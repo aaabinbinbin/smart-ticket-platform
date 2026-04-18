@@ -59,16 +59,26 @@ public class TicketRepository {
         return ticketMapper.countVisible(userId, status, category, priority);
     }
 
-    public int updateAssignee(Long id, Long assigneeId) {
-        return ticketMapper.updateAssignee(id, assigneeId);
+    public int updateAssignee(Long id, Long assigneeId, TicketStatusEnum expectedStatus) {
+        return ticketMapper.updateAssignee(id, assigneeId, expectedStatus);
     }
 
-    public int updateAssigneeAndStatus(Long id, Long assigneeId, TicketStatusEnum status) {
-        return ticketMapper.updateAssigneeAndStatus(id, assigneeId, status);
+    public int updateAssigneeAndStatus(
+            Long id,
+            Long assigneeId,
+            TicketStatusEnum expectedStatus,
+            TicketStatusEnum status
+    ) {
+        return ticketMapper.updateAssigneeAndStatus(id, assigneeId, expectedStatus, status);
     }
 
-    public int updateStatus(Long id, TicketStatusEnum status, String solutionSummary) {
-        return ticketMapper.updateStatus(id, status, solutionSummary);
+    public int updateStatus(
+            Long id,
+            TicketStatusEnum expectedStatus,
+            TicketStatusEnum status,
+            String solutionSummary
+    ) {
+        return ticketMapper.updateStatus(id, expectedStatus, status, solutionSummary);
     }
 
     public SysUser findUserById(Long userId) {

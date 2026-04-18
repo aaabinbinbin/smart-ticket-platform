@@ -36,6 +36,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -60,6 +61,7 @@ public class TicketController {
     @Operation(summary = "创建工单", description = "创建后的工单初始状态为 PENDING_ASSIGN")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateTicketRequestDTO request
     ) {
         Ticket ticket = ticketService.createTicket(currentUser(authentication), TicketCreateCommandDTO.builder()
@@ -67,7 +69,7 @@ public class TicketController {
                 .description(request.getDescription())
                 .category(parseCategory(request.getCategory()))
                 .priority(parsePriority(request.getPriority()))
-                .idempotencyKey(request.getIdempotencyKey())
+                .idempotencyKey(resolveIdempotencyKey(idempotencyKey, request.getIdempotencyKey()))
                 .build());
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
@@ -76,7 +78,7 @@ public class TicketController {
     @Operation(summary = "查询工单详情", description = "返回工单主信息、评论列表和操作日志")
     public ApiResponse<TicketDetailVO> getTicketDetail(
             Authentication authentication,
-            @Parameter(description = "工单 ID") @PathVariable Long ticketId
+            @Parameter(description = "工单 ID") @PathVariable("ticketId") Long ticketId
     ) {
         return ApiResponse.success(ticketAssembler.toDetailVO(ticketService.getDetail(currentUser(authentication), ticketId)));
     }
@@ -85,13 +87,13 @@ public class TicketController {
     @Operation(summary = "分页查询工单列表", description = "管理员可看全部，普通用户只看自己创建或当前负责的工单")
     public ApiResponse<PageResult<TicketVO>> pageTickets(
             Authentication authentication,
-            @Min(value = 1, message = "页码不能小于 1") @RequestParam(defaultValue = "1") int pageNo,
+            @Min(value = 1, message = "页码不能小于 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "每页大小不能小于 1")
             @Max(value = 100, message = "每页大小不能超过 100")
-            @RequestParam(defaultValue = "10") int pageSize,
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String priority
+            @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(value = "priority", required = false) String priority
     ) {
         PageResult<Ticket> page = ticketService.pageTickets(currentUser(authentication), TicketPageQueryDTO.builder()
                 .pageNo(pageNo)
@@ -113,7 +115,7 @@ public class TicketController {
     @Operation(summary = "分配工单", description = "管理员分配待分配工单，状态从 PENDING_ASSIGN 流转为 PROCESSING")
     public ApiResponse<TicketVO> assignTicket(
             Authentication authentication,
-            @PathVariable Long ticketId,
+            @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AssignTicketRequestDTO request
     ) {
         Ticket ticket = ticketService.assignTicket(currentUser(authentication), ticketId, request.getAssigneeId());
@@ -124,7 +126,7 @@ public class TicketController {
     @Operation(summary = "转派工单", description = "当前负责人或管理员可转派处理中的工单")
     public ApiResponse<TicketVO> transferTicket(
             Authentication authentication,
-            @PathVariable Long ticketId,
+            @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AssignTicketRequestDTO request
     ) {
         Ticket ticket = ticketService.transferTicket(currentUser(authentication), ticketId, request.getAssigneeId());
@@ -135,7 +137,7 @@ public class TicketController {
     @Operation(summary = "更新工单状态", description = "只允许 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED")
     public ApiResponse<TicketVO> updateStatus(
             Authentication authentication,
-            @PathVariable Long ticketId,
+            @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody UpdateTicketStatusRequestDTO request
     ) {
         Ticket ticket = ticketService.updateStatus(currentUser(authentication), ticketId, TicketUpdateStatusCommandDTO.builder()
@@ -149,7 +151,7 @@ public class TicketController {
     @Operation(summary = "添加工单评论", description = "提单人、当前负责人或管理员可以对未关闭工单添加评论")
     public ApiResponse<TicketCommentVO> addComment(
             Authentication authentication,
-            @PathVariable Long ticketId,
+            @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AddTicketCommentRequestDTO request
     ) {
         return ApiResponse.success(ticketAssembler.toCommentVO(
@@ -159,7 +161,7 @@ public class TicketController {
 
     @PutMapping("/{ticketId}/close")
     @Operation(summary = "关闭工单", description = "提单人或管理员关闭已解决工单，状态从 RESOLVED 流转为 CLOSED")
-    public ApiResponse<TicketVO> closeTicket(Authentication authentication, @PathVariable Long ticketId) {
+    public ApiResponse<TicketVO> closeTicket(Authentication authentication, @PathVariable("ticketId") Long ticketId) {
         Ticket ticket = ticketService.closeTicket(currentUser(authentication), ticketId);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
@@ -208,5 +210,12 @@ public class TicketController {
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_PRIORITY, code);
         }
+    }
+
+    private String resolveIdempotencyKey(String headerValue, String bodyValue) {
+        if (headerValue != null && !headerValue.isBlank()) {
+            return headerValue;
+        }
+        return bodyValue;
     }
 }

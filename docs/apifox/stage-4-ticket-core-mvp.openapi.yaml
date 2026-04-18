@@ -24,8 +24,17 @@ paths:
       tags:
         - Ticket Core
       summary: 创建工单
-      description: 创建后的工单初始状态固定为 PENDING_ASSIGN，并自动记录 CREATE 操作日志。
+      description: 创建后的工单初始状态固定为 PENDING_ASSIGN，并自动记录 CREATE 操作日志。支持 Idempotency-Key 请求头防重复提交。
       operationId: createTicket
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: 创建幂等键。推荐使用请求头传递；如请求体也传 idempotencyKey，以请求头为准。
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          example: create-ticket-001
       requestBody:
         required: true
         content:
@@ -267,7 +276,7 @@ paths:
       tags:
         - Ticket Core
       summary: 更新工单状态
-      description: 按 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED 状态机更新工单状态。
+      description: 更新非关闭状态。关闭工单必须使用 /api/tickets/{ticketId}/close，以便记录 CLOSE 操作日志。
       operationId: updateTicketStatus
       parameters:
         - $ref: '#/components/parameters/TicketId'
@@ -408,6 +417,12 @@ components:
         - RESOLVED
         - CLOSED
       description: 工单状态 code。
+    TicketStatusTransitionCode:
+      type: string
+      enum:
+        - PROCESSING
+        - RESOLVED
+      description: 通用状态更新接口允许的目标状态 code。CLOSED 必须使用关闭接口。
     TicketCategoryCode:
       type: string
       enum:
@@ -457,7 +472,7 @@ components:
           type: string
           maxLength: 128
           nullable: true
-          description: 创建幂等键。
+          description: 创建幂等键。兼容字段，推荐改用 Idempotency-Key 请求头。
     AssignTicketRequest:
       type: object
       required:
@@ -473,7 +488,7 @@ components:
         - targetStatus
       properties:
         targetStatus:
-          $ref: '#/components/schemas/TicketStatusCode'
+          $ref: '#/components/schemas/TicketStatusTransitionCode'
         solutionSummary:
           type: string
           nullable: true

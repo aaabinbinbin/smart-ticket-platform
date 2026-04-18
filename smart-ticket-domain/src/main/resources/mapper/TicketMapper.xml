@@ -100,6 +100,7 @@
         UPDATE ticket
         SET assignee_id = #{assigneeId}
         WHERE id = #{id}
+          AND status = #{expectedStatus.code}
     </update>
 
     <update id="updateAssigneeAndStatus">
@@ -107,6 +108,7 @@
         SET assignee_id = #{assigneeId},
             status = #{status.code}
         WHERE id = #{id}
+          AND status = #{expectedStatus.code}
     </update>
 
     <update id="updateStatus">
@@ -114,5 +116,6 @@
         SET status = #{status.code},
             solution_summary = #{solutionSummary}
         WHERE id = #{id}
+          AND status = #{expectedStatus.code}
     </update>
 </mapper>

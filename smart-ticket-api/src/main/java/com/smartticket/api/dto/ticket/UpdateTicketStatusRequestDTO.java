@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 @Schema(description = "更新工单状态请求")
 public class UpdateTicketStatusRequestDTO {
     @NotBlank(message = "目标状态不能为空")
-    @Schema(description = "目标状态 code，只允许按 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED 流转", example = "RESOLVED")
+    @Schema(description = "目标状态 code。通用状态接口只允许 PROCESSING 或 RESOLVED；CLOSED 必须走关闭接口", example = "RESOLVED")
     private String targetStatus;
 
     @Schema(description = "解决方案摘要，通常在更新为 RESOLVED 时填写", example = "重启登录服务后恢复")

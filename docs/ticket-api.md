@@ -131,6 +131,7 @@ RESOLVED -> CLOSED
 ```http
 POST /api/tickets
 Content-Type: application/json
+Idempotency-Key: create-ticket-001
 ```
 
 请求体：
@@ -149,6 +150,10 @@ Content-Type: application/json
 
 - 初始状态固定为 `PENDING_ASSIGN`。
 - 自动写入 `CREATE` 操作日志。
+- 支持创建幂等防重，推荐通过请求头 `Idempotency-Key` 传幂等键。
+- 也兼容请求体里的 `idempotencyKey` 字段；如果请求头和请求体都传，以请求头为准。
+- 幂等键长度不能超过 128 个字符，且不能包含控制字符。
+- 相同用户使用相同幂等键重复提交时，返回第一次创建出的工单。
 
 ### 5.2 查询工单详情
 
@@ -241,9 +246,9 @@ Content-Type: application/json
 
 说明：
 
-- 只允许按 `PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED` 流转。
+- 通用状态接口只处理非关闭状态流转，例如 `PENDING_ASSIGN -> PROCESSING`、`PROCESSING -> RESOLVED`。
 - `PROCESSING -> RESOLVED` 需要当前负责人或管理员。
-- `RESOLVED -> CLOSED` 需要提单人或管理员。
+- `RESOLVED -> CLOSED` 必须使用关闭接口 `/api/tickets/{ticketId}/close`。
 - 自动写入 `UPDATE_STATUS` 操作日志。
 
 ### 5.7 添加工单评论
@@ -279,7 +284,26 @@ PUT /api/tickets/{ticketId}/close
 - 只允许关闭 `RESOLVED` 工单。
 - 自动写入 `CLOSE` 操作日志。
 
-## 6. 操作日志
+## 6. 并发状态控制
+
+分配、转派、更新状态、关闭这类写操作都会在 SQL 更新时带上当前期望状态：
+
+```sql
+WHERE id = ?
+  AND status = ?
+```
+
+如果影响行数为 0，说明工单状态已经被其他请求修改，接口返回：
+
+```json
+{
+  "success": false,
+  "code": "TICKET_STATE_CHANGED",
+  "message": "工单状态已变化，请刷新后重试"
+}
+```
+
+## 7. 操作日志
 
 关键操作会自动写入 `ticket_operation_log`：
 
@@ -292,7 +316,7 @@ PUT /api/tickets/{ticketId}/close
 
 当前 MVP 使用文本快照记录 before / after，后续可以替换为结构化 JSON。
 
-## 7. 常见错误
+## 8. 常见错误
 
 未登录：
 

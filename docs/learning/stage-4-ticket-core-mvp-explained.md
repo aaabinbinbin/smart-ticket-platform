@@ -828,16 +828,17 @@ TicketController.updateStatus()
 ```text
 PENDING_ASSIGN -> PROCESSING
 PROCESSING -> RESOLVED
-RESOLVED -> CLOSED
 ```
 
-当前实现中，关闭工单也提供了专门接口：
+通用状态接口不再负责关闭工单。关闭工单必须走专门接口：
 
 ```http
 PUT /api/tickets/{ticketId}/close
 ```
 
-实际使用时，推荐关闭动作走 close 接口，语义更清楚。
+这样可以保证关闭动作统一写入 `CLOSE` 操作日志，而不是被记录成普通 `UPDATE_STATUS`。
+
+分配、转派、更新状态、关闭都会在 SQL 更新时带上当前期望状态。如果影响行数为 0，说明工单已经被其他请求修改，业务层返回 `TICKET_STATE_CHANGED`。
 
 ## 22. 添加评论链路
 

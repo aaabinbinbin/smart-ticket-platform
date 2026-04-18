@@ -171,6 +171,7 @@ mysql -h127.0.0.1 -uroot -p123456 < docs/sql/seed.sql
 
 - 流程说明：`docs/flow/auth-flow.md`
 - 学习理解：`docs/learning/stage-3-auth-rbac-explained.md`
+- Apifox 导入：`docs/apifox/auth-rbac.openapi.yaml`
 
 登录接口：
 
@@ -228,3 +229,29 @@ PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED
 ```
 
 工单业务权限由 `smart-ticket-biz` 模块判断。`auth` 只提供当前用户身份和 USER / STAFF / ADMIN 基础角色。
+
+## Redis 缓存与幂等
+
+当前阶段已引入 Redis，默认连接本地：
+
+```text
+127.0.0.1:6379
+```
+
+无密码，使用 database 0。
+
+已实现能力：
+
+- 工单详情缓存：`ticket:detail:{ticketId}`
+- 创建工单幂等防重：`ticket:idempotency:{userId}:{idempotencyKey}`
+- Agent 会话上下文预留：`agent:session:{sessionId}`
+
+详细设计见：
+
+- `docs/redis-design.md`
+
+## 阶段 5 验收
+
+进入 Agent 阶段前，建议先按下面文档手动跑通完整业务链路：
+
+- `docs/stage-5-acceptance.md`

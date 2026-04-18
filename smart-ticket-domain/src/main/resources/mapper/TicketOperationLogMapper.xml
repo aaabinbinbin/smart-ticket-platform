@@ -10,7 +10,7 @@
             ticket_id, operator_id, operation_type, operation_desc, before_value, after_value
         )
         VALUES (
-            #{ticketId}, #{operatorId}, #{operationType}, #{operationDesc}, #{beforeValue}, #{afterValue}
+            #{ticketId}, #{operatorId}, #{operationType.code}, #{operationDesc}, #{beforeValue}, #{afterValue}
         )
     </insert>
 

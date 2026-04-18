@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartticket.biz.dto.TicketCreateCommandDTO;
+import com.smartticket.biz.dto.TicketDetailDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
 import com.smartticket.biz.dto.TicketUpdateStatusCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
@@ -27,6 +28,7 @@ import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -55,6 +57,10 @@ class TicketServiceTest {
     private TicketCommentRepository ticketCommentRepository;
     @Mock
     private TicketOperationLogRepository operationLogRepository;
+    @Mock
+    private TicketDetailCacheService ticketDetailCacheService;
+    @Mock
+    private TicketIdempotencyService ticketIdempotencyService;
 
     private TicketService ticketService;
 
@@ -65,7 +71,9 @@ class TicketServiceTest {
                 ticketRepository,
                 ticketCommentRepository,
                 operationLogRepository,
-                permissionService
+                permissionService,
+                ticketDetailCacheService,
+                ticketIdempotencyService
         );
     }
 
@@ -111,6 +119,74 @@ class TicketServiceTest {
     }
 
     @Test
+    @DisplayName("查询详情：Redis 缓存命中后使用缓存内工单做权限判断，不查数据库")
+    void getDetailShouldReturnCachedDetailWithoutDatabaseQuery() {
+        Ticket current = ticket(TicketStatusEnum.PROCESSING, CREATOR_ID, STAFF_ID);
+        TicketDetailDTO cached = TicketDetailDTO.builder()
+                .ticket(current)
+                .comments(List.of())
+                .operationLogs(List.of())
+                .build();
+        printScenario("详情缓存", staff(), "缓存命中后使用 CurrentUser + cached.ticket 做内存权限判断");
+        when(ticketDetailCacheService.get(TICKET_ID)).thenReturn(cached);
+
+        TicketDetailDTO result = ticketService.getDetail(staff(), TICKET_ID);
+
+        assertEquals(cached, result);
+        verify(ticketRepository, never()).findVisibleById(any(), any());
+        verify(ticketRepository, never()).findById(any());
+        verify(ticketCommentRepository, never()).findByTicketId(any());
+        verify(operationLogRepository, never()).findByTicketId(any());
+    }
+
+    @Test
+    @DisplayName("查询详情：Redis 缓存命中但当前用户不可见时拒绝返回")
+    void getDetailShouldRejectInvisibleCachedTicket() {
+        Ticket current = ticket(TicketStatusEnum.PROCESSING, CREATOR_ID, STAFF_ID);
+        TicketDetailDTO cached = TicketDetailDTO.builder()
+                .ticket(current)
+                .comments(List.of())
+                .operationLogs(List.of())
+                .build();
+        printScenario("详情缓存权限", otherUser(), "缓存命中也不能绕过工单可见性权限");
+        when(ticketDetailCacheService.get(TICKET_ID)).thenReturn(cached);
+
+        BusinessException ex = assertThrows(
+                BusinessException.class,
+                () -> ticketService.getDetail(otherUser(), TICKET_ID)
+        );
+
+        assertEquals("TICKET_NOT_FOUND", ex.getCode());
+        verify(ticketRepository, never()).findVisibleById(any(), any());
+        verify(ticketRepository, never()).findById(any());
+        verify(ticketCommentRepository, never()).findByTicketId(any());
+        verify(operationLogRepository, never()).findByTicketId(any());
+    }
+
+    @Test
+    @DisplayName("创建工单：幂等键命中时返回已创建工单，不重复入库")
+    void createTicketShouldReturnExistingTicketWhenIdempotencyKeyExists() {
+        Ticket existing = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
+        printScenario("创建幂等", user(), "相同用户和相同幂等键再次提交时返回第一次创建的工单");
+        when(ticketIdempotencyService.enabled("idem-001")).thenReturn(true);
+        when(ticketIdempotencyService.normalize("idem-001")).thenReturn("idem-001");
+        when(ticketIdempotencyService.getCreatedTicketId(CREATOR_ID, "idem-001")).thenReturn(TICKET_ID);
+        when(ticketRepository.findById(TICKET_ID)).thenReturn(existing);
+
+        Ticket result = ticketService.createTicket(user(), TicketCreateCommandDTO.builder()
+                .title("测试环境无法登录")
+                .description("登录时报 500")
+                .category(TicketCategoryEnum.SYSTEM)
+                .priority(TicketPriorityEnum.HIGH)
+                .idempotencyKey("idem-001")
+                .build());
+
+        assertEquals(TICKET_ID, result.getId());
+        verify(ticketRepository, never()).insert(any());
+        verify(operationLogRepository, never()).insert(any());
+    }
+
+    @Test
     @DisplayName("分配工单：管理员可将待分配工单分配给 STAFF，并流转到 PROCESSING")
     void assignTicketShouldMovePendingTicketToProcessing() {
         Ticket before = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
@@ -119,13 +195,47 @@ class TicketServiceTest {
         printTicketFlow(before, after);
         when(ticketRepository.findById(TICKET_ID)).thenReturn(before, after);
         mockEnabledStaff(STAFF_ID);
+        when(ticketRepository.updateAssigneeAndStatus(
+                TICKET_ID,
+                STAFF_ID,
+                TicketStatusEnum.PENDING_ASSIGN,
+                TicketStatusEnum.PROCESSING
+        )).thenReturn(1);
 
         Ticket result = ticketService.assignTicket(admin(), TICKET_ID, STAFF_ID);
 
         assertEquals(TicketStatusEnum.PROCESSING, result.getStatus());
         assertEquals(STAFF_ID, result.getAssigneeId());
-        verify(ticketRepository).updateAssigneeAndStatus(TICKET_ID, STAFF_ID, TicketStatusEnum.PROCESSING);
+        verify(ticketRepository).updateAssigneeAndStatus(
+                TICKET_ID,
+                STAFF_ID,
+                TicketStatusEnum.PENDING_ASSIGN,
+                TicketStatusEnum.PROCESSING
+        );
         verifyLog(OperationTypeEnum.ASSIGN, 9L);
+    }
+
+    @Test
+    @DisplayName("分配工单：状态被并发修改时应拒绝继续写日志")
+    void assignTicketShouldRejectWhenStateChangedConcurrently() {
+        Ticket before = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
+        printScenario("分配工单并发失败", admin(), "更新时状态条件不匹配，说明工单已被其他请求修改");
+        when(ticketRepository.findById(TICKET_ID)).thenReturn(before);
+        mockEnabledStaff(STAFF_ID);
+        when(ticketRepository.updateAssigneeAndStatus(
+                TICKET_ID,
+                STAFF_ID,
+                TicketStatusEnum.PENDING_ASSIGN,
+                TicketStatusEnum.PROCESSING
+        )).thenReturn(0);
+
+        BusinessException ex = assertThrows(
+                BusinessException.class,
+                () -> ticketService.assignTicket(admin(), TICKET_ID, STAFF_ID)
+        );
+
+        assertEquals("TICKET_STATE_CHANGED", ex.getCode());
+        verify(operationLogRepository, never()).insert(any());
     }
 
     @Test
@@ -139,7 +249,7 @@ class TicketServiceTest {
 
         assertEquals("ADMIN_REQUIRED", ex.getCode());
         printException(ex);
-        verify(ticketRepository, never()).updateAssigneeAndStatus(any(), any(), any());
+        verify(ticketRepository, never()).updateAssigneeAndStatus(any(), any(), any(), any());
         verify(operationLogRepository, never()).insert(any());
     }
 
@@ -152,12 +262,13 @@ class TicketServiceTest {
         printTicketFlow(before, after);
         when(ticketRepository.findById(TICKET_ID)).thenReturn(before, after);
         mockEnabledStaff(OTHER_STAFF_ID);
+        when(ticketRepository.updateAssignee(TICKET_ID, OTHER_STAFF_ID, TicketStatusEnum.PROCESSING)).thenReturn(1);
 
         Ticket result = ticketService.transferTicket(staff(), TICKET_ID, OTHER_STAFF_ID);
 
         assertEquals(TicketStatusEnum.PROCESSING, result.getStatus());
         assertEquals(OTHER_STAFF_ID, result.getAssigneeId());
-        verify(ticketRepository).updateAssignee(TICKET_ID, OTHER_STAFF_ID);
+        verify(ticketRepository).updateAssignee(TICKET_ID, OTHER_STAFF_ID, TicketStatusEnum.PROCESSING);
         verifyLog(OperationTypeEnum.TRANSFER, STAFF_ID);
     }
 
@@ -176,7 +287,7 @@ class TicketServiceTest {
 
         assertEquals("TICKET_TRANSFER_FORBIDDEN", ex.getCode());
         printException(ex);
-        verify(ticketRepository, never()).updateAssignee(any(), any());
+        verify(ticketRepository, never()).updateAssignee(any(), any(), any());
         verify(operationLogRepository, never()).insert(any());
     }
 
@@ -189,6 +300,12 @@ class TicketServiceTest {
         printScenario("解决工单", staff(), "当前负责人将 PROCESSING -> RESOLVED，并写入解决摘要");
         printTicketFlow(before, after);
         when(ticketRepository.findById(TICKET_ID)).thenReturn(before, after);
+        when(ticketRepository.updateStatus(
+                TICKET_ID,
+                TicketStatusEnum.PROCESSING,
+                TicketStatusEnum.RESOLVED,
+                "重启服务后恢复"
+        )).thenReturn(1);
 
         Ticket result = ticketService.updateStatus(staff(), TICKET_ID, TicketUpdateStatusCommandDTO.builder()
                 .targetStatus(TicketStatusEnum.RESOLVED)
@@ -197,28 +314,52 @@ class TicketServiceTest {
 
         assertEquals(TicketStatusEnum.RESOLVED, result.getStatus());
         assertEquals("重启服务后恢复", result.getSolutionSummary());
-        verify(ticketRepository).updateStatus(TICKET_ID, TicketStatusEnum.RESOLVED, "重启服务后恢复");
+        verify(ticketRepository).updateStatus(
+                TICKET_ID,
+                TicketStatusEnum.PROCESSING,
+                TicketStatusEnum.RESOLVED,
+                "重启服务后恢复"
+        );
         verifyLog(OperationTypeEnum.UPDATE_STATUS, STAFF_ID);
     }
 
     @Test
-    @DisplayName("更新状态：禁止跳过状态链路直接关闭处理中工单")
+    @DisplayName("更新状态：禁止跳过状态链路")
     void updateStatusShouldRejectInvalidTransition() {
-        Ticket current = ticket(TicketStatusEnum.PROCESSING, CREATOR_ID, STAFF_ID);
-        printScenario("非法状态流转", staff(), "尝试 PROCESSING -> CLOSED，违反状态机约束");
+        Ticket current = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
+        printScenario("非法状态流转", admin(), "尝试 PENDING_ASSIGN -> RESOLVED，违反状态机约束");
         printTicket("当前工单", current);
         when(ticketRepository.findById(TICKET_ID)).thenReturn(current);
 
         BusinessException ex = assertThrows(
                 BusinessException.class,
-                () -> ticketService.updateStatus(staff(), TICKET_ID, TicketUpdateStatusCommandDTO.builder()
-                        .targetStatus(TicketStatusEnum.CLOSED)
+                () -> ticketService.updateStatus(admin(), TICKET_ID, TicketUpdateStatusCommandDTO.builder()
+                        .targetStatus(TicketStatusEnum.RESOLVED)
                         .build())
         );
 
         assertEquals("INVALID_TICKET_STATUS_TRANSITION", ex.getCode());
         printException(ex);
-        verify(ticketRepository, never()).updateStatus(any(), any(), any());
+        verify(ticketRepository, never()).updateStatus(any(), any(), any(), any());
+        verify(operationLogRepository, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("更新状态：关闭工单必须走 close 接口，不能走通用状态接口")
+    void updateStatusShouldRejectCloseTargetStatus() {
+        Ticket current = ticket(TicketStatusEnum.RESOLVED, CREATOR_ID, STAFF_ID);
+        printScenario("关闭入口错误", user(), "通用状态接口不再承担关闭业务语义");
+        when(ticketRepository.findById(TICKET_ID)).thenReturn(current);
+
+        BusinessException ex = assertThrows(
+                BusinessException.class,
+                () -> ticketService.updateStatus(user(), TICKET_ID, TicketUpdateStatusCommandDTO.builder()
+                        .targetStatus(TicketStatusEnum.CLOSED)
+                        .build())
+        );
+
+        assertEquals("CLOSE_TICKET_USE_CLOSE_API", ex.getCode());
+        verify(ticketRepository, never()).updateStatus(any(), any(), any(), any());
         verify(operationLogRepository, never()).insert(any());
     }
 
@@ -236,12 +377,21 @@ class TicketServiceTest {
                     comment.getId(), comment.getTicketId(), comment.getCommenterId(), comment.getContent());
             return 1;
         });
+        when(ticketCommentRepository.findById(200L)).thenReturn(TicketComment.builder()
+                .id(200L)
+                .ticketId(TICKET_ID)
+                .commenterId(STAFF_ID)
+                .commentType("USER_REPLY")
+                .content("正在排查日志")
+                .createdAt(LocalDateTime.of(2026, 4, 18, 19, 30, 0))
+                .build());
 
         TicketComment result = ticketService.addComment(staff(), TICKET_ID, "正在排查日志");
 
         assertEquals(200L, result.getId());
         assertEquals("USER_REPLY", result.getCommentType());
         assertEquals("正在排查日志", result.getContent());
+        assertEquals(LocalDateTime.of(2026, 4, 18, 19, 30, 0), result.getCreatedAt());
         verifyLog(OperationTypeEnum.COMMENT, STAFF_ID);
     }
 
@@ -274,11 +424,22 @@ class TicketServiceTest {
         printScenario("关闭工单", user(), "提单人关闭 RESOLVED 工单，状态变为 CLOSED");
         printTicketFlow(before, after);
         when(ticketRepository.findById(TICKET_ID)).thenReturn(before, after);
+        when(ticketRepository.updateStatus(
+                TICKET_ID,
+                TicketStatusEnum.RESOLVED,
+                TicketStatusEnum.CLOSED,
+                "已修复"
+        )).thenReturn(1);
 
         Ticket result = ticketService.closeTicket(user(), TICKET_ID);
 
         assertEquals(TicketStatusEnum.CLOSED, result.getStatus());
-        verify(ticketRepository).updateStatus(TICKET_ID, TicketStatusEnum.CLOSED, "已修复");
+        verify(ticketRepository).updateStatus(
+                TICKET_ID,
+                TicketStatusEnum.RESOLVED,
+                TicketStatusEnum.CLOSED,
+                "已修复"
+        );
         verifyLog(OperationTypeEnum.CLOSE, CREATOR_ID);
     }
 

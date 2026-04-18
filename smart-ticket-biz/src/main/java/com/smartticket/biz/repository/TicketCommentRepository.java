@@ -20,6 +20,10 @@ public class TicketCommentRepository {
         return ticketCommentMapper.insert(comment);
     }
 
+    public TicketComment findById(Long id) {
+        return ticketCommentMapper.findById(id);
+    }
+
     public List<TicketComment> findByTicketId(Long ticketId) {
         return ticketCommentMapper.findByTicketId(ticketId);
     }

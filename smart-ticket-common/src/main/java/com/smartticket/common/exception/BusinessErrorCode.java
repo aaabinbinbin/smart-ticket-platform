@@ -16,13 +16,17 @@ public enum BusinessErrorCode {
     TICKET_CLOSED("TICKET_CLOSED", "已关闭工单不能继续评论"),
     TICKET_STATUS_UNCHANGED("TICKET_STATUS_UNCHANGED", "工单已经处于目标状态"),
     TICKET_ASSIGNEE_REQUIRED("TICKET_ASSIGNEE_REQUIRED", "进入处理中前必须先分配处理人"),
+    TICKET_STATE_CHANGED("TICKET_STATE_CHANGED", "工单状态已变化，请刷新后重试"),
+    CLOSE_TICKET_USE_CLOSE_API("CLOSE_TICKET_USE_CLOSE_API", "关闭工单请使用关闭接口"),
     INVALID_TICKET_STATUS_TRANSITION(
             "INVALID_TICKET_STATUS_TRANSITION",
             "状态流转不合法，只允许 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED"
     ),
     TICKET_NOT_FOUND("TICKET_NOT_FOUND", "工单不存在"),
     ASSIGNEE_NOT_FOUND("ASSIGNEE_NOT_FOUND", "目标处理人不存在或已禁用"),
-    ASSIGNEE_NOT_STAFF("ASSIGNEE_NOT_STAFF", "目标处理人必须具备 STAFF 角色");
+    ASSIGNEE_NOT_STAFF("ASSIGNEE_NOT_STAFF", "目标处理人必须具备 STAFF 角色"),
+    INVALID_IDEMPOTENCY_KEY("INVALID_IDEMPOTENCY_KEY", "幂等键不合法，长度不能超过 128 个字符且不能包含控制字符"),
+    IDEMPOTENT_REQUEST_PROCESSING("IDEMPOTENT_REQUEST_PROCESSING", "相同幂等键的创建请求正在处理中，请稍后重试");
 
     private final String code;
     private final String message;

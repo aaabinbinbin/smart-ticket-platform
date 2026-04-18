@@ -56,16 +56,22 @@ public interface TicketMapper {
             @Param("priority") String priority
     );
 
-    int updateAssignee(@Param("id") Long id, @Param("assigneeId") Long assigneeId);
+    int updateAssignee(
+            @Param("id") Long id,
+            @Param("assigneeId") Long assigneeId,
+            @Param("expectedStatus") TicketStatusEnum expectedStatus
+    );
 
     int updateAssigneeAndStatus(
             @Param("id") Long id,
             @Param("assigneeId") Long assigneeId,
+            @Param("expectedStatus") TicketStatusEnum expectedStatus,
             @Param("status") TicketStatusEnum status
     );
 
     int updateStatus(
             @Param("id") Long id,
+            @Param("expectedStatus") TicketStatusEnum expectedStatus,
             @Param("status") TicketStatusEnum status,
             @Param("solutionSummary") String solutionSummary
     );

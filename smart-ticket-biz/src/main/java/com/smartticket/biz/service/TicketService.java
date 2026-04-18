@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Core ticket business service.
@@ -37,21 +39,55 @@ public class TicketService {
     private final TicketCommentRepository ticketCommentRepository;
     private final TicketOperationLogRepository operationLogRepository;
     private final TicketPermissionService permissionService;
+    private final TicketDetailCacheService ticketDetailCacheService;
+    private final TicketIdempotencyService ticketIdempotencyService;
 
     public TicketService(
             TicketRepository ticketRepository,
             TicketCommentRepository ticketCommentRepository,
             TicketOperationLogRepository operationLogRepository,
-            TicketPermissionService permissionService
+            TicketPermissionService permissionService,
+            TicketDetailCacheService ticketDetailCacheService,
+            TicketIdempotencyService ticketIdempotencyService
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
         this.operationLogRepository = operationLogRepository;
         this.permissionService = permissionService;
+        this.ticketDetailCacheService = ticketDetailCacheService;
+        this.ticketIdempotencyService = ticketIdempotencyService;
     }
 
     @Transactional
     public Ticket createTicket(CurrentUser operator, TicketCreateCommandDTO command) {
+        if (ticketIdempotencyService.enabled(command.getIdempotencyKey())) {
+            return createTicketWithIdempotency(operator, command);
+        }
+        return doCreateTicket(operator, command);
+    }
+
+    private Ticket createTicketWithIdempotency(CurrentUser operator, TicketCreateCommandDTO command) {
+        String idempotencyKey = ticketIdempotencyService.normalize(command.getIdempotencyKey());
+        validateIdempotencyKey(idempotencyKey);
+        command.setIdempotencyKey(idempotencyKey);
+        Long existingTicketId = ticketIdempotencyService.getCreatedTicketId(operator.getUserId(), idempotencyKey);
+        if (existingTicketId != null) {
+            return requireTicket(existingTicketId);
+        }
+        if (!ticketIdempotencyService.acquireCreateLock(operator.getUserId(), idempotencyKey)) {
+            throw new BusinessException(BusinessErrorCode.IDEMPOTENT_REQUEST_PROCESSING);
+        }
+        try {
+            Ticket ticket = doCreateTicket(operator, command);
+            saveIdempotencyResultAfterCommit(operator.getUserId(), idempotencyKey, ticket.getId());
+            return ticket;
+        } catch (RuntimeException ex) {
+            ticketIdempotencyService.releaseCreateLock(operator.getUserId(), idempotencyKey);
+            throw ex;
+        }
+    }
+
+    private Ticket doCreateTicket(CurrentUser operator, TicketCreateCommandDTO command) {
         Ticket ticket = Ticket.builder()
                 .ticketNo(generateTicketNo())
                 .title(command.getTitle())
@@ -69,12 +105,38 @@ public class TicketService {
     }
 
     public TicketDetailDTO getDetail(CurrentUser operator, Long ticketId) {
+        TicketDetailDTO cached = ticketDetailCacheService.get(ticketId);
+        if (cached != null && cached.getTicket() != null) {
+            requireVisibleFromTicket(operator, cached.getTicket());
+            return cached;
+        }
         Ticket ticket = requireVisibleTicket(operator, ticketId);
-        return TicketDetailDTO.builder()
+        TicketDetailDTO detail = TicketDetailDTO.builder()
                 .ticket(ticket)
                 .comments(ticketCommentRepository.findByTicketId(ticketId))
                 .operationLogs(operationLogRepository.findByTicketId(ticketId))
                 .build();
+        ticketDetailCacheService.put(ticketId, detail);
+        return detail;
+    }
+
+    private void saveIdempotencyResultAfterCommit(Long userId, String idempotencyKey, Long ticketId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            ticketIdempotencyService.saveCreatedTicketId(userId, idempotencyKey, ticketId);
+            ticketIdempotencyService.releaseCreateLock(userId, idempotencyKey);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                ticketIdempotencyService.saveCreatedTicketId(userId, idempotencyKey, ticketId);
+            }
+
+            @Override
+            public void afterCompletion(int status) {
+                ticketIdempotencyService.releaseCreateLock(userId, idempotencyKey);
+            }
+        });
     }
 
     public PageResult<Ticket> pageTickets(CurrentUser operator, TicketPageQueryDTO query) {
@@ -110,9 +172,15 @@ public class TicketService {
         requireStatus(before, TicketStatusEnum.PENDING_ASSIGN, "只有待分配工单可以执行分配");
         requireStaffUser(assigneeId);
 
-        ticketRepository.updateAssigneeAndStatus(ticketId, assigneeId, TicketStatusEnum.PROCESSING);
+        requireUpdated(ticketRepository.updateAssigneeAndStatus(
+                ticketId,
+                assigneeId,
+                before.getStatus(),
+                TicketStatusEnum.PROCESSING
+        ));
         Ticket after = requireTicket(ticketId);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.ASSIGN, "分配工单", snapshot(before), snapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -123,9 +191,10 @@ public class TicketService {
         requireStatus(before, TicketStatusEnum.PROCESSING, "只有处理中的工单可以转派");
         requireStaffUser(assigneeId);
 
-        ticketRepository.updateAssignee(ticketId, assigneeId);
+        requireUpdated(ticketRepository.updateAssignee(ticketId, assigneeId, before.getStatus()));
         Ticket after = requireTicket(ticketId);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.TRANSFER, "转派工单", snapshot(before), snapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -136,14 +205,18 @@ public class TicketService {
         if (targetStatus == null) {
             throw new BusinessException(BusinessErrorCode.TICKET_STATUS_REQUIRED);
         }
+        if (targetStatus == TicketStatusEnum.CLOSED) {
+            throw new BusinessException(BusinessErrorCode.CLOSE_TICKET_USE_CLOSE_API);
+        }
         validateStatusTransition(operator, before, targetStatus);
 
         String solutionSummary = command.getSolutionSummary() == null
                 ? before.getSolutionSummary()
                 : command.getSolutionSummary();
-        ticketRepository.updateStatus(ticketId, targetStatus, solutionSummary);
+        requireUpdated(ticketRepository.updateStatus(ticketId, before.getStatus(), targetStatus, solutionSummary));
         Ticket after = requireTicket(ticketId);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.UPDATE_STATUS, "更新工单状态", snapshot(before), snapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -162,7 +235,8 @@ public class TicketService {
                 .build();
         ticketCommentRepository.insert(comment);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.COMMENT, "添加工单评论", null, "content=" + content);
-        return comment;
+        ticketDetailCacheService.evict(ticketId);
+        return requireComment(comment.getId());
     }
 
     @Transactional
@@ -171,9 +245,15 @@ public class TicketService {
         permissionService.requireClose(operator, before);
         requireStatus(before, TicketStatusEnum.RESOLVED, "只有已解决工单可以关闭");
 
-        ticketRepository.updateStatus(ticketId, TicketStatusEnum.CLOSED, before.getSolutionSummary());
+        requireUpdated(ticketRepository.updateStatus(
+                ticketId,
+                before.getStatus(),
+                TicketStatusEnum.CLOSED,
+                before.getSolutionSummary()
+        ));
         Ticket after = requireTicket(ticketId);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.CLOSE, "关闭工单", snapshot(before), snapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -212,6 +292,14 @@ public class TicketService {
         return ticket;
     }
 
+    private TicketComment requireComment(Long commentId) {
+        TicketComment comment = ticketCommentRepository.findById(commentId);
+        if (comment == null) {
+            throw new BusinessException(BusinessErrorCode.TICKET_NOT_FOUND);
+        }
+        return comment;
+    }
+
     private Ticket requireVisibleTicket(CurrentUser operator, Long ticketId) {
         Ticket ticket = operator.isAdmin()
                 ? ticketRepository.findById(ticketId)
@@ -220,6 +308,29 @@ public class TicketService {
             throw new BusinessException(BusinessErrorCode.TICKET_NOT_FOUND);
         }
         return ticket;
+    }
+
+    private void requireVisibleFromTicket(CurrentUser operator, Ticket ticket) {
+        if (!permissionService.canView(operator, ticket)) {
+            throw new BusinessException(BusinessErrorCode.TICKET_NOT_FOUND);
+        }
+    }
+
+    private void requireUpdated(int affectedRows) {
+        if (affectedRows <= 0) {
+            throw new BusinessException(BusinessErrorCode.TICKET_STATE_CHANGED);
+        }
+    }
+
+    private void validateIdempotencyKey(String idempotencyKey) {
+        if (idempotencyKey == null || idempotencyKey.length() > 128) {
+            throw new BusinessException(BusinessErrorCode.INVALID_IDEMPOTENCY_KEY);
+        }
+        for (int i = 0; i < idempotencyKey.length(); i++) {
+            if (Character.isISOControl(idempotencyKey.charAt(i))) {
+                throw new BusinessException(BusinessErrorCode.INVALID_IDEMPOTENCY_KEY);
+            }
+        }
     }
 
     private void requireStatus(Ticket ticket, TicketStatusEnum expectedStatus, String message) {
