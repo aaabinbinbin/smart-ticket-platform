@@ -3,7 +3,9 @@ package com.smartticket.domain.enums;
 import java.util.Arrays;
 
 /**
- * Ticket category.
+ * 工单分类枚举。
+ *
+ * <p>用于标识问题所属类别，前后端通过 code 交互。</p>
  */
 public enum TicketCategoryEnum implements CodeInfoEnum {
     ACCOUNT("ACCOUNT", "账号权限"),

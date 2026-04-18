@@ -9,7 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * Cache adapter for ticket detail aggregate.
+ * 工单详情缓存服务。
+ *
+ * <p>缓存对象是工单详情聚合结果，包含工单主信息、评论和操作日志。
+ * 缓存不可作为权限依据，调用方命中缓存后仍必须做可见性判断。</p>
  */
 @Service
 public class TicketDetailCacheService {

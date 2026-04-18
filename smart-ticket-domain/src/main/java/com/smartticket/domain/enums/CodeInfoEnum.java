@@ -1,7 +1,9 @@
 package com.smartticket.domain.enums;
 
 /**
- * Enum contract for stable API/database code and human-readable text.
+ * 枚举 code 和 info 约定。
+ *
+ * <p>code 用于前后端交互和数据库存储，info 用于给人阅读的中文描述。</p>
  */
 public interface CodeInfoEnum {
 

@@ -10,7 +10,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 /**
- * Small JSON Redis adapter used by business modules.
+ * Redis JSON 访问适配器。
+ *
+ * <p>封装字符串 Redis 模板和 Jackson 序列化逻辑，供业务模块读写短期缓存和上下文数据。</p>
  */
 @Component
 public class RedisJsonClient {

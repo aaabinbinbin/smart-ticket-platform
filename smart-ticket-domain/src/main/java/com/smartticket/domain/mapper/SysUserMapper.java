@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * System user mapper for table {@code sys_user}.
+ * 系统用户 Mapper，对应表 {@code sys_user}。
  */
 @Mapper
 public interface SysUserMapper {

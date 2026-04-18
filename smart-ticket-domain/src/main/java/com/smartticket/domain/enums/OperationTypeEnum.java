@@ -3,7 +3,9 @@ package com.smartticket.domain.enums;
 import java.util.Arrays;
 
 /**
- * Ticket operation type.
+ * 工单操作类型枚举。
+ *
+ * <p>用于操作日志，记录创建、分配、转派、状态更新、评论和关闭等关键动作。</p>
  */
 public enum OperationTypeEnum implements CodeInfoEnum {
     CREATE("CREATE", "创建工单"),

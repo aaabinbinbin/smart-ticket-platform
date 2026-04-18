@@ -49,7 +49,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             } catch (RuntimeException ex) {
-                // Token 无效时清空上下文，后续由认证入口统一返回 401。
+                // 令牌无效时清空上下文，后续由认证入口统一返回 401。
                 SecurityContextHolder.clearContext();
             }
         }

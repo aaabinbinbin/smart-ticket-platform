@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * User-role relation mapper for table {@code sys_user_role}.
+ * 用户角色关系 Mapper，对应表 {@code sys_user_role}。
  */
 @Mapper
 public interface SysUserRoleMapper {

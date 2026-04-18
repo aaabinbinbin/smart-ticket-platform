@@ -8,7 +8,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ticket response object.
+ * 工单基础响应对象。
+ *
+ * <p>用于创建、分配、状态更新、关闭和分页列表等接口返回工单主信息。</p>
  */
 @Data
 @Builder

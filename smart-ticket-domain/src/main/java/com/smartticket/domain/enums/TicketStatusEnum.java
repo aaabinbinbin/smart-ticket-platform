@@ -3,7 +3,9 @@ package com.smartticket.domain.enums;
 import java.util.Arrays;
 
 /**
- * Ticket status.
+ * 工单状态枚举。
+ *
+ * <p>当前主流程为：待分配、处理中、已解决、已关闭。</p>
  */
 public enum TicketStatusEnum implements CodeInfoEnum {
     PENDING_ASSIGN("PENDING_ASSIGN", "待分配"),

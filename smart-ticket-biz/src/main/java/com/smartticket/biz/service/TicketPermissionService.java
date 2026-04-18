@@ -7,7 +7,10 @@ import com.smartticket.domain.entity.Ticket;
 import org.springframework.stereotype.Service;
 
 /**
- * Ticket business permission service.
+ * 工单业务权限服务。
+ *
+ * <p>负责判断当前用户在某张工单上的业务权限，例如查看、转派、解决、关闭。
+ * 这里处理的是工单关系权限，不是登录角色认证。</p>
  */
 @Service
 public class TicketPermissionService {

@@ -8,7 +8,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Request body for updating ticket status.
+ * 更新工单状态请求体。
+ *
+ * <p>该请求用于通用状态流转接口。关闭工单有独立业务语义，需要走关闭接口。</p>
  */
 @Data
 @Builder

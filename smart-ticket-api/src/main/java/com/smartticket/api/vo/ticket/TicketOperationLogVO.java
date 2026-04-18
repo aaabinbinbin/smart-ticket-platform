@@ -8,7 +8,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Ticket operation log response object.
+ * 工单操作日志响应对象。
+ *
+ * <p>用于详情页展示工单关键操作轨迹，包括操作类型、操作说明和变更前后快照。</p>
  */
 @Data
 @Builder

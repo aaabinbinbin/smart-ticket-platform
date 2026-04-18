@@ -1,7 +1,9 @@
 package com.smartticket.common.exception;
 
 /**
- * Centralized business error codes and default messages.
+ * 统一业务错误码和默认错误消息。
+ *
+ * <p>业务代码抛出异常时应优先使用这里的枚举，避免在各处散落硬编码错误字符串。</p>
  */
 public enum BusinessErrorCode {
     INVALID_TICKET_STATUS("INVALID_TICKET_STATUS", "工单状态不合法: %s"),

@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Ticket knowledge embedding mapper for table {@code ticket_knowledge_embedding}.
+ * 工单知识切片 Mapper，对应表 {@code ticket_knowledge_embedding}。
  */
 @Mapper
 public interface TicketKnowledgeEmbeddingMapper {

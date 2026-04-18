@@ -7,7 +7,9 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Ticket mapper for table {@code ticket}.
+ * 工单主表 Mapper，对应表 {@code ticket}。
+ *
+ * <p>这里只定义 SQL 访问能力，不承担业务权限和状态流转判断。</p>
  */
 @Mapper
 public interface TicketMapper {

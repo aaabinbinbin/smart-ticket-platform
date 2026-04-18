@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Ticket attachment mapper for table {@code ticket_attachment}.
+ * 工单附件 Mapper，对应表 {@code ticket_attachment}。
  */
 @Mapper
 public interface TicketAttachmentMapper {

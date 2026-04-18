@@ -7,7 +7,10 @@ import java.time.Duration;
 import org.springframework.stereotype.Service;
 
 /**
- * Redis storage for Agent session context.
+ * Agent 会话缓存服务。
+ *
+ * <p>负责把 {@link AgentSessionContext} 存入 Redis，供后续多轮对话阶段复用。
+ * 本服务只管理对话上下文，不直接读写工单表。</p>
  */
 @Service
 public class AgentSessionCacheService {

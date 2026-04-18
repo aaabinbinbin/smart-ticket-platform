@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * Ticket operation log mapper for table {@code ticket_operation_log}.
+ * 工单操作日志 Mapper，对应表 {@code ticket_operation_log}。
  */
 @Mapper
 public interface TicketOperationLogMapper {

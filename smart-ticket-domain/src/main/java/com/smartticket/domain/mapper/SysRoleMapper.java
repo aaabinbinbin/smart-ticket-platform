@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 /**
- * System role mapper for table {@code sys_role}.
+ * 系统角色 Mapper，对应表 {@code sys_role}。
  */
 @Mapper
 public interface SysRoleMapper {

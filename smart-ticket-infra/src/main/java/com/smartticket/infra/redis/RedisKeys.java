@@ -1,7 +1,9 @@
 package com.smartticket.infra.redis;
 
 /**
- * Central Redis key definitions.
+ * Redis key 统一定义。
+ *
+ * <p>所有 Redis key 在这里集中生成，避免业务代码分散拼接 key 字符串。</p>
  */
 public final class RedisKeys {
     private RedisKeys() {

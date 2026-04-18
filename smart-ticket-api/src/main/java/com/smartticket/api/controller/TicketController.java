@@ -42,7 +42,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Ticket REST controller.
+ * 工单 HTTP 接口控制器。
+ *
+ * <p>负责接收工单相关 HTTP 请求，完成参数转换和响应组装；具体业务规则由 {@link TicketService} 处理。</p>
  */
 @Validated
 @RestController

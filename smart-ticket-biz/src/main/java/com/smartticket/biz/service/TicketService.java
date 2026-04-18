@@ -29,7 +29,10 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
- * Core ticket business service.
+ * 工单核心业务服务。
+ *
+ * <p>该服务是工单写操作的统一入口，集中处理创建、分配、转派、状态流转、评论、
+ * 关闭、权限判断、操作日志、缓存失效和幂等防重。后续 Agent 也应通过本服务操作工单。</p>
  */
 @Service
 public class TicketService {

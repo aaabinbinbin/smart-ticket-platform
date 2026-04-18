@@ -3,7 +3,9 @@ package com.smartticket.domain.enums;
 import java.util.Arrays;
 
 /**
- * Ticket priority.
+ * 工单优先级枚举。
+ *
+ * <p>用于表达问题处理优先程度，前后端通过 code 交互。</p>
  */
 public enum TicketPriorityEnum implements CodeInfoEnum {
     LOW("LOW", "低"),

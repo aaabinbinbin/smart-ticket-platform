@@ -9,7 +9,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Request body for creating a ticket.
+ * 创建工单请求体。
+ *
+ * <p>前端通过枚举 code 传递分类和优先级，例如 SYSTEM、HIGH。</p>
  */
 @Data
 @Builder

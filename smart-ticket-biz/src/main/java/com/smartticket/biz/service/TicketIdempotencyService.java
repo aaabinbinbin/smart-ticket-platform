@@ -6,7 +6,9 @@ import java.time.Duration;
 import org.springframework.stereotype.Service;
 
 /**
- * Redis based idempotency support for ticket creation.
+ * 工单创建幂等服务。
+ *
+ * <p>基于 Redis 保存创建结果和短期处理锁，用于防止同一用户使用相同幂等键重复创建工单。</p>
  */
 @Service
 public class TicketIdempotencyService {
