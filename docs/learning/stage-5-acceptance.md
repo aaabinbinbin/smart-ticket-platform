@@ -719,4 +719,4 @@ statusInfo = 已关闭
 
 5. 统一检查所有新增记录接口的返回对象，确认数据库默认生成的 `createdAt / updatedAt` 字段是否都能正确返回。
 
-6. 进入阶段 6 前，可以先整理当前阶段代码边界：认证、工单业务、缓存、Agent 预留结构分别保持清晰，避免 Agent 接入后把工单核心流程改乱。
+6. 已补充当前阶段代码边界说明，见 `docs/current-stage-code-boundaries.md`。阶段 6 接入 Agent 时，应继续保持认证、工单业务、缓存、Agent 预留结构的边界清晰，避免 Agent 绕过 `TicketService` 改动工单核心流程。
