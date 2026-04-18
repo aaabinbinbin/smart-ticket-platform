@@ -1,0 +1,648 @@
+openapi: 3.0.3
+info:
+  title: Smart Ticket Platform - Stage 4 Ticket Core MVP
+  version: 0.0.1
+  description: |
+    第四阶段工单核心业务 MVP 接口集合。
+
+    所有接口都需要 Bearer Token：
+
+    Authorization: Bearer <accessToken>
+
+    枚举字段使用 code 交互，响应中同时返回对应 info。
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+tags:
+  - name: Ticket Core
+    description: 工单核心流程接口
+security:
+  - bearerAuth: []
+paths:
+  /api/tickets:
+    post:
+      tags:
+        - Ticket Core
+      summary: 创建工单
+      description: 创建后的工单初始状态固定为 PENDING_ASSIGN，并自动记录 CREATE 操作日志。
+      operationId: createTicket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTicketRequest'
+            example:
+              title: 测试环境无法登录
+              description: 测试环境登录时报 500，影响研发自测
+              category: SYSTEM
+              priority: HIGH
+              idempotencyKey: create-ticket-001
+      responses:
+        '200':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: 操作成功
+                data:
+                  id: 100
+                  ticketNo: INC202604180001
+                  title: 测试环境无法登录
+                  description: 测试环境登录时报 500，影响研发自测
+                  category: SYSTEM
+                  categoryInfo: 系统功能
+                  priority: HIGH
+                  priorityInfo: 高
+                  status: PENDING_ASSIGN
+                  statusInfo: 待分配
+                  creatorId: 1
+                  assigneeId: null
+                  solutionSummary: null
+                  source: MANUAL
+                  createdAt: '2026-04-18T15:00:00'
+                  updatedAt: '2026-04-18T15:00:00'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    get:
+      tags:
+        - Ticket Core
+      summary: 分页查询工单列表
+      description: 管理员查询全部工单；普通用户只查询自己创建或当前负责的工单。
+      operationId: pageTickets
+      parameters:
+        - name: pageNo
+          in: query
+          description: 页码，从 1 开始。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          example: 1
+        - name: pageSize
+          in: query
+          description: 每页大小，最大 100。
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+          example: 10
+        - name: status
+          in: query
+          description: 工单状态 code。
+          required: false
+          schema:
+            $ref: '#/components/schemas/TicketStatusCode'
+          example: PROCESSING
+        - name: category
+          in: query
+          description: 工单分类 code。
+          required: false
+          schema:
+            $ref: '#/components/schemas/TicketCategoryCode'
+          example: SYSTEM
+        - name: priority
+          in: query
+          description: 工单优先级 code。
+          required: false
+          schema:
+            $ref: '#/components/schemas/TicketPriorityCode'
+          example: HIGH
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketPageResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: 操作成功
+                data:
+                  pageNo: 1
+                  pageSize: 10
+                  total: 1
+                  records:
+                    - id: 100
+                      ticketNo: INC202604180001
+                      title: 测试环境无法登录
+                      description: 测试环境登录时报 500，影响研发自测
+                      category: SYSTEM
+                      categoryInfo: 系统功能
+                      priority: HIGH
+                      priorityInfo: 高
+                      status: PROCESSING
+                      statusInfo: 处理中
+                      creatorId: 1
+                      assigneeId: 2
+                      solutionSummary: null
+                      source: MANUAL
+                      createdAt: '2026-04-18T15:00:00'
+                      updatedAt: '2026-04-18T15:05:00'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}:
+    get:
+      tags:
+        - Ticket Core
+      summary: 查询工单详情
+      description: 返回工单主信息、评论列表和操作日志列表。普通用户只能查询自己创建或当前负责的工单。
+      operationId: getTicketDetail
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDetailResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: 操作成功
+                data:
+                  ticket:
+                    id: 100
+                    ticketNo: INC202604180001
+                    title: 测试环境无法登录
+                    description: 测试环境登录时报 500，影响研发自测
+                    category: SYSTEM
+                    categoryInfo: 系统功能
+                    priority: HIGH
+                    priorityInfo: 高
+                    status: PROCESSING
+                    statusInfo: 处理中
+                    creatorId: 1
+                    assigneeId: 2
+                    solutionSummary: null
+                    source: MANUAL
+                    createdAt: '2026-04-18T15:00:00'
+                    updatedAt: '2026-04-18T15:05:00'
+                  comments: []
+                  operationLogs:
+                    - id: 1
+                      ticketId: 100
+                      operatorId: 1
+                      operationType: CREATE
+                      operationTypeInfo: 创建工单
+                      operationDesc: 创建工单
+                      beforeValue: null
+                      afterValue: id=100, ticketNo=INC202604180001, status=PENDING_ASSIGN, assigneeId=null, solutionSummary=null
+                      createdAt: '2026-04-18T15:00:00'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}/assign:
+    put:
+      tags:
+        - Ticket Core
+      summary: 分配工单
+      description: 管理员将待分配工单分配给 STAFF，状态从 PENDING_ASSIGN 流转为 PROCESSING。
+      operationId: assignTicket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTicketRequest'
+            example:
+              assigneeId: 2
+      responses:
+        '200':
+          description: 分配成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}/transfer:
+    put:
+      tags:
+        - Ticket Core
+      summary: 转派工单
+      description: 当前负责人或管理员将处理中的工单转派给另一个 STAFF。转派不改变工单状态。
+      operationId: transferTicket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTicketRequest'
+            example:
+              assigneeId: 3
+      responses:
+        '200':
+          description: 转派成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}/status:
+    put:
+      tags:
+        - Ticket Core
+      summary: 更新工单状态
+      description: 按 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED 状态机更新工单状态。
+      operationId: updateTicketStatus
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTicketStatusRequest'
+            example:
+              targetStatus: RESOLVED
+              solutionSummary: 重启登录服务后恢复
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}/comments:
+    post:
+      tags:
+        - Ticket Core
+      summary: 添加工单评论
+      description: 提单人、当前负责人或管理员可以对未关闭工单添加评论，并自动记录 COMMENT 操作日志。
+      operationId: addTicketComment
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTicketCommentRequest'
+            example:
+              content: 已收到，正在排查登录服务日志。
+      responses:
+        '200':
+          description: 评论成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketCommentResponse'
+              example:
+                success: true
+                code: SUCCESS
+                message: 操作成功
+                data:
+                  id: 200
+                  ticketId: 100
+                  commenterId: 2
+                  commentType: USER_REPLY
+                  content: 已收到，正在排查登录服务日志。
+                  createdAt: '2026-04-18T15:10:00'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/tickets/{ticketId}/close:
+    put:
+      tags:
+        - Ticket Core
+      summary: 关闭工单
+      description: 提单人或管理员关闭已解决工单，状态从 RESOLVED 流转为 CLOSED。
+      operationId: closeTicket
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: 关闭成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          $ref: '#/components/responses/BusinessError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TicketId:
+      name: ticketId
+      in: path
+      description: 工单 ID。
+      required: true
+      schema:
+        type: integer
+        format: int64
+      example: 100
+  responses:
+    BusinessError:
+      description: 业务错误或参数校验错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidTransition:
+              summary: 状态流转不合法
+              value:
+                success: false
+                code: INVALID_TICKET_STATUS_TRANSITION
+                message: 状态流转不合法，只允许 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED
+                data: null
+            notFound:
+              summary: 工单不存在或不可见
+              value:
+                success: false
+                code: TICKET_NOT_FOUND
+                message: 工单不存在
+                data: null
+    Unauthorized:
+      description: 未登录或 Token 无效
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            code: UNAUTHORIZED
+            message: 请先登录或提供有效令牌
+            data: null
+  schemas:
+    TicketStatusCode:
+      type: string
+      enum:
+        - PENDING_ASSIGN
+        - PROCESSING
+        - RESOLVED
+        - CLOSED
+      description: 工单状态 code。
+    TicketCategoryCode:
+      type: string
+      enum:
+        - ACCOUNT
+        - SYSTEM
+        - ENVIRONMENT
+        - OTHER
+      description: 工单分类 code。
+    TicketPriorityCode:
+      type: string
+      enum:
+        - LOW
+        - MEDIUM
+        - HIGH
+        - URGENT
+      description: 工单优先级 code。
+    OperationTypeCode:
+      type: string
+      enum:
+        - CREATE
+        - ASSIGN
+        - TRANSFER
+        - UPDATE_STATUS
+        - COMMENT
+        - CLOSE
+      description: 操作类型 code。
+    CreateTicketRequest:
+      type: object
+      required:
+        - title
+        - description
+        - category
+        - priority
+      properties:
+        title:
+          type: string
+          maxLength: 200
+          description: 工单标题。
+        description:
+          type: string
+          description: 问题描述。
+        category:
+          $ref: '#/components/schemas/TicketCategoryCode'
+        priority:
+          $ref: '#/components/schemas/TicketPriorityCode'
+        idempotencyKey:
+          type: string
+          maxLength: 128
+          nullable: true
+          description: 创建幂等键。
+    AssignTicketRequest:
+      type: object
+      required:
+        - assigneeId
+      properties:
+        assigneeId:
+          type: integer
+          format: int64
+          description: 目标处理人用户 ID，必须具备 STAFF 角色。
+    UpdateTicketStatusRequest:
+      type: object
+      required:
+        - targetStatus
+      properties:
+        targetStatus:
+          $ref: '#/components/schemas/TicketStatusCode'
+        solutionSummary:
+          type: string
+          nullable: true
+          description: 解决方案摘要，通常在更新为 RESOLVED 时填写。
+    AddTicketCommentRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          type: string
+          maxLength: 5000
+          description: 评论内容。
+    TicketVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        ticketNo:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        category:
+          $ref: '#/components/schemas/TicketCategoryCode'
+        categoryInfo:
+          type: string
+        priority:
+          $ref: '#/components/schemas/TicketPriorityCode'
+        priorityInfo:
+          type: string
+        status:
+          $ref: '#/components/schemas/TicketStatusCode'
+        statusInfo:
+          type: string
+        creatorId:
+          type: integer
+          format: int64
+        assigneeId:
+          type: integer
+          format: int64
+          nullable: true
+        solutionSummary:
+          type: string
+          nullable: true
+        source:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TicketCommentVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        ticketId:
+          type: integer
+          format: int64
+        commenterId:
+          type: integer
+          format: int64
+        commentType:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    TicketOperationLogVO:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        ticketId:
+          type: integer
+          format: int64
+        operatorId:
+          type: integer
+          format: int64
+        operationType:
+          $ref: '#/components/schemas/OperationTypeCode'
+        operationTypeInfo:
+          type: string
+        operationDesc:
+          type: string
+        beforeValue:
+          type: string
+          nullable: true
+        afterValue:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    TicketDetailVO:
+      type: object
+      properties:
+        ticket:
+          $ref: '#/components/schemas/TicketVO'
+        comments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketCommentVO'
+        operationLogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketOperationLogVO'
+    TicketPage:
+      type: object
+      properties:
+        pageNo:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+          format: int64
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketVO'
+    TicketResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketVO'
+    TicketDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketDetailVO'
+    TicketPageResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketPage'
+    TicketCommentResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/TicketCommentVO'
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/BaseResponse'
+        - type: object
+          properties:
+            data:
+              nullable: true
+    BaseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        code:
+          type: string
+        message:
+          type: string

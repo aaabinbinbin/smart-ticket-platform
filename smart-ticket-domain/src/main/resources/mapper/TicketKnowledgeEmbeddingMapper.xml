@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketKnowledgeEmbeddingMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketKnowledgeEmbedding"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_knowledge_embedding (knowledge_id, chunk_index, chunk_text)
+        VALUES (#{knowledgeId}, #{chunkIndex}, #{chunkText})
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
+        SELECT *
+        FROM ticket_knowledge_embedding
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByKnowledgeId" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
+        SELECT *
+        FROM ticket_knowledge_embedding
+        WHERE knowledge_id = #{knowledgeId}
+        ORDER BY chunk_index ASC
+    </select>
+</mapper>

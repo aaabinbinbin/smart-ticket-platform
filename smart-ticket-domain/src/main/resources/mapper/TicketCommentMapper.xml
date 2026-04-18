@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketCommentMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketComment"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_comment (ticket_id, commenter_id, comment_type, content)
+        VALUES (#{ticketId}, #{commenterId}, #{commentType}, #{content})
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketComment">
+        SELECT *
+        FROM ticket_comment
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketComment">
+        SELECT *
+        FROM ticket_comment
+        WHERE ticket_id = #{ticketId}
+        ORDER BY created_at ASC
+    </select>
+</mapper>

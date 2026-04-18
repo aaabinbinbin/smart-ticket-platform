@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketOperationLogMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketOperationLog"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_operation_log (
+            ticket_id, operator_id, operation_type, operation_desc, before_value, after_value
+        )
+        VALUES (
+            #{ticketId}, #{operatorId}, #{operationType}, #{operationDesc}, #{beforeValue}, #{afterValue}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketOperationLog">
+        SELECT *
+        FROM ticket_operation_log
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketOperationLog">
+        SELECT *
+        FROM ticket_operation_log
+        WHERE ticket_id = #{ticketId}
+        ORDER BY created_at ASC
+    </select>
+</mapper>

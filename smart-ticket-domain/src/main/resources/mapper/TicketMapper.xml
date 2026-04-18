@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.Ticket"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket (
+            ticket_no, title, description, category, priority, status,
+            creator_id, assignee_id, solution_summary, source, idempotency_key
+        )
+        VALUES (
+            #{ticketNo}, #{title}, #{description}, #{category.code}, #{priority.code}, #{status.code},
+            #{creatorId}, #{assigneeId}, #{solutionSummary}, #{source}, #{idempotencyKey}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE id = #{id}
+    </select>
+
+    <select id="findVisibleById" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE id = #{id}
+          AND (creator_id = #{userId} OR assignee_id = #{userId})
+    </select>
+
+    <select id="findByTicketNo" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE ticket_no = #{ticketNo}
+    </select>
+
+    <select id="findByCreatorId" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE creator_id = #{creatorId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByAssigneeId" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE assignee_id = #{assigneeId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="findByStatus" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE status = #{status.code}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="pageAll" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE 1 = 1
+        <if test="status != null">AND status = #{status}</if>
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE 1 = 1
+        <if test="status != null">AND status = #{status}</if>
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+    </select>
+
+    <select id="pageVisible" resultType="com.smartticket.domain.entity.Ticket">
+        SELECT *
+        FROM ticket
+        WHERE (creator_id = #{userId} OR assignee_id = #{userId})
+        <if test="status != null">AND status = #{status}</if>
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countVisible" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket
+        WHERE (creator_id = #{userId} OR assignee_id = #{userId})
+        <if test="status != null">AND status = #{status}</if>
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+    </select>
+
+    <update id="updateAssignee">
+        UPDATE ticket
+        SET assignee_id = #{assigneeId}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateAssigneeAndStatus">
+        UPDATE ticket
+        SET assignee_id = #{assigneeId},
+            status = #{status.code}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE ticket
+        SET status = #{status.code},
+            solution_summary = #{solutionSummary}
+        WHERE id = #{id}
+    </update>
+</mapper>

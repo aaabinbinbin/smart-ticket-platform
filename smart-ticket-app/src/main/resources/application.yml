@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: smart-ticket-platform
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/smart_ticket_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis:
+  mapper-locations: classpath*:mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+smart-ticket:
+  jwt:
+    secret: smart-ticket-platform-local-jwt-secret-change-me-please-20260417
+    expiration-minutes: 120

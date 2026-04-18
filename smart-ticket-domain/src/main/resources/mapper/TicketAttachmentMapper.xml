@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketAttachmentMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketAttachment"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_attachment (
+            ticket_id, file_name, file_url, file_type, file_size, uploader_id
+        )
+        VALUES (
+            #{ticketId}, #{fileName}, #{fileUrl}, #{fileType}, #{fileSize}, #{uploaderId}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketAttachment">
+        SELECT *
+        FROM ticket_attachment
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketAttachment">
+        SELECT *
+        FROM ticket_attachment
+        WHERE ticket_id = #{ticketId}
+        ORDER BY created_at ASC
+    </select>
+</mapper>
