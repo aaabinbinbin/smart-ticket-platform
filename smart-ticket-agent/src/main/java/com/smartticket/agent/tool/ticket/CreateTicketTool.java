@@ -13,7 +13,10 @@ import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.biz.dto.TicketCreateCommandDTO;
 import com.smartticket.biz.service.TicketService;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.rag.model.RetrievalResult;
+import com.smartticket.rag.service.RetrievalService;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -25,10 +28,16 @@ public class CreateTicketTool implements AgentTool {
 
     private final TicketService ticketService;
     private final AgentToolRequestValidator validator;
+    private final RetrievalService retrievalService;
 
-    public CreateTicketTool(TicketService ticketService, AgentToolRequestValidator validator) {
+    public CreateTicketTool(
+            TicketService ticketService,
+            AgentToolRequestValidator validator,
+            RetrievalService retrievalService
+    ) {
         this.ticketService = ticketService;
         this.validator = validator;
+        this.retrievalService = retrievalService;
     }
 
     @Override
@@ -65,12 +74,30 @@ public class CreateTicketTool implements AgentTool {
             return AgentToolResults.needMoreInfo(NAME, validation.getMissingFields());
         }
 
+        RetrievalResult similarCases = retrievalService.checkSimilarCasesBeforeCreate(
+                request.getParameters().getTitle(),
+                request.getParameters().getDescription(),
+                3
+        );
+
         Ticket ticket = ticketService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
                 .title(request.getParameters().getTitle())
                 .description(request.getParameters().getDescription())
                 .category(request.getParameters().getCategory())
                 .priority(request.getParameters().getPriority())
                 .build());
-        return AgentToolResults.success(NAME, "已创建工单。", ticket, ticket.getId(), null);
+        String reply = similarCases.getHits().isEmpty()
+                ? "已创建工单。"
+                : "已创建工单，并找到相似历史案例供处理时参考。相似案例不会阻止本次创建。";
+        return AgentToolResults.success(
+                NAME,
+                reply,
+                Map.of(
+                        "ticket", ticket,
+                        "similarCases", similarCases
+                ),
+                ticket.getId(),
+                null
+        );
     }
 }

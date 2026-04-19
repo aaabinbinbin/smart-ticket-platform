@@ -23,6 +23,12 @@
         ORDER BY chunk_index ASC
     </select>
 
+    <select id="findAll" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
+        SELECT *
+        FROM ticket_knowledge_embedding
+        ORDER BY knowledge_id ASC, chunk_index ASC
+    </select>
+
     <delete id="deleteByKnowledgeId">
         DELETE FROM ticket_knowledge_embedding
         WHERE knowledge_id = #{knowledgeId}

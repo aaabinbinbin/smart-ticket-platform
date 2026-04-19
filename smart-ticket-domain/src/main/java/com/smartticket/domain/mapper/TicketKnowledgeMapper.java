@@ -1,6 +1,7 @@
 package com.smartticket.domain.mapper;
 
 import com.smartticket.domain.entity.TicketKnowledge;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -15,6 +16,8 @@ public interface TicketKnowledgeMapper {
     TicketKnowledge findById(@Param("id") Long id);
 
     TicketKnowledge findByTicketId(@Param("ticketId") Long ticketId);
+
+    List<TicketKnowledge> findActive();
 
     int update(TicketKnowledge ticketKnowledge);
 }

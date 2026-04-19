@@ -29,6 +29,11 @@ public class TicketKnowledgeEmbeddingRepository {
         return mapper.findByKnowledgeId(knowledgeId);
     }
 
+    /** 查询所有切片，第一版用于内存 TopK 相似度计算。 */
+    public List<TicketKnowledgeEmbedding> findAll() {
+        return mapper.findAll();
+    }
+
     /** 删除某条知识已有切片，用于重新构建时保持幂等。 */
     public int deleteByKnowledgeId(Long knowledgeId) {
         return mapper.deleteByKnowledgeId(knowledgeId);
