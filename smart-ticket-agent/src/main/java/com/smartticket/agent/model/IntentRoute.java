@@ -1,0 +1,19 @@
+package com.smartticket.agent.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+/**
+ * 意图路由决策结果。
+ */
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class IntentRoute {
+    private AgentIntent intent;
+    private double confidence;
+    private String reason;
+}
