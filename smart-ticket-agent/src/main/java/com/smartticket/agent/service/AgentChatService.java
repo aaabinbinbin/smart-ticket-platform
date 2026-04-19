@@ -3,8 +3,13 @@ package com.smartticket.agent.service;
 import com.smartticket.agent.dto.AgentChatRequestDTO;
 import com.smartticket.agent.dto.AgentChatResponseDTO;
 import com.smartticket.agent.model.AgentSessionContext;
-import com.smartticket.agent.model.AgentToolResult;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.tool.core.AgentTool;
+import com.smartticket.agent.tool.core.AgentToolRegistry;
+import com.smartticket.agent.tool.core.AgentToolRequest;
+import com.smartticket.agent.tool.core.AgentToolResult;
+import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
+import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.ArrayList;
@@ -25,16 +30,19 @@ public class AgentChatService {
 
     private final AgentSessionCacheService sessionCacheService;
     private final IntentRouter intentRouter;
-    private final TicketAgentCapabilityService capabilityService;
+    private final AgentToolRegistry toolRegistry;
+    private final AgentToolParameterExtractor parameterExtractor;
 
     public AgentChatService(
             AgentSessionCacheService sessionCacheService,
             IntentRouter intentRouter,
-            TicketAgentCapabilityService capabilityService
+            AgentToolRegistry toolRegistry,
+            AgentToolParameterExtractor parameterExtractor
     ) {
         this.sessionCacheService = sessionCacheService;
         this.intentRouter = intentRouter;
-        this.capabilityService = capabilityService;
+        this.toolRegistry = toolRegistry;
+        this.parameterExtractor = parameterExtractor;
     }
 
     public AgentChatResponseDTO chat(Authentication authentication, AgentChatRequestDTO request) {
@@ -45,9 +53,22 @@ public class AgentChatService {
                 currentUser.getUserId(), route);
         log.info("agent session context before call: sessionId={}, context={}", request.getSessionId(), context);
 
-        AgentToolResult toolResult = capabilityService.invoke(currentUser, request.getMessage(), context, route);
-        log.info("agent capability result: sessionId={}, intent={}, invoked={}, result={}", request.getSessionId(),
-                route.getIntent(), toolResult.isInvoked(), toolResult.getData());
+        AgentTool tool = toolRegistry.requireByIntent(route.getIntent());
+        AgentToolParameters parameters = parameterExtractor.extract(request.getMessage(), context);
+        AgentToolRequest toolRequest = AgentToolRequest.builder()
+                .currentUser(currentUser)
+                .message(request.getMessage())
+                .context(context)
+                .route(route)
+                .parameters(parameters)
+                .build();
+        log.info("agent selected tool: sessionId={}, intent={}, tool={}, metadata={}, parameters={}",
+                request.getSessionId(), route.getIntent(), tool.name(), tool.metadata(), parameters);
+
+        AgentToolResult toolResult = tool.execute(toolRequest);
+        log.info("agent tool result: sessionId={}, intent={}, tool={}, status={}, invoked={}, result={}",
+                request.getSessionId(), route.getIntent(), tool.name(), toolResult.getStatus(),
+                toolResult.isInvoked(), toolResult.getData());
 
         applyToolResult(context, route, request.getMessage(), toolResult);
         sessionCacheService.save(request.getSessionId(), context);
