@@ -24,6 +24,7 @@ public class AgentPromptTemplateRegistry {
         templates.put(AgentPromptName.TICKET_PARAMETER_EXTRACTION, ticketParameterExtraction());
         templates.put(AgentPromptName.CLARIFICATION_QUESTION, clarificationQuestion());
         templates.put(AgentPromptName.RESPONSE_SUMMARY, responseSummary());
+        templates.put(AgentPromptName.TOOL_CALL_PLAN, toolCallPlan());
     }
 
     /**
@@ -98,6 +99,47 @@ public class AgentPromptTemplateRegistry {
 
                 只输出 JSON，不要输出 Markdown。JSON 格式：
                 {"reply":"处理结果..."}
+                """;
+    }
+
+    /**
+     * 单 Agent 工具调用计划模板。
+     */
+    private String toolCallPlan() {
+        return """
+                你是工单系统的单 Agent 计划生成器。
+                你的任务是根据用户消息、会话上下文、候选 Tool 和 fallback 信息，生成一个受控工具调用计划。
+
+                严格规则：
+                1. 只能从 availableTools 中选择 toolName。
+                2. intent 只能是 QUERY_TICKET、CREATE_TICKET、TRANSFER_TICKET、SEARCH_HISTORY。
+                3. 不能直接执行工具，不能声称已经写入数据库。
+                4. 不能绕过 Tool 和 biz 层权限。
+                5. 不要默认调用 RAG。
+                6. 参数只能来自用户消息、会话上下文或 fallback 参数，不要编造。
+                7. category 只能是 ACCOUNT、SYSTEM、ENVIRONMENT、OTHER。
+                8. priority 只能是 LOW、MEDIUM、HIGH、URGENT。
+
+                只输出 JSON，不要输出 Markdown。JSON 格式：
+                {
+                  "intent": "QUERY_TICKET",
+                  "toolName": "queryTicket",
+                  "parameters": {
+                    "ticketId": null,
+                    "assigneeId": null,
+                    "title": null,
+                    "description": null,
+                    "category": null,
+                    "priority": null,
+                    "numbers": [],
+                    "missingFields": []
+                  },
+                  "needMoreInfo": false,
+                  "missingFields": [],
+                  "nextAction": "EXECUTE_TOOL",
+                  "confidence": 0.0,
+                  "reason": "一句话说明计划原因"
+                }
                 """;
     }
 }

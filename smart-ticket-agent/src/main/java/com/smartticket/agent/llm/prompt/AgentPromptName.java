@@ -24,7 +24,12 @@ public enum AgentPromptName {
     /**
      * 工具执行结果总结 Prompt。
      */
-    RESPONSE_SUMMARY("response-summary");
+    RESPONSE_SUMMARY("response-summary"),
+
+    /**
+     * 单 Agent 工具调用计划 Prompt。
+     */
+    TOOL_CALL_PLAN("tool-call-plan");
 
     /**
      * 模板外部名称，保持与文档中的模板名称一致。

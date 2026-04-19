@@ -2,9 +2,11 @@ package com.smartticket.agent.llm.prompt;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smartticket.agent.llm.model.LlmFallbackToolCallPlan;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.tool.core.AgentToolResult;
+import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.parameter.AgentToolParameterField;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -100,6 +102,29 @@ public class AgentPromptBuilder {
         payload.put("toolStatus", toolResult.getStatus());
         payload.put("toolReply", safe(toolResult.getReply()));
         payload.put("toolResult", toolResult.getData());
+        return toJson(payload);
+    }
+
+    /**
+     * 构造单 Agent 工具调用计划任务的 user prompt。
+     *
+     * <p>availableTools 只暴露工具元数据，不暴露任何可直接执行业务的对象。</p>
+     */
+    public String toolCallPlanUserPrompt(
+            String message,
+            AgentSessionContext context,
+            IntentRoute fallbackRoute,
+            LlmFallbackToolCallPlan fallbackPlan,
+            List<AgentTool> availableTools
+    ) {
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("message", safe(message));
+        payload.put("sessionContext", context);
+        payload.put("fallbackRoute", fallbackRoute);
+        payload.put("fallbackPlan", fallbackPlan);
+        payload.put("availableTools", availableTools.stream()
+                .map(tool -> tool.metadata())
+                .toList());
         return toJson(payload);
     }
 

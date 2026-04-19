@@ -3,14 +3,17 @@ package com.smartticket.agent.llm.service;
 import com.smartticket.agent.llm.client.LlmClient;
 import com.smartticket.agent.llm.client.LlmMessage;
 import com.smartticket.agent.llm.model.LlmClarificationResult;
+import com.smartticket.agent.llm.model.LlmFallbackToolCallPlan;
 import com.smartticket.agent.llm.model.LlmIntentDecision;
 import com.smartticket.agent.llm.model.LlmParameterExtractionResult;
 import com.smartticket.agent.llm.model.LlmResponseSummary;
+import com.smartticket.agent.llm.model.LlmToolCallPlan;
 import com.smartticket.agent.llm.prompt.AgentPromptBuilder;
 import com.smartticket.agent.llm.prompt.AgentPromptName;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.core.AgentToolStatus;
 import com.smartticket.agent.tool.parameter.AgentToolParameterField;
@@ -19,6 +22,7 @@ import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -170,6 +174,48 @@ public class LlmAgentService {
             log.warn("agent llm response summary fallback: reason={}", ex.getMessage());
             return toolResult.getReply();
         }
+    }
+
+    /**
+     * 使用 LLM 生成单 Agent 工具调用计划。
+     *
+     * <p>该方法只返回模型计划，不执行 Tool；计划合法性由 TicketAgentOrchestrator 继续校验。</p>
+     */
+    public Optional<LlmToolCallPlan> planToolCall(
+            String message,
+            AgentSessionContext context,
+            IntentRoute fallbackRoute,
+            LlmFallbackToolCallPlan fallbackPlan,
+            List<AgentTool> availableTools
+    ) {
+        if (!llmClient.isAvailable()) {
+            return Optional.empty();
+        }
+        try {
+            String content = llmClient.complete(List.of(
+                    LlmMessage.system(promptBuilder.systemPrompt(AgentPromptName.TOOL_CALL_PLAN)),
+                    LlmMessage.user(promptBuilder.toolCallPlanUserPrompt(
+                            message, context, fallbackRoute, fallbackPlan, availableTools))
+            ));
+            LlmToolCallPlan plan = jsonParser.parse(content, LlmToolCallPlan.class);
+            log.info("agent llm tool call plan: plan={}", plan);
+            return Optional.ofNullable(plan);
+        } catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException ex) {
+            log.warn("agent llm tool call plan fallback: reason={}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 将 LLM 参数抽取结果与 fallback 参数合并。
+     *
+     * <p>供阶段九编排器复用阶段八的参数校验逻辑。</p>
+     */
+    public AgentToolParameters mergeParametersOrFallback(
+            LlmParameterExtractionResult result,
+            AgentToolParameters fallbackParameters
+    ) {
+        return validateParameters(result, fallbackParameters);
     }
 
     /**
