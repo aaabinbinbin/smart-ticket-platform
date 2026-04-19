@@ -27,14 +27,17 @@ public class IntentRouter {
 
     public IntentRoute route(String message, AgentSessionContext context) {
         String normalized = normalize(message);
-        if (containsAny(normalized, HISTORY_KEYWORDS)) {
-            return route(AgentIntent.SEARCH_HISTORY, 0.92, "命中历史查询关键词");
-        }
         if (containsAny(normalized, TRANSFER_KEYWORDS)) {
             return route(AgentIntent.TRANSFER_TICKET, 0.90, "命中转派关键词");
         }
         if (containsAny(normalized, CREATE_KEYWORDS)) {
             return route(AgentIntent.CREATE_TICKET, 0.88, "命中创建关键词");
+        }
+        if (containsTicketReference(normalized) && containsAny(normalized, QUERY_KEYWORDS)) {
+            return route(AgentIntent.QUERY_TICKET, 0.88, "命中当前会话工单指代查询");
+        }
+        if (containsAny(normalized, HISTORY_KEYWORDS)) {
+            return route(AgentIntent.SEARCH_HISTORY, 0.92, "命中历史查询关键词");
         }
         if (containsAny(normalized, QUERY_KEYWORDS)) {
             return route(AgentIntent.QUERY_TICKET, 0.82, "命中查询关键词");
@@ -55,6 +58,15 @@ public class IntentRouter {
 
     private boolean containsAny(String message, List<String> keywords) {
         return keywords.stream().anyMatch(message::contains);
+    }
+
+    private boolean containsTicketReference(String message) {
+        return message.contains("它")
+                || message.contains("这个")
+                || message.contains("该工单")
+                || message.contains("这个工单")
+                || message.contains("刚才那个工单")
+                || message.contains("刚刚那个工单");
     }
 
     private String normalize(String message) {

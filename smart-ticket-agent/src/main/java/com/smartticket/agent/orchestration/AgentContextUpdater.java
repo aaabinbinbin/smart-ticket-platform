@@ -10,18 +10,21 @@ import org.springframework.stereotype.Component;
 /**
  * Agent 会话上下文更新器。
  *
- * <p>该类只维护 Agent 会话状态，不直接写工单事实数据。阶段十的 pending action
- * 可以继续在这里扩展。</p>
+ * <p>该类只维护通用会话指针和最近消息，不直接写工单事实数据。pending action 的保存和清理由
+ * {@link AgentPendingActionService} 负责，避免普通上下文更新和待执行动作管理耦合在一起。</p>
  */
 @Component
 public class AgentContextUpdater {
-    /**
-     * 会话中保留的最近消息数量，避免上下文无限增长。
-     */
+    /** 会话中保留的最近消息数量，避免上下文无限增长。 */
     private static final int MAX_RECENT_MESSAGES = 10;
 
     /**
      * 根据 Tool 观察结果更新会话上下文。
+     *
+     * @param context 当前 Redis 会话上下文
+     * @param route 本轮 Agent 路由结果
+     * @param message 用户原始消息
+     * @param toolResult Tool 执行或澄清结果
      */
     public void apply(
             AgentSessionContext context,
