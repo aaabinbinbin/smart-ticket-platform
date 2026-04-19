@@ -409,3 +409,9 @@ TicketAgentOrchestrator
 3. 默认 RAG。
 4. 让 LLM 直接写数据库。
 5. 让 LLM 决定最终业务权限。
+# 2026-04-19 Spring AI Migration Note
+
+This historical stage document describes the pre-Spring-AI LLM adapter design.
+`OpenAiCompatibleLlmClient` has been removed in the Spring AI baseline integration.
+The current model adapter is `SpringAiLlmClient -> Spring AI ChatClient`.
+The `LlmClient` abstraction, prompt construction, JSON parsing, Tool Guard, and biz boundary still remain.

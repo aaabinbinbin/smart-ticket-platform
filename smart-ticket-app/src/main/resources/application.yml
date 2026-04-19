@@ -13,6 +13,30 @@ spring:
       password: 123456
       database: 0
       timeout: 3s
+  ai:
+    model:
+      chat: ${SPRING_AI_MODEL_CHAT:none}
+      embedding: ${SPRING_AI_MODEL_EMBEDDING:none}
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          temperature: 0.1
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+    vectorstore:
+      pgvector:
+        enabled: ${SMART_TICKET_AI_VECTOR_STORE_ENABLED:false}
+        initialize-schema: false
+        schema-name: ${PGVECTOR_SCHEMA:public}
+        table-name: ${PGVECTOR_TABLE:vector_store}
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: ${PGVECTOR_DIMENSIONS:1536}
+        max-document-batch-size: 1000
 
 mybatis:
   mapper-locations: classpath*:mapper/**/*.xml
@@ -20,6 +44,18 @@ mybatis:
     map-underscore-to-camel-case: true
 
 smart-ticket:
+  ai:
+    chat:
+      enabled: ${SMART_TICKET_AI_CHAT_ENABLED:false}
+    embedding:
+      enabled: ${SMART_TICKET_AI_EMBEDDING_ENABLED:false}
+    vector-store:
+      enabled: ${SMART_TICKET_AI_VECTOR_STORE_ENABLED:false}
+    pgvector:
+      url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/smart_ticket_vector}
+      username: ${PGVECTOR_DATASOURCE_USERNAME:postgres}
+      password: ${PGVECTOR_DATASOURCE_PASSWORD:postgres}
+      driver-class-name: org.postgresql.Driver
   jwt:
     secret: smart-ticket-platform-local-jwt-secret-change-me-please-20260417
     expiration-minutes: 120
