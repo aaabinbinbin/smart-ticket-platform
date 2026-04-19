@@ -16,4 +16,6 @@ public interface TicketKnowledgeEmbeddingMapper {
     TicketKnowledgeEmbedding findById(@Param("id") Long id);
 
     List<TicketKnowledgeEmbedding> findByKnowledgeId(@Param("knowledgeId") Long knowledgeId);
+
+    int deleteByKnowledgeId(@Param("knowledgeId") Long knowledgeId);
 }

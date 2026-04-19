@@ -37,6 +37,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * 工单核心业务服务测试。
@@ -61,6 +62,8 @@ class TicketServiceTest {
     private TicketDetailCacheService ticketDetailCacheService;
     @Mock
     private TicketIdempotencyService ticketIdempotencyService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private TicketService ticketService;
 
@@ -73,7 +76,8 @@ class TicketServiceTest {
                 operationLogRepository,
                 permissionService,
                 ticketDetailCacheService,
-                ticketIdempotencyService
+                ticketIdempotencyService,
+                eventPublisher
         );
     }
 

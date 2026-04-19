@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 /**
  * 工单知识切片实体，对应表 {@code ticket_knowledge_embedding}。
  *
- * <p>当前 MySQL 表只保存切片文本。真正的向量字段后续接入 pgvector 时再扩展。</p>
+ * <p>第一版先把向量以 JSON 文本形式存入 MySQL，后续接入 pgvector 时可迁移为专用向量字段。</p>
  */
 @Data
 @Builder
@@ -24,6 +24,8 @@ public class TicketKnowledgeEmbedding {
     private Integer chunkIndex;
     /** 切片文本内容。 */
     private String chunkText;
+    /** 切片对应的向量 JSON 文本，第一版用于证明向量化入库链路已打通。 */
+    private String embeddingVector;
     /** 创建时间。 */
     private LocalDateTime createdAt;
 }

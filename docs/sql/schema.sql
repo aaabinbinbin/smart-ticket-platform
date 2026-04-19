@@ -128,12 +128,13 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 工单知识切片表。
--- 保存知识文本切片。当前 MySQL 版本只保存切片文本，向量字段后续由 pgvector 承担。
+-- 保存知识文本切片和第一版向量 JSON。后续接入 pgvector 时可迁移到专用向量字段。
 CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识切片主键',
     knowledge_id BIGINT NOT NULL COMMENT '所属知识 ID',
     chunk_index INT NOT NULL COMMENT '切片序号，从 0 或 1 开始由 RAG 模块约定',
     chunk_text TEXT NOT NULL COMMENT '切片文本内容',
+    embedding_vector TEXT COMMENT '向量 JSON 文本，第一版用于打通知识向量化入库链路',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_knowledge_id (knowledge_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

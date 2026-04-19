@@ -6,8 +6,8 @@
 
     <insert id="insert" parameterType="com.smartticket.domain.entity.TicketKnowledgeEmbedding"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO ticket_knowledge_embedding (knowledge_id, chunk_index, chunk_text)
-        VALUES (#{knowledgeId}, #{chunkIndex}, #{chunkText})
+        INSERT INTO ticket_knowledge_embedding (knowledge_id, chunk_index, chunk_text, embedding_vector)
+        VALUES (#{knowledgeId}, #{chunkIndex}, #{chunkText}, #{embeddingVector})
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
@@ -22,4 +22,9 @@
         WHERE knowledge_id = #{knowledgeId}
         ORDER BY chunk_index ASC
     </select>
+
+    <delete id="deleteByKnowledgeId">
+        DELETE FROM ticket_knowledge_embedding
+        WHERE knowledge_id = #{knowledgeId}
+    </delete>
 </mapper>

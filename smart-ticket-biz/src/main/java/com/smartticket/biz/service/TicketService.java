@@ -4,6 +4,7 @@ import com.smartticket.biz.dto.TicketCreateCommandDTO;
 import com.smartticket.biz.dto.TicketDetailDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
 import com.smartticket.biz.dto.TicketUpdateStatusCommandDTO;
+import com.smartticket.biz.event.TicketClosedEvent;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.repository.TicketCommentRepository;
 import com.smartticket.biz.repository.TicketOperationLogRepository;
@@ -23,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -44,6 +46,7 @@ public class TicketService {
     private final TicketPermissionService permissionService;
     private final TicketDetailCacheService ticketDetailCacheService;
     private final TicketIdempotencyService ticketIdempotencyService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public TicketService(
             TicketRepository ticketRepository,
@@ -51,7 +54,8 @@ public class TicketService {
             TicketOperationLogRepository operationLogRepository,
             TicketPermissionService permissionService,
             TicketDetailCacheService ticketDetailCacheService,
-            TicketIdempotencyService ticketIdempotencyService
+            TicketIdempotencyService ticketIdempotencyService,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
@@ -59,6 +63,7 @@ public class TicketService {
         this.permissionService = permissionService;
         this.ticketDetailCacheService = ticketDetailCacheService;
         this.ticketIdempotencyService = ticketIdempotencyService;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -257,7 +262,27 @@ public class TicketService {
         Ticket after = requireTicket(ticketId);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.CLOSE, "关闭工单", snapshot(before), snapshot(after));
         ticketDetailCacheService.evict(ticketId);
+        publishTicketClosedAfterCommit(ticketId);
         return after;
+    }
+
+    /**
+     * 在关闭主事务提交后发布工单关闭事件。
+     *
+     * <p>知识构建和向量化由事件监听方异步处理，避免 embedding 流程进入关闭工单主事务。</p>
+     */
+    private void publishTicketClosedAfterCommit(Long ticketId) {
+        TicketClosedEvent event = new TicketClosedEvent(ticketId);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            eventPublisher.publishEvent(event);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                eventPublisher.publishEvent(event);
+            }
+        });
     }
 
     private void validateStatusTransition(CurrentUser operator, Ticket ticket, TicketStatusEnum targetStatus) {
