@@ -21,6 +21,7 @@ public class AgentToolParameters {
     private Long assigneeId;
     private String title;
     private String description;
+    private String idempotencyKey;
     private TicketCategoryEnum category;
     private TicketPriorityEnum priority;
     @Builder.Default

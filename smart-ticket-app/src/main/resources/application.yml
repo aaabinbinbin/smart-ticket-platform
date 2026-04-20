@@ -18,11 +18,11 @@ spring:
       chat: ${SPRING_AI_MODEL_CHAT:none}
       embedding: ${SPRING_AI_MODEL_EMBEDDING:none}
     openai:
-      api-key: ${OPENAI_API_KEY:}
-      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      api-key: ${MY_API_KEY}
+      base-url: ${MY_BASE_URL}
       chat:
         options:
-          model: ${OPENAI_CHAT_MODEL:gpt-4o-mini}
+          model: kimi-k2.5
           temperature: 0.1
       embedding:
         options:
