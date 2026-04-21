@@ -26,4 +26,10 @@
         WHERE ticket_id = #{ticketId}
         ORDER BY created_at ASC
     </select>
+
+    <select id="countByOperationType" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_operation_log
+        WHERE operation_type = #{operationType}
+    </select>
 </mapper>

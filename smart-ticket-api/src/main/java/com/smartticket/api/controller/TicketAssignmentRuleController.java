@@ -6,6 +6,7 @@ import com.smartticket.api.dto.p1.TicketAssignmentRuleRequest;
 import com.smartticket.api.dto.p1.UpdateEnabledRequest;
 import com.smartticket.api.vo.p1.TicketAssignmentPreviewVO;
 import com.smartticket.api.vo.p1.TicketAssignmentRuleVO;
+import com.smartticket.api.vo.p1.TicketAssignmentStatsVO;
 import com.smartticket.api.vo.ticket.TicketVO;
 import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.dto.TicketAssignmentRuleCommandDTO;
@@ -37,15 +38,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 自动分派规则和 preview 接口。
- *
- * <p>当前 P1 只返回推荐结果，不执行真实分派。</p>
- */
 @Validated
 @RestController
 @RequestMapping("/api")
-@Tag(name = "P1 自动分派 Preview", description = "自动分派规则管理和推荐结果预览")
+@Tag(name = "P1 自动分派", description = "自动分派规则管理、预览、执行与统计")
 public class TicketAssignmentRuleController {
     private final TicketAssignmentRuleService assignmentRuleService;
     private final P1ConfigAssembler assembler;
@@ -129,6 +125,12 @@ public class TicketAssignmentRuleController {
                 .build());
     }
 
+    @GetMapping("/ticket-assignment-rules/stats")
+    @Operation(summary = "查询自动分派统计")
+    public ApiResponse<TicketAssignmentStatsVO> stats() {
+        return ApiResponse.success(assembler.toAssignmentStatsVO(assignmentRuleService.stats()));
+    }
+
     @PostMapping("/tickets/{ticketId}/assignment-preview")
     @Operation(summary = "预览工单自动分派结果", description = "只返回推荐目标，不执行真实分派")
     public ApiResponse<TicketAssignmentPreviewVO> preview(
@@ -141,7 +143,7 @@ public class TicketAssignmentRuleController {
     }
 
     @PostMapping("/tickets/{ticketId}/auto-assign")
-    @Operation(summary = "按规则自动分派工单", description = "执行真实分派；必须命中配置了目标处理人的规则")
+    @Operation(summary = "按规则自动分派工单", description = "执行真实分派，支持队列负载均衡和组负责人回退")
     public ApiResponse<TicketVO> autoAssign(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -151,7 +153,6 @@ public class TicketAssignmentRuleController {
         ));
     }
 
-    /** 将 HTTP 请求转换为 biz 命令。 */
     private TicketAssignmentRuleCommandDTO toCommand(TicketAssignmentRuleRequest request) {
         return TicketAssignmentRuleCommandDTO.builder()
                 .ruleName(request.getRuleName())
@@ -165,7 +166,6 @@ public class TicketAssignmentRuleController {
                 .build();
     }
 
-    /** 将认证用户转换为 biz 层用户上下文。 */
     private CurrentUser currentUser(Authentication authentication) {
         AuthUser authUser = (AuthUser) authentication.getPrincipal();
         return CurrentUser.builder()
@@ -179,7 +179,6 @@ public class TicketAssignmentRuleController {
                 .build();
     }
 
-    /** 解析工单分类。 */
     private TicketCategoryEnum parseCategory(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -191,7 +190,6 @@ public class TicketAssignmentRuleController {
         }
     }
 
-    /** 解析工单优先级。 */
     private TicketPriorityEnum parsePriority(String code) {
         if (code == null || code.isBlank()) {
             return null;

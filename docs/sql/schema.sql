@@ -1,70 +1,55 @@
--- 企业智能工单协同平台数据库初始化脚本。
--- 当前脚本只负责创建 MySQL 主业务库和 MVP 阶段核心表。
--- RAG 向量字段后续接入 pgvector 时单独维护，不放在 MySQL 主库中。
-
--- 创建业务数据库，统一使用 utf8mb4 以支持中文、英文和符号内容。
-CREATE DATABASE IF NOT EXISTS smart_ticket_platform
+-- 浼佷笟鏅鸿兘宸ュ崟鍗忓悓骞冲彴鏁版嵁搴撳垵濮嬪寲鑴氭湰銆?-- 褰撳墠鑴氭湰鍙礋璐ｅ垱寤?MySQL 涓讳笟鍔″簱鍜?MVP 闃舵鏍稿績琛ㄣ€?-- RAG 鍚戦噺瀛楁鍚庣画鎺ュ叆 pgvector 鏃跺崟鐙淮鎶わ紝涓嶆斁鍦?MySQL 涓诲簱涓€?
+-- 鍒涘缓涓氬姟鏁版嵁搴擄紝缁熶竴浣跨敤 utf8mb4 浠ユ敮鎸佷腑鏂囥€佽嫳鏂囧拰绗﹀彿鍐呭銆?CREATE DATABASE IF NOT EXISTS smart_ticket_platform
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
 USE smart_ticket_platform;
 
--- 系统用户表。
--- 保存登录账号、密码摘要、展示姓名、邮箱和账号启停状态。
--- 这里只保存用户基础身份信息，不保存用户在某张工单中的业务位置。
-CREATE TABLE IF NOT EXISTS sys_user (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '用户主键',
-    username VARCHAR(64) NOT NULL UNIQUE COMMENT '登录用户名，全局唯一',
-    password_hash VARCHAR(255) NOT NULL COMMENT '密码哈希值，不保存明文密码',
-    real_name VARCHAR(64) NOT NULL COMMENT '用户真实姓名或展示名',
-    email VARCHAR(128) COMMENT '邮箱地址',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT '账号状态：1-启用，0-禁用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'
+-- 绯荤粺鐢ㄦ埛琛ㄣ€?-- 淇濆瓨鐧诲綍璐﹀彿銆佸瘑鐮佹憳瑕併€佸睍绀哄鍚嶃€侀偖绠卞拰璐﹀彿鍚仠鐘舵€併€?-- 杩欓噷鍙繚瀛樼敤鎴峰熀纭€韬唤淇℃伅锛屼笉淇濆瓨鐢ㄦ埛鍦ㄦ煇寮犲伐鍗曚腑鐨勪笟鍔′綅缃€?CREATE TABLE IF NOT EXISTS sys_user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐢ㄦ埛涓婚敭',
+    username VARCHAR(64) NOT NULL UNIQUE COMMENT '鐧诲綍鐢ㄦ埛鍚嶏紝鍏ㄥ眬鍞竴',
+    password_hash VARCHAR(255) NOT NULL COMMENT '瀵嗙爜鍝堝笇鍊硷紝涓嶄繚瀛樻槑鏂囧瘑鐮?,
+    real_name VARCHAR(64) NOT NULL COMMENT '鐢ㄦ埛鐪熷疄濮撳悕鎴栧睍绀哄悕',
+    email VARCHAR(128) COMMENT '閭鍦板潃',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '璐﹀彿鐘舵€侊細1-鍚敤锛?-绂佺敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 系统角色表。
--- 第一版固定使用 USER / STAFF / ADMIN 三类角色。
--- 角色只表示系统能力，不表示提单人、处理人这类工单内业务关系。
-CREATE TABLE IF NOT EXISTS sys_role (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '角色主键',
-    role_code VARCHAR(64) NOT NULL UNIQUE COMMENT '角色编码：USER/STAFF/ADMIN',
-    role_name VARCHAR(64) NOT NULL COMMENT '角色名称',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+-- 绯荤粺瑙掕壊琛ㄣ€?-- 绗竴鐗堝浐瀹氫娇鐢?USER / STAFF / ADMIN 涓夌被瑙掕壊銆?-- 瑙掕壊鍙〃绀虹郴缁熻兘鍔涳紝涓嶈〃绀烘彁鍗曚汉銆佸鐞嗕汉杩欑被宸ュ崟鍐呬笟鍔″叧绯汇€?CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '瑙掕壊涓婚敭',
+    role_code VARCHAR(64) NOT NULL UNIQUE COMMENT '瑙掕壊缂栫爜锛歎SER/STAFF/ADMIN',
+    role_name VARCHAR(64) NOT NULL COMMENT '瑙掕壊鍚嶇О',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 用户角色关联表。
--- 一个用户可以拥有多个角色，例如处理人员同时拥有 USER 和 STAFF。
-CREATE TABLE IF NOT EXISTS sys_user_role (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '关联主键',
-    user_id BIGINT NOT NULL COMMENT '用户 ID',
-    role_id BIGINT NOT NULL COMMENT '角色 ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- 鐢ㄦ埛瑙掕壊鍏宠仈琛ㄣ€?-- 涓€涓敤鎴峰彲浠ユ嫢鏈夊涓鑹诧紝渚嬪澶勭悊浜哄憳鍚屾椂鎷ユ湁 USER 鍜?STAFF銆?CREATE TABLE IF NOT EXISTS sys_user_role (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鍏宠仈涓婚敭',
+    user_id BIGINT NOT NULL COMMENT '鐢ㄦ埛 ID',
+    role_id BIGINT NOT NULL COMMENT '瑙掕壊 ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
     UNIQUE KEY uk_user_role (user_id, role_id),
     INDEX idx_user_id (user_id),
     INDEX idx_role_id (role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单主表。
--- 保存工单当前事实状态：当前状态、当前负责人、优先级、分类等。
--- 评论、操作日志、附件等过程数据拆分到独立表。
-CREATE TABLE IF NOT EXISTS ticket (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '工单主键',
-    ticket_no VARCHAR(32) NOT NULL UNIQUE COMMENT '业务工单号，例如 INC202604170001',
-    title VARCHAR(200) NOT NULL COMMENT '工单标题',
-    description TEXT NOT NULL COMMENT '问题描述',
-    category VARCHAR(64) NOT NULL COMMENT '工单分类：ACCOUNT/SYSTEM/ENVIRONMENT/OTHER',
-    priority VARCHAR(32) NOT NULL COMMENT '优先级：LOW/MEDIUM/HIGH/URGENT',
-    status VARCHAR(32) NOT NULL COMMENT '状态：PENDING_ASSIGN/PROCESSING/RESOLVED/CLOSED',
-    creator_id BIGINT NOT NULL COMMENT '提单人用户 ID',
-    assignee_id BIGINT DEFAULT NULL COMMENT '当前处理人用户 ID，待分配时可为空',
-    group_id BIGINT DEFAULT NULL COMMENT '当前绑定的工单组 ID',
-    queue_id BIGINT DEFAULT NULL COMMENT '当前绑定的工单队列 ID',
-    solution_summary TEXT COMMENT '解决方案摘要，通常在解决或关闭阶段填写',
-    source VARCHAR(32) NOT NULL DEFAULT 'MANUAL' COMMENT '创建来源：MANUAL-手工创建，AGENT-Agent 创建',
-    idempotency_key VARCHAR(128) DEFAULT NULL COMMENT '创建幂等键，用于防止重复提交',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 宸ュ崟涓昏〃銆?-- 淇濆瓨宸ュ崟褰撳墠浜嬪疄鐘舵€侊細褰撳墠鐘舵€併€佸綋鍓嶈礋璐ｄ汉銆佷紭鍏堢骇銆佸垎绫荤瓑銆?-- 璇勮銆佹搷浣滄棩蹇椼€侀檮浠剁瓑杩囩▼鏁版嵁鎷嗗垎鍒扮嫭绔嬭〃銆?CREATE TABLE IF NOT EXISTS ticket (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '宸ュ崟涓婚敭',
+    ticket_no VARCHAR(32) NOT NULL UNIQUE COMMENT '涓氬姟宸ュ崟鍙凤紝渚嬪 INC202604170001',
+    title VARCHAR(200) NOT NULL COMMENT '宸ュ崟鏍囬',
+    description TEXT NOT NULL COMMENT '闂鎻忚堪',
+    category VARCHAR(64) NOT NULL COMMENT '宸ュ崟鍒嗙被锛欰CCOUNT/SYSTEM/ENVIRONMENT/OTHER',
+    priority VARCHAR(32) NOT NULL COMMENT '浼樺厛绾э細LOW/MEDIUM/HIGH/URGENT',
+    status VARCHAR(32) NOT NULL COMMENT '鐘舵€侊細PENDING_ASSIGN/PROCESSING/RESOLVED/CLOSED',
+    creator_id BIGINT NOT NULL COMMENT '鎻愬崟浜虹敤鎴?ID',
+    assignee_id BIGINT DEFAULT NULL COMMENT '褰撳墠澶勭悊浜虹敤鎴?ID锛屽緟鍒嗛厤鏃跺彲涓虹┖',
+    group_id BIGINT DEFAULT NULL COMMENT '褰撳墠缁戝畾鐨勫伐鍗曠粍 ID',
+    queue_id BIGINT DEFAULT NULL COMMENT '褰撳墠缁戝畾鐨勫伐鍗曢槦鍒?ID',
+    solution_summary TEXT COMMENT '瑙ｅ喅鏂规鎽樿锛岄€氬父鍦ㄨВ鍐虫垨鍏抽棴闃舵濉啓',
+    source VARCHAR(32) NOT NULL DEFAULT 'MANUAL' COMMENT '鍒涘缓鏉ユ簮锛歁ANUAL-鎵嬪伐鍒涘缓锛孉GENT-Agent 鍒涘缓',
+    idempotency_key VARCHAR(128) DEFAULT NULL COMMENT '鍒涘缓骞傜瓑閿紝鐢ㄤ簬闃叉閲嶅鎻愪氦',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     INDEX idx_creator_id (creator_id),
     INDEX idx_assignee_id (assignee_id),
     INDEX idx_ticket_group_id (group_id),
@@ -74,151 +59,150 @@ CREATE TABLE IF NOT EXISTS ticket (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单评论表。
--- 保存用户回复、处理过程记录、解决方案补充等协作内容。
-CREATE TABLE IF NOT EXISTS ticket_comment (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '评论主键',
-    ticket_id BIGINT NOT NULL COMMENT '所属工单 ID',
-    commenter_id BIGINT NOT NULL COMMENT '评论人用户 ID',
-    comment_type VARCHAR(32) NOT NULL COMMENT '评论类型：USER_REPLY/PROCESS_LOG/SOLUTION',
-    content TEXT NOT NULL COMMENT '评论正文',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- 宸ュ崟璇勮琛ㄣ€?-- 淇濆瓨鐢ㄦ埛鍥炲銆佸鐞嗚繃绋嬭褰曘€佽В鍐虫柟妗堣ˉ鍏呯瓑鍗忎綔鍐呭銆?CREATE TABLE IF NOT EXISTS ticket_comment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '璇勮涓婚敭',
+    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
+    commenter_id BIGINT NOT NULL COMMENT '璇勮浜虹敤鎴?ID',
+    comment_type VARCHAR(32) NOT NULL COMMENT '璇勮绫诲瀷锛歎SER_REPLY/PROCESS_LOG/SOLUTION',
+    content TEXT NOT NULL COMMENT '璇勮姝ｆ枃',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
     INDEX idx_ticket_id (ticket_id),
     INDEX idx_commenter_id (commenter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单操作日志表。
--- 保存创建、分配、转派、状态变更、评论、关闭等关键操作轨迹。
--- 该表服务于审计和追溯，不作为当前事实来源。
-CREATE TABLE IF NOT EXISTS ticket_operation_log (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '日志主键',
-    ticket_id BIGINT NOT NULL COMMENT '所属工单 ID',
-    operator_id BIGINT NOT NULL COMMENT '操作人用户 ID',
-    operation_type VARCHAR(64) NOT NULL COMMENT '操作类型：CREATE/ASSIGN/TRANSFER/UPDATE_STATUS/COMMENT/CLOSE',
-    operation_desc VARCHAR(500) NOT NULL COMMENT '操作说明',
-    before_value TEXT COMMENT '变更前内容，可存 JSON 或文本',
-    after_value TEXT COMMENT '变更后内容，可存 JSON 或文本',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- 宸ュ崟鎿嶄綔鏃ュ織琛ㄣ€?-- 淇濆瓨鍒涘缓銆佸垎閰嶃€佽浆娲俱€佺姸鎬佸彉鏇淬€佽瘎璁恒€佸叧闂瓑鍏抽敭鎿嶄綔杞ㄨ抗銆?-- 璇ヨ〃鏈嶅姟浜庡璁″拰杩芥函锛屼笉浣滀负褰撳墠浜嬪疄鏉ユ簮銆?CREATE TABLE IF NOT EXISTS ticket_operation_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鏃ュ織涓婚敭',
+    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
+    operator_id BIGINT NOT NULL COMMENT '鎿嶄綔浜虹敤鎴?ID',
+    operation_type VARCHAR(64) NOT NULL COMMENT '鎿嶄綔绫诲瀷锛欳REATE/ASSIGN/TRANSFER/UPDATE_STATUS/COMMENT/CLOSE',
+    operation_desc VARCHAR(500) NOT NULL COMMENT '鎿嶄綔璇存槑',
+    before_value TEXT COMMENT '鍙樻洿鍓嶅唴瀹癸紝鍙瓨 JSON 鎴栨枃鏈?,
+    after_value TEXT COMMENT '鍙樻洿鍚庡唴瀹癸紝鍙瓨 JSON 鎴栨枃鏈?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
     INDEX idx_ticket_id (ticket_id),
     INDEX idx_operator_id (operator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单附件表。
--- MVP 阶段只保存文件 URL，不在数据库中保存文件二进制内容。
-CREATE TABLE IF NOT EXISTS ticket_attachment (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '附件主键',
-    ticket_id BIGINT NOT NULL COMMENT '所属工单 ID',
-    file_name VARCHAR(255) NOT NULL COMMENT '原始文件名',
-    file_url VARCHAR(500) NOT NULL COMMENT '文件访问地址或对象存储地址',
-    file_type VARCHAR(64) COMMENT '文件类型或扩展名',
-    file_size BIGINT COMMENT '文件大小，单位字节',
-    uploader_id BIGINT NOT NULL COMMENT '上传人用户 ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- 宸ュ崟闄勪欢琛ㄣ€?-- MVP 闃舵鍙繚瀛樻枃浠?URL锛屼笉鍦ㄦ暟鎹簱涓繚瀛樻枃浠朵簩杩涘埗鍐呭銆?CREATE TABLE IF NOT EXISTS ticket_attachment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闄勪欢涓婚敭',
+    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
+    file_name VARCHAR(255) NOT NULL COMMENT '鍘熷鏂囦欢鍚?,
+    file_url VARCHAR(500) NOT NULL COMMENT '鏂囦欢璁块棶鍦板潃鎴栧璞″瓨鍌ㄥ湴鍧€',
+    file_type VARCHAR(64) COMMENT '鏂囦欢绫诲瀷鎴栨墿灞曞悕',
+    file_size BIGINT COMMENT '鏂囦欢澶у皬锛屽崟浣嶅瓧鑺?,
+    uploader_id BIGINT NOT NULL COMMENT '涓婁紶浜虹敤鎴?ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
     INDEX idx_ticket_id (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单知识表。
--- 保存已关闭工单沉淀出的知识文本，是后续 RAG 切片和检索的来源。
--- 该表属于知识数据，不参与工单主事务状态判断。
-CREATE TABLE IF NOT EXISTS ticket_knowledge (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识主键',
-    ticket_id BIGINT NOT NULL COMMENT '来源工单 ID',
-    content TEXT NOT NULL COMMENT '用于切片和向量化的知识正文',
-    content_summary VARCHAR(1000) COMMENT '知识摘要，便于列表展示和召回结果展示',
-    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '知识状态：ACTIVE-可用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 宸ュ崟鐭ヨ瘑琛ㄣ€?-- 淇濆瓨宸插叧闂伐鍗曟矇娣€鍑虹殑鐭ヨ瘑鏂囨湰锛屾槸鍚庣画 RAG 鍒囩墖鍜屾绱㈢殑鏉ユ簮銆?-- 璇ヨ〃灞炰簬鐭ヨ瘑鏁版嵁锛屼笉鍙備笌宸ュ崟涓讳簨鍔＄姸鎬佸垽鏂€?CREATE TABLE IF NOT EXISTS ticket_knowledge (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐭ヨ瘑涓婚敭',
+    ticket_id BIGINT NOT NULL COMMENT '鏉ユ簮宸ュ崟 ID',
+    content TEXT NOT NULL COMMENT '鐢ㄤ簬鍒囩墖鍜屽悜閲忓寲鐨勭煡璇嗘鏂?,
+    content_summary VARCHAR(1000) COMMENT '鐭ヨ瘑鎽樿锛屼究浜庡垪琛ㄥ睍绀哄拰鍙洖缁撴灉灞曠ず',
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '鐭ヨ瘑鐘舵€侊細ACTIVE-鍙敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     UNIQUE KEY uk_ticket_id (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 工单知识切片表。
--- 保存知识文本切片和第一版向量 JSON。后续接入 pgvector 时可迁移到专用向量字段。
-CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识切片主键',
-    knowledge_id BIGINT NOT NULL COMMENT '所属知识 ID',
-    chunk_index INT NOT NULL COMMENT '切片序号，从 0 或 1 开始由 RAG 模块约定',
-    chunk_text TEXT NOT NULL COMMENT '切片文本内容',
-    embedding_vector TEXT COMMENT '向量 JSON 文本，第一版用于打通知识向量化入库链路',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+-- 宸ュ崟鐭ヨ瘑鍒囩墖琛ㄣ€?-- 淇濆瓨鐭ヨ瘑鏂囨湰鍒囩墖鍜岀涓€鐗堝悜閲?JSON銆傚悗缁帴鍏?pgvector 鏃跺彲杩佺Щ鍒颁笓鐢ㄥ悜閲忓瓧娈点€?CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐭ヨ瘑鍒囩墖涓婚敭',
+    knowledge_id BIGINT NOT NULL COMMENT '鎵€灞炵煡璇?ID',
+    chunk_index INT NOT NULL COMMENT '鍒囩墖搴忓彿锛屼粠 0 鎴?1 寮€濮嬬敱 RAG 妯″潡绾﹀畾',
+    chunk_text TEXT NOT NULL COMMENT '鍒囩墖鏂囨湰鍐呭',
+    embedding_vector TEXT COMMENT '鍚戦噺 JSON 鏂囨湰锛岀涓€鐗堢敤浜庢墦閫氱煡璇嗗悜閲忓寲鍏ュ簱閾捐矾',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
     INDEX idx_knowledge_id (knowledge_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket group.
--- 工单组是队列、SLA 和自动分派的基础配置；当前阶段只做配置管理，不改变工单主流程。
-CREATE TABLE IF NOT EXISTS ticket_group (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '工单组主键',
-    group_name VARCHAR(128) NOT NULL COMMENT '工单组名称',
-    group_code VARCHAR(64) NOT NULL COMMENT '工单组编码',
-    owner_user_id BIGINT DEFAULT NULL COMMENT '组负责人用户 ID',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 宸ュ崟缁勬槸闃熷垪銆丼LA 鍜岃嚜鍔ㄥ垎娲剧殑鍩虹閰嶇疆锛涘綋鍓嶉樁娈靛彧鍋氶厤缃鐞嗭紝涓嶆敼鍙樺伐鍗曚富娴佺▼銆?CREATE TABLE IF NOT EXISTS ticket_group (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '宸ュ崟缁勪富閿?,
+    group_name VARCHAR(128) NOT NULL COMMENT '宸ュ崟缁勫悕绉?,
+    group_code VARCHAR(64) NOT NULL COMMENT '宸ュ崟缁勭紪鐮?,
+    owner_user_id BIGINT DEFAULT NULL COMMENT '缁勮礋璐ｄ汉鐢ㄦ埛 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     UNIQUE KEY uk_ticket_group_code (group_code),
     INDEX idx_ticket_group_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket queue.
--- 工单队列隶属于工单组，后续用于队列视图、SLA 匹配和自动分派。
-CREATE TABLE IF NOT EXISTS ticket_queue (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '队列主键',
-    queue_name VARCHAR(128) NOT NULL COMMENT '队列名称',
-    queue_code VARCHAR(64) NOT NULL COMMENT '队列编码',
-    group_id BIGINT NOT NULL COMMENT '所属工单组 ID',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 宸ュ崟闃熷垪闅跺睘浜庡伐鍗曠粍锛屽悗缁敤浜庨槦鍒楄鍥俱€丼LA 鍖归厤鍜岃嚜鍔ㄥ垎娲俱€?CREATE TABLE IF NOT EXISTS ticket_queue (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闃熷垪涓婚敭',
+    queue_name VARCHAR(128) NOT NULL COMMENT '闃熷垪鍚嶇О',
+    queue_code VARCHAR(64) NOT NULL COMMENT '闃熷垪缂栫爜',
+    group_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗曠粍 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     UNIQUE KEY uk_ticket_queue_code (queue_code),
     INDEX idx_ticket_queue_group_id (group_id),
     INDEX idx_ticket_queue_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: SLA policy.
--- SLA 策略按工单分类和优先级匹配；category/priority 为空表示通配。
-CREATE TABLE IF NOT EXISTS ticket_sla_policy (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 策略主键',
-    policy_name VARCHAR(128) NOT NULL COMMENT 'SLA 策略名称',
-    category VARCHAR(64) DEFAULT NULL COMMENT '适用工单分类，空值表示通配',
-    priority VARCHAR(64) DEFAULT NULL COMMENT '适用工单优先级，空值表示通配',
-    first_response_minutes INT NOT NULL COMMENT '首次响应时限，单位分钟',
-    resolve_minutes INT NOT NULL COMMENT '解决时限，单位分钟',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- SLA 绛栫暐鎸夊伐鍗曞垎绫诲拰浼樺厛绾у尮閰嶏紱category/priority 涓虹┖琛ㄧず閫氶厤銆?CREATE TABLE IF NOT EXISTS ticket_sla_policy (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 绛栫暐涓婚敭',
+    policy_name VARCHAR(128) NOT NULL COMMENT 'SLA 绛栫暐鍚嶇О',
+    category VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟鍒嗙被锛岀┖鍊艰〃绀洪€氶厤',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟浼樺厛绾э紝绌哄€艰〃绀洪€氶厤',
+    first_response_minutes INT NOT NULL COMMENT '棣栨鍝嶅簲鏃堕檺锛屽崟浣嶅垎閽?,
+    resolve_minutes INT NOT NULL COMMENT '瑙ｅ喅鏃堕檺锛屽崟浣嶅垎閽?,
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     INDEX idx_ticket_sla_policy_match (category, priority, enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket SLA instance.
--- SLA 实例记录某张工单命中的策略和截止时间；当前阶段不做定时违约扫描。
-CREATE TABLE IF NOT EXISTS ticket_sla_instance (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 实例主键',
-    ticket_id BIGINT NOT NULL COMMENT '工单 ID',
-    policy_id BIGINT NOT NULL COMMENT 'SLA 策略 ID',
-    first_response_deadline DATETIME NOT NULL COMMENT '首次响应截止时间',
-    resolve_deadline DATETIME NOT NULL COMMENT '解决截止时间',
-    breached TINYINT NOT NULL DEFAULT 0 COMMENT '是否已违约：1-已违约，0-未违约',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- SLA 瀹炰緥璁板綍鏌愬紶宸ュ崟鍛戒腑鐨勭瓥鐣ュ拰鎴鏃堕棿锛涘綋鍓嶉樁娈典笉鍋氬畾鏃惰繚绾︽壂鎻忋€?CREATE TABLE IF NOT EXISTS ticket_sla_instance (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 瀹炰緥涓婚敭',
+    ticket_id BIGINT NOT NULL COMMENT '宸ュ崟 ID',
+    policy_id BIGINT NOT NULL COMMENT 'SLA 绛栫暐 ID',
+    first_response_deadline DATETIME NOT NULL COMMENT '棣栨鍝嶅簲鎴鏃堕棿',
+    resolve_deadline DATETIME NOT NULL COMMENT '瑙ｅ喅鎴鏃堕棿',
+    breached TINYINT NOT NULL DEFAULT 0 COMMENT '鏄惁宸茶繚绾︼細1-宸茶繚绾︼紝0-鏈繚绾?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     UNIQUE KEY uk_ticket_sla_ticket_id (ticket_id),
     INDEX idx_ticket_sla_policy_id (policy_id),
     INDEX idx_ticket_sla_deadline (resolve_deadline)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: assignment rule.
--- 自动分派规则当前只用于 preview 推荐，不直接更新工单处理人或状态。
-CREATE TABLE IF NOT EXISTS ticket_assignment_rule (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '自动分派规则主键',
-    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
-    category VARCHAR(64) DEFAULT NULL COMMENT '适用工单分类，空值表示通配',
-    priority VARCHAR(64) DEFAULT NULL COMMENT '适用工单优先级，空值表示通配',
-    target_group_id BIGINT DEFAULT NULL COMMENT '目标工单组 ID',
-    target_queue_id BIGINT DEFAULT NULL COMMENT '目标队列 ID',
-    target_user_id BIGINT DEFAULT NULL COMMENT '目标处理人 ID',
-    weight INT NOT NULL DEFAULT 0 COMMENT '规则权重，越大越优先',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 鑷姩鍒嗘淳瑙勫垯褰撳墠鍙敤浜?preview 鎺ㄨ崘锛屼笉鐩存帴鏇存柊宸ュ崟澶勭悊浜烘垨鐘舵€併€?CREATE TABLE IF NOT EXISTS ticket_assignment_rule (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鑷姩鍒嗘淳瑙勫垯涓婚敭',
+    rule_name VARCHAR(128) NOT NULL COMMENT '瑙勫垯鍚嶇О',
+    category VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟鍒嗙被锛岀┖鍊艰〃绀洪€氶厤',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟浼樺厛绾э紝绌哄€艰〃绀洪€氶厤',
+    target_group_id BIGINT DEFAULT NULL COMMENT '鐩爣宸ュ崟缁?ID',
+    target_queue_id BIGINT DEFAULT NULL COMMENT '鐩爣闃熷垪 ID',
+    target_user_id BIGINT DEFAULT NULL COMMENT '鐩爣澶勭悊浜?ID',
+    weight INT NOT NULL DEFAULT 0 COMMENT '瑙勫垯鏉冮噸锛岃秺澶ц秺浼樺厛',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     INDEX idx_ticket_assignment_rule_match (category, priority, enabled, weight),
     INDEX idx_ticket_assignment_rule_target_group (target_group_id),
     INDEX idx_ticket_assignment_rule_target_queue (target_queue_id),
     INDEX idx_ticket_assignment_rule_target_user (target_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: ticket queue member.
+-- 队列成员用于真实自动分派和后续认领能力；同一用户可加入多个队列。
+CREATE TABLE IF NOT EXISTS ticket_queue_member (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '队列成员主键',
+    queue_id BIGINT NOT NULL COMMENT '所属队列 ID',
+    user_id BIGINT NOT NULL COMMENT '成员用户 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
+    last_assigned_at DATETIME DEFAULT NULL COMMENT '最近一次被自动分派时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_queue_member (queue_id, user_id),
+    INDEX idx_ticket_queue_member_queue_id (queue_id),
+    INDEX idx_ticket_queue_member_user_id (user_id),
+    INDEX idx_ticket_queue_member_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

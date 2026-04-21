@@ -4,6 +4,7 @@ import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.ApiResponse;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.validation.BindException;
@@ -24,9 +25,10 @@ public class ApiExceptionHandler {
      * 业务异常，例如状态流转不合法、资源不存在、业务权限不足。
      */
     @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse<Void> handleBusinessException(BusinessException ex) {
-        return ApiResponse.failure(ex.getCode(), ex.getMessage());
+    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
+        HttpStatus status = "UNAUTHORIZED".equals(ex.getCode()) ? HttpStatus.UNAUTHORIZED : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
+                .body(ApiResponse.failure(ex.getCode(), ex.getMessage()));
     }
 
     /**

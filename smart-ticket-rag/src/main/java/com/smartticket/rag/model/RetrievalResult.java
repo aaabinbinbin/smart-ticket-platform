@@ -24,6 +24,12 @@ public class RetrievalResult {
     /** 实际使用的 TopK。 */
     private Integer topK;
 
+    /** 实际检索路径，例如 PGVECTOR 或 MYSQL_FALLBACK。 */
+    private String retrievalPath;
+
+    /** 是否走了 fallback 路径。 */
+    private boolean fallbackUsed;
+
     /** 命中的历史知识列表。 */
     @Builder.Default
     private List<RetrievalHit> hits = new ArrayList<>();

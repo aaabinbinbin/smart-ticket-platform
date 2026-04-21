@@ -15,7 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 工单队列业务服务。
  *
- * <p>队列是 P1 的配置能力，当前只做管理，不接入自动分派和工单主流程。</p>
+ * <p>队列既是 P1 的配置能力，也已经接入工单主流程的队列绑定和自动分派目标校验。
+ * 当前仍未实现组内负载均衡、认领和无人可分配时的回退策略。</p>
  */
 @Service
 public class TicketQueueService {

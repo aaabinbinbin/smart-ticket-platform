@@ -5,9 +5,6 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-/**
- * 系统用户 Mapper，对应表 {@code sys_user}。
- */
 @Mapper
 public interface SysUserMapper {
 
@@ -18,6 +15,8 @@ public interface SysUserMapper {
     SysUser findByUsername(@Param("username") String username);
 
     List<SysUser> findAll();
+
+    List<SysUser> findByRoleCode(@Param("roleCode") String roleCode);
 
     int updateBasicInfo(SysUser sysUser);
 }

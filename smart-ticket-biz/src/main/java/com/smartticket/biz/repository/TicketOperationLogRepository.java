@@ -23,4 +23,8 @@ public class TicketOperationLogRepository {
     public List<TicketOperationLog> findByTicketId(Long ticketId) {
         return ticketOperationLogMapper.findByTicketId(ticketId);
     }
+
+    public long countByOperationType(String operationType) {
+        return ticketOperationLogMapper.countByOperationType(operationType);
+    }
 }

@@ -2,19 +2,20 @@ package com.smartticket.domain.enums;
 
 import java.util.Arrays;
 
-/**
- * 工单操作类型枚举。
- *
- * <p>用于操作日志，记录创建、分配、转派、状态更新、评论和关闭等关键动作。</p>
- */
 public enum OperationTypeEnum implements CodeInfoEnum {
     CREATE("CREATE", "创建工单"),
     ASSIGN("ASSIGN", "分配处理人"),
+    CLAIM("CLAIM", "认领处理"),
     TRANSFER("TRANSFER", "转派处理人"),
     BIND_QUEUE("BIND_QUEUE", "绑定工单队列"),
+    AUTO_ASSIGN_MATCHED("AUTO_ASSIGN_MATCHED", "自动分派命中"),
+    AUTO_ASSIGN_FALLBACK("AUTO_ASSIGN_FALLBACK", "自动分派回退"),
+    AUTO_ASSIGN_PENDING("AUTO_ASSIGN_PENDING", "自动分派待认领"),
     UPDATE_STATUS("UPDATE_STATUS", "更新状态"),
     COMMENT("COMMENT", "添加评论"),
-    CLOSE("CLOSE", "关闭工单");
+    CLOSE("CLOSE", "关闭工单"),
+    SLA_BREACH("SLA_BREACH", "SLA违约"),
+    SLA_ESCALATE("SLA_ESCALATE", "SLA升级");
 
     private final String code;
     private final String info;

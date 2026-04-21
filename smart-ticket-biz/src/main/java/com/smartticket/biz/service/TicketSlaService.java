@@ -4,55 +4,59 @@ import com.smartticket.biz.dto.TicketSlaPolicyCommandDTO;
 import com.smartticket.biz.dto.TicketSlaPolicyPageQueryDTO;
 import com.smartticket.biz.dto.TicketSlaScanResultDTO;
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.biz.repository.TicketOperationLogRepository;
+import com.smartticket.biz.repository.TicketRepository;
 import com.smartticket.biz.repository.TicketSlaInstanceRepository;
 import com.smartticket.biz.repository.TicketSlaPolicyRepository;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.PageResult;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.entity.TicketOperationLog;
 import com.smartticket.domain.entity.TicketSlaInstance;
 import com.smartticket.domain.entity.TicketSlaPolicy;
 import com.smartticket.domain.enums.CodeInfoEnum;
+import com.smartticket.domain.enums.OperationTypeEnum;
+import com.smartticket.domain.enums.TicketPriorityEnum;
+import com.smartticket.domain.enums.TicketStatusEnum;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 工单 SLA 业务服务。
- *
- * <p>当前 P1 第一版只负责 SLA 策略配置、工单 SLA 实例生成和查询。
- * 不做定时违约扫描、升级策略和自动通知。</p>
- */
 @Service
 public class TicketSlaService {
-    /** SLA 违约扫描默认批次大小。 */
     private static final int DEFAULT_SCAN_LIMIT = 100;
-
-    /** SLA 违约扫描单次最大批次大小，避免一次手动操作拖垮数据库。 */
     private static final int MAX_SCAN_LIMIT = 1000;
 
-    /** SLA 策略仓储。 */
     private final TicketSlaPolicyRepository policyRepository;
-
-    /** SLA 实例仓储。 */
     private final TicketSlaInstanceRepository instanceRepository;
-
-    /** 权限服务，用于复用 ADMIN 判断。 */
+    private final TicketRepository ticketRepository;
+    private final TicketOperationLogRepository operationLogRepository;
     private final TicketPermissionService permissionService;
+    private final TicketDetailCacheService ticketDetailCacheService;
+    private final TicketSlaNotificationService notificationService;
 
     public TicketSlaService(
             TicketSlaPolicyRepository policyRepository,
             TicketSlaInstanceRepository instanceRepository,
-            TicketPermissionService permissionService
+            TicketRepository ticketRepository,
+            TicketOperationLogRepository operationLogRepository,
+            TicketPermissionService permissionService,
+            TicketDetailCacheService ticketDetailCacheService,
+            TicketSlaNotificationService notificationService
     ) {
         this.policyRepository = policyRepository;
         this.instanceRepository = instanceRepository;
+        this.ticketRepository = ticketRepository;
+        this.operationLogRepository = operationLogRepository;
         this.permissionService = permissionService;
+        this.ticketDetailCacheService = ticketDetailCacheService;
+        this.notificationService = notificationService;
     }
 
-    /** 创建 SLA 策略。 */
     @Transactional
     public TicketSlaPolicy createPolicy(CurrentUser operator, TicketSlaPolicyCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -69,7 +73,6 @@ public class TicketSlaService {
         return requirePolicy(policy.getId());
     }
 
-    /** 更新 SLA 策略。 */
     @Transactional
     public TicketSlaPolicy updatePolicy(CurrentUser operator, Long policyId, TicketSlaPolicyCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -85,7 +88,6 @@ public class TicketSlaService {
         return requirePolicy(policyId);
     }
 
-    /** 启用或停用 SLA 策略。 */
     @Transactional
     public TicketSlaPolicy updatePolicyEnabled(CurrentUser operator, Long policyId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -94,12 +96,10 @@ public class TicketSlaService {
         return requirePolicy(policyId);
     }
 
-    /** 查询 SLA 策略详情。 */
     public TicketSlaPolicy getPolicy(Long policyId) {
         return requirePolicy(policyId);
     }
 
-    /** 分页查询 SLA 策略。 */
     public PageResult<TicketSlaPolicy> pagePolicies(TicketSlaPolicyPageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -117,11 +117,6 @@ public class TicketSlaService {
                 .build();
     }
 
-    /**
-     * 为工单生成或刷新 SLA 实例。
-     *
-     * <p>如果没有匹配策略，则不创建实例。该方法不阻断工单主流程。</p>
-     */
     @Transactional
     public void createOrRefreshInstance(Ticket ticket) {
         if (ticket == null || ticket.getId() == null) {
@@ -146,7 +141,6 @@ public class TicketSlaService {
         }
     }
 
-    /** 查询某张工单的 SLA 实例。 */
     public TicketSlaInstance getInstanceByTicketId(Long ticketId) {
         TicketSlaInstance instance = instanceRepository.findByTicketId(ticketId);
         if (instance == null) {
@@ -155,24 +149,63 @@ public class TicketSlaService {
         return instance;
     }
 
-    /** 根据 ID 查询策略，不存在时抛出业务异常。 */
-    /** 扫描并标记已经超过解决截止时间的 SLA 实例。 */
     @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, Integer limit) {
         return scanBreachedInstances(operator, LocalDateTime.now(), limit);
     }
 
-    /** 按指定业务时间扫描 SLA 违约实例，主要用于测试和后续调度复用。 */
     @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, LocalDateTime now, Integer limit) {
         permissionService.requireAdmin(operator);
+        return doScanBreachedInstances(now, limit);
+    }
+
+    @Transactional
+    public TicketSlaScanResultDTO scanBreachedInstancesAutomatically() {
+        return doScanBreachedInstances(LocalDateTime.now(), null);
+    }
+
+    private TicketSlaScanResultDTO doScanBreachedInstances(LocalDateTime now, Integer limit) {
         int normalizedLimit = normalizeScanLimit(limit);
         LocalDateTime scanTime = now == null ? LocalDateTime.now() : now;
         List<TicketSlaInstance> candidates = instanceRepository.findBreachedCandidates(scanTime, normalizedLimit);
         List<Long> markedIds = new ArrayList<>();
+        int firstResponseBreachedCount = 0;
+        int resolveBreachedCount = 0;
+        int escalatedCount = 0;
+        int notifiedCount = 0;
+        Optional<Long> adminUserId = findEscalationAdminUserId();
         for (TicketSlaInstance candidate : candidates) {
-            if (candidate.getId() != null && instanceRepository.markBreached(candidate.getId()) > 0) {
-                markedIds.add(candidate.getId());
+            if (candidate.getId() == null || candidate.getTicketId() == null) {
+                continue;
+            }
+            Ticket ticket = ticketRepository.findById(candidate.getTicketId());
+            if (ticket == null) {
+                continue;
+            }
+            String breachType = determineBreachType(ticket, candidate, scanTime);
+            if (breachType == null) {
+                continue;
+            }
+            if (instanceRepository.markBreached(candidate.getId()) <= 0) {
+                continue;
+            }
+            markedIds.add(candidate.getId());
+            if ("FIRST_RESPONSE".equals(breachType)) {
+                firstResponseBreachedCount++;
+            } else {
+                resolveBreachedCount++;
+            }
+            boolean escalated = escalateTicket(ticket, adminUserId.orElse(null), breachType);
+            if (escalated) {
+                escalatedCount++;
+            }
+            Ticket latestTicket = ticketRepository.findById(ticket.getId());
+            notificationService.notifyBreached(latestTicket == null ? ticket : latestTicket, candidate, breachType, escalated);
+            notifiedCount++;
+            writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId.orElse(null)), OperationTypeEnum.SLA_BREACH, "SLA违约", "instanceId=" + candidate.getId(), "breachType=" + breachType + ", escalated=" + escalated);
+            if (escalated) {
+                writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId.orElse(null)), OperationTypeEnum.SLA_ESCALATE, "SLA升级", null, "breachType=" + breachType + ", adminUserId=" + adminUserId.orElse(null));
             }
         }
         return TicketSlaScanResultDTO.builder()
@@ -180,8 +213,64 @@ public class TicketSlaService {
                 .limit(normalizedLimit)
                 .candidateCount(candidates.size())
                 .markedCount(markedIds.size())
+                .firstResponseBreachedCount(firstResponseBreachedCount)
+                .resolveBreachedCount(resolveBreachedCount)
+                .escalatedCount(escalatedCount)
+                .notifiedCount(notifiedCount)
                 .breachedInstanceIds(markedIds)
                 .build();
+    }
+
+    private Optional<Long> findEscalationAdminUserId() {
+        return ticketRepository.findUsersByRoleCode("ADMIN").stream()
+                .filter(user -> Integer.valueOf(1).equals(user.getStatus()))
+                .map(user -> user.getId())
+                .findFirst();
+    }
+
+    private String determineBreachType(Ticket ticket, TicketSlaInstance instance, LocalDateTime now) {
+        if (instance.getFirstResponseDeadline() != null && !now.isBefore(instance.getFirstResponseDeadline()) && ticket.getStatus() == TicketStatusEnum.PENDING_ASSIGN && ticket.getAssigneeId() == null) {
+            return "FIRST_RESPONSE";
+        }
+        if (instance.getResolveDeadline() != null && !now.isBefore(instance.getResolveDeadline()) && ticket.getStatus() != TicketStatusEnum.CLOSED) {
+            return "RESOLVE";
+        }
+        return null;
+    }
+
+    private boolean escalateTicket(Ticket ticket, Long adminUserId, String breachType) {
+        boolean changed = false;
+        if (ticket.getPriority() != TicketPriorityEnum.URGENT) {
+            changed = ticketRepository.updatePriority(ticket.getId(), TicketPriorityEnum.URGENT) > 0;
+        }
+        if ("FIRST_RESPONSE".equals(breachType) && adminUserId != null && ticket.getStatus() == TicketStatusEnum.PENDING_ASSIGN && ticket.getAssigneeId() == null) {
+            changed = ticketRepository.updateAssigneeAndStatus(ticket.getId(), adminUserId, TicketStatusEnum.PENDING_ASSIGN, TicketStatusEnum.PROCESSING) > 0 || changed;
+        }
+        if (changed) {
+            ticketDetailCacheService.evict(ticket.getId());
+        }
+        return changed;
+    }
+
+    private Long resolveOperatorId(Ticket ticket, Long adminUserId) {
+        if (adminUserId != null) {
+            return adminUserId;
+        }
+        if (ticket.getAssigneeId() != null) {
+            return ticket.getAssigneeId();
+        }
+        return ticket.getCreatorId();
+    }
+
+    private void writeAuditLog(Long ticketId, Long operatorId, OperationTypeEnum operationType, String operationDesc, String beforeValue, String afterValue) {
+        operationLogRepository.insert(TicketOperationLog.builder()
+                .ticketId(ticketId)
+                .operatorId(operatorId)
+                .operationType(operationType)
+                .operationDesc(operationDesc)
+                .beforeValue(beforeValue)
+                .afterValue(afterValue)
+                .build());
     }
 
     private TicketSlaPolicy requirePolicy(Long policyId) {
@@ -192,7 +281,6 @@ public class TicketSlaService {
         return policy;
     }
 
-    /** 校验 SLA 策略时限。 */
     private void validatePolicy(TicketSlaPolicyCommandDTO command) {
         if (command.getFirstResponseMinutes() == null || command.getFirstResponseMinutes() <= 0) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_SLA_POLICY, "首次响应时限必须大于 0");
@@ -205,17 +293,14 @@ public class TicketSlaService {
         }
     }
 
-    /** 将枚举转换成 code。 */
     private String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }
 
-    /** 将布尔值转换为数据库启停标记。 */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }
 
-    /** 归一化扫描批次大小。 */
     private int normalizeScanLimit(Integer limit) {
         if (limit == null) {
             return DEFAULT_SCAN_LIMIT;

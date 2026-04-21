@@ -4,12 +4,15 @@ import com.smartticket.agent.execution.AgentExecutionDecision;
 import com.smartticket.agent.execution.AgentExecutionGuard;
 import com.smartticket.agent.model.AgentChatResult;
 import com.smartticket.agent.model.AgentIntent;
+import com.smartticket.agent.model.AgentPendingAction;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.orchestration.ToolCallPlan;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolRequest;
 import com.smartticket.agent.tool.core.AgentToolResult;
+import com.smartticket.agent.tool.core.AgentToolStatus;
+import com.smartticket.agent.tool.parameter.AgentToolParameterField;
 import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.agent.tool.support.SpringAiToolCallState;
@@ -19,7 +22,9 @@ import com.smartticket.agent.tool.ticket.QueryTicketTool;
 import com.smartticket.agent.tool.ticket.SearchHistoryTool;
 import com.smartticket.agent.tool.ticket.TransferTicketTool;
 import com.smartticket.biz.model.CurrentUser;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -99,9 +104,16 @@ public class AgentFacade {
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
         AgentSessionContext context = sessionService.load(sessionId);
+        if (hasPendingCreateDraft(context)) {
+            return continuePendingCreate(currentUser, sessionId, message, context, springAiReady);
+        }
         IntentRoute route = intentRouter.route(message, context);
         log.info("agent facade chat: sessionId={}, userId={}, intent={}, springAiChatReady={}",
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
+
+        if (route.getConfidence() < 0.50d) {
+            return clarifyLowConfidenceIntent(sessionId, message, context, route, springAiReady);
+        }
 
         if (springAiReady) {
             Optional<AgentChatResult> springAiResult =
@@ -111,6 +123,22 @@ public class AgentFacade {
             }
         }
         return executeDeterministicFallback(currentUser, sessionId, message, context, route, springAiReady);
+    }
+
+    private AgentChatResult clarifyLowConfidenceIntent(
+            String sessionId,
+            String message,
+            AgentSessionContext context,
+            IntentRoute route,
+            boolean springAiReady
+    ) {
+        AgentToolResult toolResult = AgentToolResult.builder()
+                .invoked(false)
+                .toolName("clarifyIntent")
+                .reply("我暂时无法判断你的目标。请明确说明你是想查询工单、创建工单、转派工单，还是检索历史案例。")
+                .build();
+        sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
     }
 
     /**
@@ -153,6 +181,7 @@ public class AgentFacade {
                         sessionId);
                 return Optional.empty();
             }
+            syncCreatePendingAction(context, route, null, message, toolResult);
             sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
             return Optional.of(toChatResult(sessionId, route, context, toolResult,
                     hasText(content) ? content : toolResult.getReply(), true));
@@ -201,8 +230,225 @@ public class AgentFacade {
         } else {
             toolResult = decision.toToolResult(tool.name());
         }
+        syncCreatePendingAction(context, route, parameters, message, toolResult);
         sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+    }
+
+    private AgentChatResult continuePendingCreate(
+            CurrentUser currentUser,
+            String sessionId,
+            String message,
+            AgentSessionContext context,
+            boolean springAiReady
+    ) {
+        IntentRoute route = IntentRoute.builder()
+                .intent(AgentIntent.CREATE_TICKET)
+                .confidence(0.99d)
+                .reason("继续补全待创建工单草稿")
+                .build();
+        if (isCancelMessage(message)) {
+            context.setPendingAction(null);
+            AgentToolResult toolResult = AgentToolResult.builder()
+                    .invoked(false)
+                    .status(AgentToolStatus.FAILED)
+                    .toolName(createTicketTool.name())
+                    .reply("已取消本次工单创建。你可以随时重新发起新的创建请求。")
+                    .build();
+            sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
+            return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+        }
+
+        AgentPendingAction pendingAction = context.getPendingAction();
+        AgentToolParameters mergedParameters = mergeCreateDraftParameters(
+                pendingAction.getPendingParameters(),
+                parameterExtractor.extract(message, context),
+                message,
+                pendingAction.getAwaitingFields()
+        );
+        AgentToolResult toolResult = createTicketTool.execute(AgentToolRequest.builder()
+                .currentUser(currentUser)
+                .message(message)
+                .context(context)
+                .route(route)
+                .parameters(mergedParameters)
+                .build());
+        syncCreatePendingAction(context, route, mergedParameters, message, toolResult);
+        sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+    }
+
+    private boolean hasPendingCreateDraft(AgentSessionContext context) {
+        return context != null
+                && context.getPendingAction() != null
+                && context.getPendingAction().getPendingIntent() == AgentIntent.CREATE_TICKET;
+    }
+
+    private void syncCreatePendingAction(
+            AgentSessionContext context,
+            IntentRoute route,
+            AgentToolParameters parameters,
+            String message,
+            AgentToolResult toolResult
+    ) {
+        if (context == null || route.getIntent() != AgentIntent.CREATE_TICKET) {
+            return;
+        }
+        if (toolResult.getStatus() == AgentToolStatus.SUCCESS) {
+            context.setPendingAction(null);
+            return;
+        }
+        if (toolResult.getStatus() != AgentToolStatus.NEED_MORE_INFO) {
+            return;
+        }
+        List<AgentToolParameterField> missingFields = extractMissingFields(toolResult.getData());
+        AgentToolParameters draft = parameters == null ? AgentToolParameters.builder().build() : copyParameters(parameters);
+        context.setPendingAction(AgentPendingAction.builder()
+                .pendingIntent(AgentIntent.CREATE_TICKET)
+                .pendingToolName(createTicketTool.name())
+                .pendingParameters(draft)
+                .awaitingFields(missingFields)
+                .lastToolResult(toolResult)
+                .build());
+        toolResult.setReply(buildCreateClarificationReply(missingFields, draft, message));
+    }
+
+    private List<AgentToolParameterField> extractMissingFields(Object data) {
+        if (!(data instanceof List<?> rawList)) {
+            return List.of();
+        }
+        List<AgentToolParameterField> fields = new ArrayList<>();
+        for (Object item : rawList) {
+            if (item instanceof AgentToolParameterField field) {
+                fields.add(field);
+            }
+        }
+        return fields;
+    }
+
+    private AgentToolParameters mergeCreateDraftParameters(
+            AgentToolParameters draft,
+            AgentToolParameters extracted,
+            String message,
+            List<AgentToolParameterField> awaitingFields
+    ) {
+        AgentToolParameters merged = copyParameters(draft == null ? AgentToolParameters.builder().build() : draft);
+        if (extracted.getCategory() != null) {
+            merged.setCategory(extracted.getCategory());
+        }
+        if (extracted.getPriority() != null) {
+            merged.setPriority(extracted.getPriority());
+        }
+        boolean metadataOnly = isLikelyMetadataOnlyMessage(extracted, message);
+        if (!metadataOnly && shouldFillTitle(merged, awaitingFields, extracted)) {
+            merged.setTitle(extracted.getTitle());
+        }
+        if (!metadataOnly && shouldFillDescription(merged, awaitingFields, extracted, message)) {
+            merged.setDescription(message == null ? null : message.trim());
+        }
+        if (hasText(extracted.getIdempotencyKey())) {
+            merged.setIdempotencyKey(extracted.getIdempotencyKey());
+        }
+        merged.setNumbers(extracted.getNumbers() == null ? List.of() : extracted.getNumbers());
+        return merged;
+    }
+
+    private boolean shouldFillTitle(
+            AgentToolParameters merged,
+            List<AgentToolParameterField> awaitingFields,
+            AgentToolParameters extracted
+    ) {
+        return hasText(extracted.getTitle())
+                && (!hasText(merged.getTitle()) || awaitingFields.contains(AgentToolParameterField.TITLE));
+    }
+
+    private boolean shouldFillDescription(
+            AgentToolParameters merged,
+            List<AgentToolParameterField> awaitingFields,
+            AgentToolParameters extracted,
+            String message
+    ) {
+        return hasText(message)
+                && (!hasText(merged.getDescription())
+                || awaitingFields.contains(AgentToolParameterField.DESCRIPTION)
+                || extracted.getDescription() != null);
+    }
+
+    private boolean isLikelyMetadataOnlyMessage(AgentToolParameters extracted, String message) {
+        if (!hasText(message)) {
+            return false;
+        }
+        String trimmed = message.trim();
+        return trimmed.length() <= 20
+                && (extracted.getCategory() != null || extracted.getPriority() != null)
+                && !containsProblemNarrative(trimmed);
+    }
+
+    private boolean containsProblemNarrative(String message) {
+        return message.contains("无法")
+                || message.contains("失败")
+                || message.contains("异常")
+                || message.contains("报错")
+                || message.contains("问题")
+                || message.contains("影响")
+                || message.toLowerCase().contains("error");
+    }
+
+    private String buildCreateClarificationReply(
+            List<AgentToolParameterField> missingFields,
+            AgentToolParameters draft,
+            String message
+    ) {
+        if (missingFields.isEmpty()) {
+            return "请继续补充创建工单所需的信息。";
+        }
+        if (missingFields.size() == 1) {
+            AgentToolParameterField field = missingFields.get(0);
+            return switch (field) {
+                case TITLE -> "请补充工单标题，尽量一句话说明核心问题。";
+                case DESCRIPTION -> "请补充更完整的问题描述，例如现象、影响范围和你已尝试过的操作。";
+                case CATEGORY -> "请补充工单分类：ACCOUNT、SYSTEM、ENVIRONMENT、OTHER。";
+                case PRIORITY -> "请补充工单优先级：LOW、MEDIUM、HIGH、URGENT。";
+                default -> "请补充" + field.getLabel() + "。";
+            };
+        }
+        StringBuilder reply = new StringBuilder("我先记录了当前工单草稿");
+        if (hasText(draft.getTitle())) {
+            reply.append("（标题：").append(draft.getTitle()).append("）");
+        }
+        reply.append("。还需要补充：");
+        for (int i = 0; i < missingFields.size(); i++) {
+            if (i > 0) {
+                reply.append("、");
+            }
+            reply.append(missingFields.get(i).getLabel());
+        }
+        reply.append("。");
+        return reply.toString();
+    }
+
+    private AgentToolParameters copyParameters(AgentToolParameters source) {
+        return AgentToolParameters.builder()
+                .ticketId(source.getTicketId())
+                .assigneeId(source.getAssigneeId())
+                .title(source.getTitle())
+                .description(source.getDescription())
+                .idempotencyKey(source.getIdempotencyKey())
+                .category(source.getCategory())
+                .priority(source.getPriority())
+                .numbers(source.getNumbers() == null ? List.of() : new ArrayList<>(source.getNumbers()))
+                .build();
+    }
+
+    private boolean isCancelMessage(String message) {
+        if (!hasText(message)) {
+            return false;
+        }
+        String normalized = message.trim().toLowerCase();
+        return normalized.contains("取消")
+                || normalized.contains("不用了")
+                || normalized.contains("算了")
+                || normalized.equals("cancel");
     }
 
     /** 按意图选择本轮唯一允许暴露给 Spring AI 的 Tool Bean。 */

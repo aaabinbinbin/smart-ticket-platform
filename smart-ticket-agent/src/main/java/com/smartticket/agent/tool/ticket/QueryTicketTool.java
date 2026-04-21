@@ -11,7 +11,7 @@ import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.TicketDetailDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
-import com.smartticket.biz.service.TicketService;
+import com.smartticket.biz.service.TicketQueryService;
 import com.smartticket.common.response.PageResult;
 import com.smartticket.domain.entity.Ticket;
 import org.springframework.ai.chat.model.ToolContext;
@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
  * 查询当前工单事实数据的 Tool。
  *
  * <p>该 Tool 只访问当前业务事实，不调用 RAG。权限和可见性仍由 biz 层
- * {@link TicketService} 判断。</p>
+ * {@link TicketQueryService} 判断。</p>
  */
 @Component
 public class QueryTicketTool implements AgentTool {
@@ -32,15 +32,15 @@ public class QueryTicketTool implements AgentTool {
     /**
      * 工单业务服务，负责事实查询和权限判断。
      */
-    private final TicketService ticketService;
+    private final TicketQueryService ticketQueryService;
 
     /**
      * Spring AI Tool Calling 适配支持。
      */
     private final SpringAiToolSupport springAiToolSupport;
 
-    public QueryTicketTool(TicketService ticketService, SpringAiToolSupport springAiToolSupport) {
-        this.ticketService = ticketService;
+    public QueryTicketTool(TicketQueryService ticketQueryService, SpringAiToolSupport springAiToolSupport) {
+        this.ticketQueryService = ticketQueryService;
         this.springAiToolSupport = springAiToolSupport;
     }
 
@@ -69,10 +69,10 @@ public class QueryTicketTool implements AgentTool {
     public AgentToolResult execute(AgentToolRequest request) {
         Long ticketId = request.getParameters().getTicketId();
         if (ticketId != null) {
-            TicketDetailDTO detail = ticketService.getDetail(request.getCurrentUser(), ticketId);
+            TicketDetailDTO detail = ticketQueryService.getDetail(request.getCurrentUser(), ticketId);
             return AgentToolResults.success(NAME, "已查询工单详情。", detail, ticketId, null);
         }
-        PageResult<Ticket> page = ticketService.pageTickets(request.getCurrentUser(), TicketPageQueryDTO.builder()
+        PageResult<Ticket> page = ticketQueryService.pageTickets(request.getCurrentUser(), TicketPageQueryDTO.builder()
                 .pageNo(1)
                 .pageSize(5)
                 .build());

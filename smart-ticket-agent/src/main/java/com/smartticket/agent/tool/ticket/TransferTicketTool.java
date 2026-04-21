@@ -12,7 +12,7 @@ import com.smartticket.agent.tool.parameter.AgentToolRequestValidator;
 import com.smartticket.agent.tool.parameter.AgentToolValidationResult;
 import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
-import com.smartticket.biz.service.TicketService;
+import com.smartticket.biz.service.TicketWorkflowService;
 import com.smartticket.domain.entity.Ticket;
 import java.util.List;
 import org.springframework.ai.chat.model.ToolContext;
@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
  * 转派工单 Tool。
  *
  * <p>该 Tool 是高风险写操作，执行前必须经过 Agent Guard。真正转派动作仍由
- * {@link TicketService#transferTicket} 完成，权限、状态和目标处理人合法性由 biz 层判断。</p>
+ * {@link TicketWorkflowService#transferTicket} 完成，权限、状态和目标处理人合法性由 biz 层判断。</p>
  */
 @Component
 public class TransferTicketTool implements AgentTool {
@@ -33,7 +33,7 @@ public class TransferTicketTool implements AgentTool {
     /**
      * 工单业务服务。
      */
-    private final TicketService ticketService;
+    private final TicketWorkflowService ticketWorkflowService;
 
     /**
      * Tool 参数校验器。
@@ -46,11 +46,11 @@ public class TransferTicketTool implements AgentTool {
     private final SpringAiToolSupport springAiToolSupport;
 
     public TransferTicketTool(
-            TicketService ticketService,
+            TicketWorkflowService ticketWorkflowService,
             AgentToolRequestValidator validator,
             SpringAiToolSupport springAiToolSupport
     ) {
-        this.ticketService = ticketService;
+        this.ticketWorkflowService = ticketWorkflowService;
         this.validator = validator;
         this.springAiToolSupport = springAiToolSupport;
     }
@@ -90,7 +90,7 @@ public class TransferTicketTool implements AgentTool {
 
         Long ticketId = request.getParameters().getTicketId();
         Long assigneeId = request.getParameters().getAssigneeId();
-        Ticket ticket = ticketService.transferTicket(request.getCurrentUser(), ticketId, assigneeId);
+        Ticket ticket = ticketWorkflowService.transferTicket(request.getCurrentUser(), ticketId, assigneeId);
         return AgentToolResults.success(NAME, "已转派工单。", ticket, ticket.getId(), assigneeId);
     }
 

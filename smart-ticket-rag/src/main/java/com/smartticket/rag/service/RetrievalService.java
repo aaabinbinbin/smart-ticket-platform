@@ -43,6 +43,12 @@ public class RetrievalService {
     /** 知识读取仓储，用于补充摘要和来源工单信息。 */
     private final TicketKnowledgeReadRepository knowledgeRepository;
 
+    /** 轻量 query rewrite 服务。 */
+    private final QueryRewriteService queryRewriteService;
+
+    /** 轻量 rerank 服务。 */
+    private final RetrievalRerankService retrievalRerankService;
+
     /** Spring AI VectorStore 持有对象，启用 PGvector 后用于相似度检索。 */
     private final ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider;
 
@@ -53,12 +59,16 @@ public class RetrievalService {
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
             TicketKnowledgeReadRepository knowledgeRepository,
+            QueryRewriteService queryRewriteService,
+            RetrievalRerankService retrievalRerankService,
             ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider,
             @Value("${smart-ticket.ai.vector-store.enabled:false}") boolean vectorStoreEnabled
     ) {
         this.embeddingModelClient = embeddingModelClient;
         this.embeddingRepository = embeddingRepository;
         this.knowledgeRepository = knowledgeRepository;
+        this.queryRewriteService = queryRewriteService;
+        this.retrievalRerankService = retrievalRerankService;
         this.vectorStoreHolderProvider = vectorStoreHolderProvider;
         this.vectorStoreEnabled = vectorStoreEnabled;
     }
@@ -72,12 +82,16 @@ public class RetrievalService {
     public RetrievalResult retrieve(RetrievalRequest request) {
         String queryText = request == null ? null : request.getQueryText();
         int topK = normalizeTopK(request == null ? null : request.getTopK());
-        String rewrittenQuery = request != null && request.isRewrite() ? rewriteQuery(queryText) : normalizeQuery(queryText);
+        String rewrittenQuery = request != null && request.isRewrite()
+                ? queryRewriteService.rewriteForHistorySearch(queryText)
+                : normalizeQuery(queryText);
         if (!hasText(rewrittenQuery)) {
             return RetrievalResult.builder()
                     .queryText(queryText)
                     .rewrittenQuery(rewrittenQuery)
                     .topK(topK)
+                    .retrievalPath("EMPTY")
+                    .fallbackUsed(false)
                     .hits(List.of())
                     .build();
         }
@@ -127,11 +141,16 @@ public class RetrievalService {
             List<RetrievalHit> hits = documents.stream()
                     .map(this::toHit)
                     .toList();
+            List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rewrittenQuery, hits, topK);
+            log.info("rag retrieval path=PGVECTOR, fallbackUsed=false, query='{}', topK={}, hits={}",
+                    rewrittenQuery, topK, rerankedHits.size());
             return Optional.of(RetrievalResult.builder()
                     .queryText(queryText)
                     .rewrittenQuery(rewrittenQuery)
                     .topK(topK)
-                    .hits(hits)
+                    .retrievalPath("PGVECTOR")
+                    .fallbackUsed(false)
+                    .hits(rerankedHits)
                     .build());
         } catch (RuntimeException ex) {
             log.warn("spring ai vector store retrieval failed, fallback to mysql vectors: reason={}", ex.getMessage());
@@ -151,24 +170,19 @@ public class RetrievalService {
                 .map(embedding -> toHit(embedding, knowledgeMap.get(embedding.getKnowledgeId()), queryVector))
                 .filter(hit -> hit.getScore() != null)
                 .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
-                .limit(topK)
                 .toList();
+        List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rewrittenQuery, hits, topK);
+        log.warn("rag retrieval path=MYSQL_FALLBACK, fallbackUsed=true, query='{}', topK={}, hits={}",
+                rewrittenQuery, topK, rerankedHits.size());
 
         return RetrievalResult.builder()
                 .queryText(queryText)
                 .rewrittenQuery(rewrittenQuery)
                 .topK(topK)
-                .hits(hits)
+                .retrievalPath("MYSQL_FALLBACK")
+                .fallbackUsed(true)
+                .hits(rerankedHits)
                 .build();
-    }
-
-    /** 轻量 query rewrite，第一版只做去噪和场景前缀增强。 */
-    private String rewriteQuery(String queryText) {
-        String normalized = normalizeQuery(queryText);
-        if (!hasText(normalized)) {
-            return normalized;
-        }
-        return "历史工单相似问题 检索 " + normalized;
     }
 
     /** 归一化查询文本。 */

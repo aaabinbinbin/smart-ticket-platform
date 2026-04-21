@@ -8,12 +8,18 @@ import java.util.Locale;
 import org.springframework.stereotype.Service;
 
 /**
- * 第一版 Agent 入口使用的规则意图路由器。
+ * 当前版本的规则意图路由器。
+ *
+ * <p>优先使用可解释规则完成基础路由，并在置信度过低时交由上层先做澄清，
+ * 避免默认把模糊请求硬路由到 QUERY_TICKET。</p>
  */
 @Service
 public class IntentRouter {
     private static final List<String> HISTORY_KEYWORDS = List.of(
-            "历史", "记录", "刚才", "之前", "上次", "前面", "history", "previous"
+            "历史", "历史案例", "类似案例", "经验", "方案", "记录", "history", "previous"
+    );
+    private static final List<String> CONTEXT_KEYWORDS = List.of(
+            "刚才", "之前", "上次", "前面", "这个", "它"
     );
     private static final List<String> TRANSFER_KEYWORDS = List.of(
             "转派", "转交", "转给", "移交", "transfer", "handover"
@@ -27,25 +33,46 @@ public class IntentRouter {
 
     public IntentRoute route(String message, AgentSessionContext context) {
         String normalized = normalize(message);
-        if (containsAny(normalized, TRANSFER_KEYWORDS)) {
+        boolean transfer = containsAny(normalized, TRANSFER_KEYWORDS);
+        boolean create = containsAny(normalized, CREATE_KEYWORDS);
+        boolean history = containsAny(normalized, HISTORY_KEYWORDS);
+        boolean query = containsAny(normalized, QUERY_KEYWORDS);
+        boolean ticketReference = containsTicketReference(normalized);
+        int matchedIntents = countMatches(transfer, create, history, query);
+
+        if (matchedIntents > 1) {
+            if (transfer) {
+                return route(AgentIntent.TRANSFER_TICKET, 0.72, "混合表达中优先命中转派规则");
+            }
+            if (create) {
+                return route(AgentIntent.CREATE_TICKET, 0.68, "混合表达中优先命中创建规则");
+            }
+            if (history) {
+                return route(AgentIntent.SEARCH_HISTORY, 0.66, "混合表达中优先命中历史检索规则");
+            }
+        }
+        if (transfer) {
             return route(AgentIntent.TRANSFER_TICKET, 0.90, "命中转派关键词");
         }
-        if (containsAny(normalized, CREATE_KEYWORDS)) {
+        if (create) {
             return route(AgentIntent.CREATE_TICKET, 0.88, "命中创建关键词");
         }
-        if (containsTicketReference(normalized) && containsAny(normalized, QUERY_KEYWORDS)) {
+        if (ticketReference && query) {
             return route(AgentIntent.QUERY_TICKET, 0.88, "命中当前会话工单指代查询");
         }
-        if (containsAny(normalized, HISTORY_KEYWORDS)) {
+        if (history) {
             return route(AgentIntent.SEARCH_HISTORY, 0.92, "命中历史查询关键词");
         }
-        if (containsAny(normalized, QUERY_KEYWORDS)) {
+        if (query) {
             return route(AgentIntent.QUERY_TICKET, 0.82, "命中查询关键词");
         }
-        if (context != null && context.getActiveTicketId() != null) {
-            return route(AgentIntent.QUERY_TICKET, 0.55, "兜底查询当前会话工单");
+        if (context != null && context.getActiveTicketId() != null && containsAny(normalized, CONTEXT_KEYWORDS)) {
+            return route(AgentIntent.QUERY_TICKET, 0.58, "命中会话上下文指代，倾向查询当前工单");
         }
-        return route(AgentIntent.QUERY_TICKET, 0.40, "兜底进入工单查询");
+        if (context != null && context.getActiveTicketId() != null) {
+            return route(AgentIntent.QUERY_TICKET, 0.46, "上下文中存在当前工单，但用户表达仍然偏模糊");
+        }
+        return route(AgentIntent.QUERY_TICKET, 0.25, "未命中明确意图规则，需要先澄清用户目标");
     }
 
     private IntentRoute route(AgentIntent intent, double confidence, String reason) {
@@ -67,6 +94,16 @@ public class IntentRouter {
                 || message.contains("这个工单")
                 || message.contains("刚才那个工单")
                 || message.contains("刚刚那个工单");
+    }
+
+    private int countMatches(boolean... matches) {
+        int count = 0;
+        for (boolean match : matches) {
+            if (match) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private String normalize(String message) {

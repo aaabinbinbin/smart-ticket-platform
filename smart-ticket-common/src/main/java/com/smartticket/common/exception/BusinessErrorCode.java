@@ -1,11 +1,7 @@
 package com.smartticket.common.exception;
 
-/**
- * 统一业务错误码和默认错误消息。
- *
- * <p>业务代码抛出异常时应优先使用这里的枚举，避免在各处散落硬编码错误字符串。</p>
- */
 public enum BusinessErrorCode {
+    UNAUTHORIZED("UNAUTHORIZED", "请先登录或提供有效令牌"),
     INVALID_TICKET_STATUS("INVALID_TICKET_STATUS", "工单状态不合法: %s"),
     INVALID_TICKET_CATEGORY("INVALID_TICKET_CATEGORY", "不支持的工单分类: %s"),
     INVALID_TICKET_PRIORITY("INVALID_TICKET_PRIORITY", "不支持的工单优先级: %s"),
@@ -14,6 +10,8 @@ public enum BusinessErrorCode {
     TICKET_TRANSFER_FORBIDDEN("TICKET_TRANSFER_FORBIDDEN", "只有当前负责人或管理员可以转派工单"),
     TICKET_RESOLVE_FORBIDDEN("TICKET_RESOLVE_FORBIDDEN", "只有当前负责人或管理员可以解决工单"),
     TICKET_CLOSE_FORBIDDEN("TICKET_CLOSE_FORBIDDEN", "只有提单人或管理员可以关闭工单"),
+    TICKET_CLAIM_FORBIDDEN("TICKET_CLAIM_FORBIDDEN", "当前用户无权认领该工单"),
+    INVALID_TICKET_CLAIM("INVALID_TICKET_CLAIM", "工单认领条件不满足: %s"),
     TICKET_STATUS_REQUIRED("TICKET_STATUS_REQUIRED", "目标状态不能为空"),
     TICKET_CLOSED("TICKET_CLOSED", "已关闭工单不能继续评论"),
     TICKET_STATUS_UNCHANGED("TICKET_STATUS_UNCHANGED", "工单已经处于目标状态"),

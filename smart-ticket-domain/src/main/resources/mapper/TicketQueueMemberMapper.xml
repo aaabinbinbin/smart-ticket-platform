@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketQueueMemberMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketQueueMember"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_queue_member (
+            queue_id, user_id, enabled, last_assigned_at
+        )
+        VALUES (
+            #{queueId}, #{userId}, #{enabled}, #{lastAssignedAt}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketQueueMember">
+        SELECT *
+        FROM ticket_queue_member
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByQueueIdAndUserId" resultType="com.smartticket.domain.entity.TicketQueueMember">
+        SELECT *
+        FROM ticket_queue_member
+        WHERE queue_id = #{queueId}
+          AND user_id = #{userId}
+    </select>
+
+    <select id="findByQueueId" resultType="com.smartticket.domain.entity.TicketQueueMember">
+        SELECT *
+        FROM ticket_queue_member
+        WHERE queue_id = #{queueId}
+        <if test="enabled != null">
+            AND enabled = #{enabled}
+        </if>
+        ORDER BY
+            CASE WHEN last_assigned_at IS NULL THEN 0 ELSE 1 END ASC,
+            last_assigned_at ASC,
+            id ASC
+    </select>
+
+    <update id="updateEnabled">
+        UPDATE ticket_queue_member
+        SET enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateLastAssignedAt">
+        UPDATE ticket_queue_member
+        SET last_assigned_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+    </update>
+</mapper>

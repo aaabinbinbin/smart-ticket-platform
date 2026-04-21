@@ -3,8 +3,11 @@ package com.smartticket.biz.service;
 import com.smartticket.biz.dto.TicketAssignmentPreviewDTO;
 import com.smartticket.biz.dto.TicketAssignmentRuleCommandDTO;
 import com.smartticket.biz.dto.TicketAssignmentRulePageQueryDTO;
+import com.smartticket.biz.dto.TicketAssignmentStatsDTO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.repository.TicketAssignmentRuleRepository;
+import com.smartticket.biz.repository.TicketOperationLogRepository;
+import com.smartticket.biz.repository.TicketQueueRepository;
 import com.smartticket.biz.repository.TicketRepository;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
@@ -13,54 +16,61 @@ import com.smartticket.domain.entity.SysRole;
 import com.smartticket.domain.entity.SysUser;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketAssignmentRule;
+import com.smartticket.domain.entity.TicketGroup;
+import com.smartticket.domain.entity.TicketOperationLog;
 import com.smartticket.domain.entity.TicketQueue;
+import com.smartticket.domain.entity.TicketQueueMember;
 import com.smartticket.domain.enums.CodeInfoEnum;
+import com.smartticket.domain.enums.OperationTypeEnum;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * 自动分派规则业务服务。
- *
- * <p>当前 P1 只实现 preview，不执行真实分派。真实分派后续必须复用工单主流程的分配服务。</p>
- */
 @Service
 public class TicketAssignmentRuleService {
-    /** 自动分派规则仓储。 */
     private final TicketAssignmentRuleRepository ruleRepository;
-
-    /** 工单主服务，用于 preview 前复用详情权限判断。 */
-    private final TicketService ticketService;
-
-    /** 工单组服务，用于校验目标组。 */
+    private final TicketQueryService ticketQueryService;
+    private final TicketWorkflowService ticketWorkflowService;
+    private final TicketQueueBindingService ticketQueueBindingService;
     private final TicketGroupService ticketGroupService;
-
-    /** 工单队列服务，用于校验目标队列。 */
     private final TicketQueueService ticketQueueService;
-
-    /** 工单仓储，用于校验目标处理人是否为 STAFF。 */
+    private final TicketQueueRepository ticketQueueRepository;
+    private final TicketQueueMemberService ticketQueueMemberService;
     private final TicketRepository ticketRepository;
-
-    /** 权限服务，用于复用 ADMIN 判断。 */
+    private final TicketOperationLogRepository ticketOperationLogRepository;
     private final TicketPermissionService permissionService;
 
     public TicketAssignmentRuleService(
             TicketAssignmentRuleRepository ruleRepository,
-            TicketService ticketService,
+            TicketQueryService ticketQueryService,
+            TicketWorkflowService ticketWorkflowService,
+            TicketQueueBindingService ticketQueueBindingService,
             TicketGroupService ticketGroupService,
             TicketQueueService ticketQueueService,
+            TicketQueueRepository ticketQueueRepository,
+            TicketQueueMemberService ticketQueueMemberService,
             TicketRepository ticketRepository,
+            TicketOperationLogRepository ticketOperationLogRepository,
             TicketPermissionService permissionService
     ) {
         this.ruleRepository = ruleRepository;
-        this.ticketService = ticketService;
+        this.ticketQueryService = ticketQueryService;
+        this.ticketWorkflowService = ticketWorkflowService;
+        this.ticketQueueBindingService = ticketQueueBindingService;
         this.ticketGroupService = ticketGroupService;
         this.ticketQueueService = ticketQueueService;
+        this.ticketQueueRepository = ticketQueueRepository;
+        this.ticketQueueMemberService = ticketQueueMemberService;
         this.ticketRepository = ticketRepository;
+        this.ticketOperationLogRepository = ticketOperationLogRepository;
         this.permissionService = permissionService;
     }
 
-    /** 创建自动分派规则。 */
     @Transactional
     public TicketAssignmentRule create(CurrentUser operator, TicketAssignmentRuleCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -79,7 +89,6 @@ public class TicketAssignmentRuleService {
         return requireById(rule.getId());
     }
 
-    /** 更新自动分派规则。 */
     @Transactional
     public TicketAssignmentRule update(CurrentUser operator, Long ruleId, TicketAssignmentRuleCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -97,7 +106,6 @@ public class TicketAssignmentRuleService {
         return requireById(ruleId);
     }
 
-    /** 启用或停用自动分派规则。 */
     @Transactional
     public TicketAssignmentRule updateEnabled(CurrentUser operator, Long ruleId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -106,12 +114,10 @@ public class TicketAssignmentRuleService {
         return requireById(ruleId);
     }
 
-    /** 查询规则详情。 */
     public TicketAssignmentRule get(Long ruleId) {
         return requireById(ruleId);
     }
 
-    /** 分页查询规则。 */
     public PageResult<TicketAssignmentRule> page(TicketAssignmentRulePageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -129,13 +135,8 @@ public class TicketAssignmentRuleService {
                 .build();
     }
 
-    /**
-     * 预览某张工单的自动分派推荐结果。
-     *
-     * <p>该方法不更新工单，不写操作日志，只返回推荐目标和命中原因。</p>
-     */
     public TicketAssignmentPreviewDTO preview(CurrentUser operator, Long ticketId) {
-        Ticket ticket = ticketService.getDetail(operator, ticketId).getTicket();
+        Ticket ticket = ticketQueryService.getDetail(operator, ticketId).getTicket();
         TicketAssignmentRule rule = ruleRepository.findBestMatch(enumCode(ticket.getCategory()), enumCode(ticket.getPriority()));
         if (rule == null) {
             return TicketAssignmentPreviewDTO.builder()
@@ -156,33 +157,62 @@ public class TicketAssignmentRuleService {
                 .build();
     }
 
-    /**
-     * 按自动分派规则执行真实分派。
-     *
-     * <p>该方法只在命中规则且规则明确配置 {@code targetUserId} 时执行。
-     * 真实写操作委托给 {@link TicketService#assignTicket(CurrentUser, Long, Long)}，
-     * 复用现有 ADMIN 权限、工单状态机、目标处理人校验、操作日志和 SLA 刷新。</p>
-     */
+    public TicketAssignmentStatsDTO stats() {
+        long matched = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.AUTO_ASSIGN_MATCHED.getCode());
+        long fallback = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.AUTO_ASSIGN_FALLBACK.getCode());
+        long pending = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.AUTO_ASSIGN_PENDING.getCode());
+        long claimed = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.CLAIM.getCode());
+        long total = matched + fallback + pending;
+        long assigned = matched + fallback;
+        BigDecimal hitRate = total == 0
+                ? BigDecimal.ZERO
+                : BigDecimal.valueOf(assigned)
+                        .divide(BigDecimal.valueOf(total), 4, RoundingMode.HALF_UP);
+        return TicketAssignmentStatsDTO.builder()
+                .autoAssignMatchedCount(matched)
+                .autoAssignFallbackCount(fallback)
+                .autoAssignPendingCount(pending)
+                .claimedCount(claimed)
+                .totalAutoAssignCount(total)
+                .autoAssignedCount(assigned)
+                .autoAssignHitRate(hitRate)
+                .build();
+    }
+
+    @Transactional
     public Ticket autoAssign(CurrentUser operator, Long ticketId) {
-        Ticket ticket = ticketService.getDetail(operator, ticketId).getTicket();
+        Ticket ticket = ticketQueryService.getDetail(operator, ticketId).getTicket();
         TicketAssignmentRule rule = ruleRepository.findBestMatch(enumCode(ticket.getCategory()), enumCode(ticket.getPriority()));
         if (rule == null) {
             throw new BusinessException(BusinessErrorCode.TICKET_ASSIGNMENT_RULE_NOT_MATCHED);
         }
-        if (rule.getTargetUserId() == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "真实分派需要规则配置目标处理人");
+
+        AssignmentTarget target = resolveAssignmentTarget(rule);
+        if (target.groupId() != null && target.queueId() != null) {
+            ticketQueueBindingService.bindTicketQueue(operator, ticketId, target.groupId(), target.queueId());
         }
-        if (rule.getTargetQueueId() != null) {
-            Long groupId = rule.getTargetGroupId();
-            if (groupId == null) {
-                groupId = ticketQueueService.get(rule.getTargetQueueId()).getGroupId();
-            }
-            ticketService.bindTicketQueue(operator, ticketId, groupId, rule.getTargetQueueId());
+        if (target.assigneeId() == null) {
+            writeOperationLog(ticketId, operator.getUserId(), OperationTypeEnum.AUTO_ASSIGN_PENDING,
+                    "自动分派未找到可用处理人，转为待认领", null, "groupId=" + target.groupId() + ", queueId=" + target.queueId());
+            return ticketQueryService.getDetail(operator, ticketId).getTicket();
         }
-        return ticketService.assignTicket(operator, ticketId, rule.getTargetUserId());
+        if (target.memberId() != null) {
+            ticketQueueMemberService.markAssigned(target.memberId());
+            writeOperationLog(ticketId, operator.getUserId(), OperationTypeEnum.AUTO_ASSIGN_MATCHED,
+                    "自动分派命中队列成员", null,
+                    "assigneeId=" + target.assigneeId() + ", queueId=" + target.queueId() + ", memberId=" + target.memberId());
+        } else if (target.fallback()) {
+            writeOperationLog(ticketId, operator.getUserId(), OperationTypeEnum.AUTO_ASSIGN_FALLBACK,
+                    "自动分派回退到组负责人", null,
+                    "assigneeId=" + target.assigneeId() + ", groupId=" + target.groupId());
+        } else {
+            writeOperationLog(ticketId, operator.getUserId(), OperationTypeEnum.AUTO_ASSIGN_MATCHED,
+                    "自动分派命中指定处理人", null,
+                    "assigneeId=" + target.assigneeId() + ", queueId=" + target.queueId());
+        }
+        return ticketWorkflowService.assignTicket(operator, ticketId, target.assigneeId());
     }
 
-    /** 根据 ID 查询规则，不存在时抛出业务异常。 */
     private TicketAssignmentRule requireById(Long ruleId) {
         TicketAssignmentRule rule = ruleRepository.findById(ruleId);
         if (rule == null) {
@@ -191,7 +221,6 @@ public class TicketAssignmentRuleService {
         return rule;
     }
 
-    /** 校验自动分派规则目标。 */
     private void validateRule(TicketAssignmentRuleCommandDTO command) {
         if (command.getTargetGroupId() == null
                 && command.getTargetQueueId() == null
@@ -213,7 +242,6 @@ public class TicketAssignmentRuleService {
         }
     }
 
-    /** 校验目标处理人存在且具备 STAFF 角色。 */
     private void requireStaffUser(Long userId) {
         SysUser user = ticketRepository.findUserById(userId);
         if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
@@ -228,13 +256,124 @@ public class TicketAssignmentRuleService {
         }
     }
 
-    /** 将枚举转换成 code。 */
+    private AssignmentTarget resolveAssignmentTarget(TicketAssignmentRule rule) {
+        if (rule.getTargetUserId() != null) {
+            return new AssignmentTarget(rule.getTargetGroupId(), rule.getTargetQueueId(), rule.getTargetUserId(), null, false);
+        }
+
+        Long groupId = rule.getTargetGroupId();
+        Long queueId = rule.getTargetQueueId();
+        if (queueId != null && groupId == null) {
+            groupId = ticketQueueService.get(queueId).getGroupId();
+        }
+
+        List<TicketQueue> candidateQueues = resolveCandidateQueues(groupId, queueId);
+        QueueCandidate selectedCandidate = selectLeastLoadedCandidate(candidateQueues);
+        if (selectedCandidate != null) {
+            return new AssignmentTarget(
+                    selectedCandidate.groupId(),
+                    selectedCandidate.queueId(),
+                    selectedCandidate.assigneeId(),
+                    selectedCandidate.memberId(),
+                    false
+            );
+        }
+
+        Long fallbackAssigneeId = resolveGroupOwnerFallback(groupId);
+        Long fallbackQueueId = queueId != null ? queueId : candidateQueues.stream()
+                .map(TicketQueue::getId)
+                .findFirst()
+                .orElse(null);
+        return new AssignmentTarget(groupId, fallbackQueueId, fallbackAssigneeId, null, fallbackAssigneeId != null);
+    }
+
+    private List<TicketQueue> resolveCandidateQueues(Long groupId, Long queueId) {
+        if (queueId != null) {
+            return List.of(ticketQueueService.requireEnabled(queueId));
+        }
+        if (groupId == null) {
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "真实分派至少需要配置组、队列或处理人");
+        }
+        ticketGroupService.requireEnabled(groupId);
+        return ticketQueueRepository.findEnabledByGroupId(groupId);
+    }
+
+    private QueueCandidate selectLeastLoadedCandidate(List<TicketQueue> candidateQueues) {
+        List<QueueCandidate> candidates = new ArrayList<>();
+        for (TicketQueue queue : candidateQueues) {
+            for (TicketQueueMember member : ticketQueueMemberService.listEnabledMembers(queue.getId())) {
+                candidates.add(new QueueCandidate(
+                        queue.getGroupId(),
+                        queue.getId(),
+                        member.getId(),
+                        member.getUserId(),
+                        ticketRepository.countOpenAssignedTickets(member.getUserId()),
+                        member.getLastAssignedAt()
+                ));
+            }
+        }
+        return candidates.stream()
+                .min(Comparator.comparingLong(QueueCandidate::load)
+                        .thenComparing(QueueCandidate::lastAssignedAt, Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(QueueCandidate::memberId))
+                .orElse(null);
+    }
+
+    private Long resolveGroupOwnerFallback(Long groupId) {
+        if (groupId == null) {
+            return null;
+        }
+        TicketGroup group = ticketGroupService.requireEnabled(groupId);
+        if (group.getOwnerUserId() == null) {
+            return null;
+        }
+        SysUser user = ticketRepository.findUserById(group.getOwnerUserId());
+        if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
+            return null;
+        }
+        boolean isStaff = ticketRepository.findRolesByUserId(group.getOwnerUserId())
+                .stream()
+                .map(SysRole::getRoleCode)
+                .anyMatch("STAFF"::equals);
+        return isStaff ? group.getOwnerUserId() : null;
+    }
+
+    private void writeOperationLog(
+            Long ticketId,
+            Long operatorId,
+            OperationTypeEnum operationType,
+            String operationDesc,
+            String beforeValue,
+            String afterValue
+    ) {
+        ticketOperationLogRepository.insert(TicketOperationLog.builder()
+                .ticketId(ticketId)
+                .operatorId(operatorId)
+                .operationType(operationType)
+                .operationDesc(operationDesc)
+                .beforeValue(beforeValue)
+                .afterValue(afterValue)
+                .build());
+    }
+
     private String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }
 
-    /** 将布尔值转换为数据库启停标记。 */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
+    }
+
+    private record AssignmentTarget(Long groupId, Long queueId, Long assigneeId, Long memberId, boolean fallback) {
+    }
+
+    private record QueueCandidate(
+            Long groupId,
+            Long queueId,
+            Long memberId,
+            Long assigneeId,
+            long load,
+            LocalDateTime lastAssignedAt
+    ) {
     }
 }

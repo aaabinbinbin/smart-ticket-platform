@@ -1,16 +1,12 @@
 package com.smartticket.domain.mapper;
 
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-/**
- * 工单主表 Mapper，对应表 {@code ticket}。
- *
- * <p>这里只定义 SQL 访问能力，不承担业务权限和状态流转判断。</p>
- */
 @Mapper
 public interface TicketMapper {
 
@@ -26,61 +22,25 @@ public interface TicketMapper {
 
     List<Ticket> findByAssigneeId(@Param("assigneeId") Long assigneeId);
 
+    long countOpenAssignedTickets(@Param("assigneeId") Long assigneeId);
+
     List<Ticket> findByStatus(@Param("status") TicketStatusEnum status);
 
-    List<Ticket> pageAll(
-            @Param("status") String status,
-            @Param("category") String category,
-            @Param("priority") String priority,
-            @Param("offset") int offset,
-            @Param("limit") int limit
-    );
+    List<Ticket> pageAll(@Param("status") String status, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
 
-    long countAll(
-            @Param("status") String status,
-            @Param("category") String category,
-            @Param("priority") String priority
-    );
+    long countAll(@Param("status") String status, @Param("category") String category, @Param("priority") String priority);
 
-    List<Ticket> pageVisible(
-            @Param("userId") Long userId,
-            @Param("status") String status,
-            @Param("category") String category,
-            @Param("priority") String priority,
-            @Param("offset") int offset,
-            @Param("limit") int limit
-    );
+    List<Ticket> pageVisible(@Param("userId") Long userId, @Param("status") String status, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
 
-    long countVisible(
-            @Param("userId") Long userId,
-            @Param("status") String status,
-            @Param("category") String category,
-            @Param("priority") String priority
-    );
+    long countVisible(@Param("userId") Long userId, @Param("status") String status, @Param("category") String category, @Param("priority") String priority);
 
-    int updateAssignee(
-            @Param("id") Long id,
-            @Param("assigneeId") Long assigneeId,
-            @Param("expectedStatus") TicketStatusEnum expectedStatus
-    );
+    int updateAssignee(@Param("id") Long id, @Param("assigneeId") Long assigneeId, @Param("expectedStatus") TicketStatusEnum expectedStatus);
 
-    int updateAssigneeAndStatus(
-            @Param("id") Long id,
-            @Param("assigneeId") Long assigneeId,
-            @Param("expectedStatus") TicketStatusEnum expectedStatus,
-            @Param("status") TicketStatusEnum status
-    );
+    int updateAssigneeAndStatus(@Param("id") Long id, @Param("assigneeId") Long assigneeId, @Param("expectedStatus") TicketStatusEnum expectedStatus, @Param("status") TicketStatusEnum status);
 
-    int updateQueueBinding(
-            @Param("id") Long id,
-            @Param("groupId") Long groupId,
-            @Param("queueId") Long queueId
-    );
+    int updateQueueBinding(@Param("id") Long id, @Param("groupId") Long groupId, @Param("queueId") Long queueId);
 
-    int updateStatus(
-            @Param("id") Long id,
-            @Param("expectedStatus") TicketStatusEnum expectedStatus,
-            @Param("status") TicketStatusEnum status,
-            @Param("solutionSummary") String solutionSummary
-    );
+    int updateStatus(@Param("id") Long id, @Param("expectedStatus") TicketStatusEnum expectedStatus, @Param("status") TicketStatusEnum status, @Param("solutionSummary") String solutionSummary);
+
+    int updatePriority(@Param("id") Long id, @Param("priority") TicketPriorityEnum priority);
 }

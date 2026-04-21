@@ -28,6 +28,10 @@ public class TicketQueueRepository {
         return ticketQueueMapper.findByCode(queueCode);
     }
 
+    public List<TicketQueue> findEnabledByGroupId(Long groupId) {
+        return ticketQueueMapper.findEnabledByGroupId(groupId);
+    }
+
     public List<TicketQueue> page(Long groupId, String keyword, Integer enabled, int offset, int limit) {
         return ticketQueueMapper.page(groupId, keyword, enabled, offset, limit);
     }

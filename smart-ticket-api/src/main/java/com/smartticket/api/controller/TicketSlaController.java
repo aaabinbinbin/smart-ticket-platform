@@ -10,7 +10,7 @@ import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.dto.TicketSlaPolicyCommandDTO;
 import com.smartticket.biz.dto.TicketSlaPolicyPageQueryDTO;
 import com.smartticket.biz.model.CurrentUser;
-import com.smartticket.biz.service.TicketService;
+import com.smartticket.biz.service.TicketQueryService;
 import com.smartticket.biz.service.TicketSlaService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
@@ -48,16 +48,16 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "P1 SLA 配置", description = "SLA 策略管理和工单 SLA 实例查询")
 public class TicketSlaController {
     private final TicketSlaService ticketSlaService;
-    private final TicketService ticketService;
+    private final TicketQueryService ticketQueryService;
     private final P1ConfigAssembler assembler;
 
     public TicketSlaController(
             TicketSlaService ticketSlaService,
-            TicketService ticketService,
+            TicketQueryService ticketQueryService,
             P1ConfigAssembler assembler
     ) {
         this.ticketSlaService = ticketSlaService;
-        this.ticketService = ticketService;
+        this.ticketQueryService = ticketQueryService;
         this.assembler = assembler;
     }
 
@@ -135,7 +135,7 @@ public class TicketSlaController {
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
     ) {
-        ticketService.getDetail(currentUser(authentication), ticketId);
+        ticketQueryService.getDetail(currentUser(authentication), ticketId);
         return ApiResponse.success(assembler.toSlaInstanceVO(ticketSlaService.getInstanceByTicketId(ticketId)));
     }
 

@@ -16,4 +16,6 @@ public interface TicketOperationLogMapper {
     TicketOperationLog findById(@Param("id") Long id);
 
     List<TicketOperationLog> findByTicketId(@Param("ticketId") Long ticketId);
+
+    long countByOperationType(@Param("operationType") String operationType);
 }

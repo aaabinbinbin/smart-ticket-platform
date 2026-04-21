@@ -17,48 +17,38 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
-        WHERE id = #{id}
+        SELECT * FROM ticket WHERE id = #{id}
     </select>
 
     <select id="findVisibleById" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
-        WHERE id = #{id}
-          AND (creator_id = #{userId} OR assignee_id = #{userId})
+        SELECT * FROM ticket WHERE id = #{id} AND (creator_id = #{userId} OR assignee_id = #{userId})
     </select>
 
     <select id="findByTicketNo" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
-        WHERE ticket_no = #{ticketNo}
+        SELECT * FROM ticket WHERE ticket_no = #{ticketNo}
     </select>
 
     <select id="findByCreatorId" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
-        WHERE creator_id = #{creatorId}
-        ORDER BY created_at DESC
+        SELECT * FROM ticket WHERE creator_id = #{creatorId} ORDER BY created_at DESC
     </select>
 
     <select id="findByAssigneeId" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
+        SELECT * FROM ticket WHERE assignee_id = #{assigneeId} ORDER BY created_at DESC
+    </select>
+
+    <select id="countOpenAssignedTickets" resultType="long">
+        SELECT COUNT(1)
         FROM ticket
         WHERE assignee_id = #{assigneeId}
-        ORDER BY created_at DESC
+          AND status IN ('PENDING_ASSIGN', 'PROCESSING', 'RESOLVED')
     </select>
 
     <select id="findByStatus" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
-        WHERE status = #{status.code}
-        ORDER BY created_at DESC
+        SELECT * FROM ticket WHERE status = #{status.code} ORDER BY created_at DESC
     </select>
 
     <select id="pageAll" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
+        SELECT * FROM ticket
         WHERE 1 = 1
         <if test="status != null">AND status = #{status}</if>
         <if test="category != null">AND category = #{category}</if>
@@ -68,8 +58,7 @@
     </select>
 
     <select id="countAll" resultType="long">
-        SELECT COUNT(1)
-        FROM ticket
+        SELECT COUNT(1) FROM ticket
         WHERE 1 = 1
         <if test="status != null">AND status = #{status}</if>
         <if test="category != null">AND category = #{category}</if>
@@ -77,8 +66,7 @@
     </select>
 
     <select id="pageVisible" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT *
-        FROM ticket
+        SELECT * FROM ticket
         WHERE (creator_id = #{userId} OR assignee_id = #{userId})
         <if test="status != null">AND status = #{status}</if>
         <if test="category != null">AND category = #{category}</if>
@@ -88,8 +76,7 @@
     </select>
 
     <select id="countVisible" resultType="long">
-        SELECT COUNT(1)
-        FROM ticket
+        SELECT COUNT(1) FROM ticket
         WHERE (creator_id = #{userId} OR assignee_id = #{userId})
         <if test="status != null">AND status = #{status}</if>
         <if test="category != null">AND category = #{category}</if>
@@ -97,32 +84,26 @@
     </select>
 
     <update id="updateAssignee">
-        UPDATE ticket
-        SET assignee_id = #{assigneeId}
-        WHERE id = #{id}
-          AND status = #{expectedStatus.code}
+        UPDATE ticket SET assignee_id = #{assigneeId} WHERE id = #{id} AND status = #{expectedStatus.code}
     </update>
 
     <update id="updateAssigneeAndStatus">
         UPDATE ticket
-        SET assignee_id = #{assigneeId},
-            status = #{status.code}
-        WHERE id = #{id}
-          AND status = #{expectedStatus.code}
+        SET assignee_id = #{assigneeId}, status = #{status.code}
+        WHERE id = #{id} AND status = #{expectedStatus.code}
     </update>
 
     <update id="updateQueueBinding">
-        UPDATE ticket
-        SET group_id = #{groupId},
-            queue_id = #{queueId}
-        WHERE id = #{id}
+        UPDATE ticket SET group_id = #{groupId}, queue_id = #{queueId} WHERE id = #{id}
     </update>
 
     <update id="updateStatus">
         UPDATE ticket
-        SET status = #{status.code},
-            solution_summary = #{solutionSummary}
-        WHERE id = #{id}
-          AND status = #{expectedStatus.code}
+        SET status = #{status.code}, solution_summary = #{solutionSummary}
+        WHERE id = #{id} AND status = #{expectedStatus.code}
+    </update>
+
+    <update id="updatePriority">
+        UPDATE ticket SET priority = #{priority.code} WHERE id = #{id}
     </update>
 </mapper>

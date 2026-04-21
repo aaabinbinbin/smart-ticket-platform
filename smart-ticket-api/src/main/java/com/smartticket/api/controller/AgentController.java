@@ -6,6 +6,8 @@ import com.smartticket.api.dto.agent.AgentChatRequest;
 import com.smartticket.api.dto.agent.AgentChatResponse;
 import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.common.exception.BusinessErrorCode;
+import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,7 +56,12 @@ public class AgentController {
      * 将 Spring Security 当前用户转换为 biz 层需要的 CurrentUser。
      */
     private CurrentUser currentUser(Authentication authentication) {
-        AuthUser authUser = (AuthUser) authentication.getPrincipal();
+        if (authentication == null || authentication.getPrincipal() == null) {
+            throw new BusinessException(BusinessErrorCode.UNAUTHORIZED);
+        }
+        if (!(authentication.getPrincipal() instanceof AuthUser authUser)) {
+            throw new BusinessException(BusinessErrorCode.UNAUTHORIZED);
+        }
         return CurrentUser.builder()
                 .userId(authUser.getUserId())
                 .username(authUser.getUsername())

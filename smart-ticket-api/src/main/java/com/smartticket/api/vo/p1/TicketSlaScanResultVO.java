@@ -6,30 +6,34 @@ import java.util.List;
 import lombok.Builder;
 import lombok.Data;
 
-/**
- * SLA 违约扫描结果响应。
- */
 @Data
 @Builder
-@Schema(description = "SLA 违约扫描结果")
+@Schema(description = "SLA 扫描结果")
 public class TicketSlaScanResultVO {
-    /** 本次扫描使用的业务时间。 */
-    @Schema(description = "本次扫描使用的业务时间")
+    @Schema(description = "扫描时间")
     private LocalDateTime scanTime;
 
-    /** 本次扫描的最大处理数量。 */
-    @Schema(description = "本次扫描的最大处理数量")
+    @Schema(description = "扫描上限")
     private Integer limit;
 
-    /** 查询到的候选违约实例数量。 */
-    @Schema(description = "查询到的候选违约实例数量")
+    @Schema(description = "候选实例数量")
     private Integer candidateCount;
 
-    /** 成功标记为违约的实例数量。 */
-    @Schema(description = "成功标记为违约的实例数量")
+    @Schema(description = "成功标记违约数量")
     private Integer markedCount;
 
-    /** 本次成功标记违约的 SLA 实例 ID。 */
-    @Schema(description = "本次成功标记违约的 SLA 实例 ID")
+    @Schema(description = "首次响应违约数量")
+    private Integer firstResponseBreachedCount;
+
+    @Schema(description = "解决时限违约数量")
+    private Integer resolveBreachedCount;
+
+    @Schema(description = "成功升级数量")
+    private Integer escalatedCount;
+
+    @Schema(description = "成功通知数量")
+    private Integer notifiedCount;
+
+    @Schema(description = "成功标记违约的 SLA 实例 ID")
     private List<Long> breachedInstanceIds;
 }

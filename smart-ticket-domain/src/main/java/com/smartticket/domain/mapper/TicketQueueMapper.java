@@ -17,6 +17,8 @@ public interface TicketQueueMapper {
 
     TicketQueue findByCode(@Param("queueCode") String queueCode);
 
+    List<TicketQueue> findEnabledByGroupId(@Param("groupId") Long groupId);
+
     List<TicketQueue> page(
             @Param("groupId") Long groupId,
             @Param("keyword") String keyword,

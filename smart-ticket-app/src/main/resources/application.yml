@@ -8,27 +8,29 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.100.128
       port: 6379
-      password: 123456
-      database: 0
+      password:
+      database: 1
       timeout: 3s
   ai:
     model:
       chat: ${SPRING_AI_MODEL_CHAT:none}
       embedding: ${SPRING_AI_MODEL_EMBEDDING:none}
     openai:
-      api-key: ${OPENAI_API_KEY:${MY_API_KEY:}}
-      base-url: ${OPENAI_BASE_URL:${MY_BASE_URL:https://api.openai.com}}
+      api-key: ${MY_API_KEY:}
+      base-url: ${MY_BASE_URL:https://api.openai.com}
       chat:
         options:
           model: ${OPENAI_CHAT_MODEL:kimi-k2.5}
           temperature: ${OPENAI_CHAT_TEMPERATURE:0.1}
       embedding:
         options:
-          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
+          model: ${OPENAI_EMBEDDING_MODEL:multimodal-embedding-v1}
     vectorstore:
       pgvector:
+        # 启用 PGvector 主检索路径时，需要同时开启 SMART_TICKET_AI_VECTOR_STORE_ENABLED
+        # 并保证下面 smart-ticket.ai.pgvector.* 指向可用的 PostgreSQL + pgvector 实例。
         enabled: ${SMART_TICKET_AI_VECTOR_STORE_ENABLED:false}
         initialize-schema: false
         schema-name: ${PGVECTOR_SCHEMA:public}
@@ -50,11 +52,13 @@ smart-ticket:
     embedding:
       enabled: ${SMART_TICKET_AI_EMBEDDING_ENABLED:false}
     vector-store:
+      # false 时 RetrievalService 会明确退回 MySQL fallback，仅作为开发兜底。
       enabled: ${SMART_TICKET_AI_VECTOR_STORE_ENABLED:false}
     pgvector:
-      url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://127.0.0.1:5432/smart_ticket_vector}
+      # PGvector 主路径示例：postgresql://host:5432/db，并确保目标库已安装 pgvector 扩展。
+      url: ${PGVECTOR_DATASOURCE_URL:jdbc:postgresql://192.168.100.128:5432/smart_ticket_vector}
       username: ${PGVECTOR_DATASOURCE_USERNAME:postgres}
-      password: ${PGVECTOR_DATASOURCE_PASSWORD:postgres}
+      password: ${PGVECTOR_DATASOURCE_PASSWORD:123456}
       driver-class-name: org.postgresql.Driver
   jwt:
     secret: smart-ticket-platform-local-jwt-secret-change-me-please-20260417

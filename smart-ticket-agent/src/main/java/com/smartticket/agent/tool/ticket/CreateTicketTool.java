@@ -13,7 +13,7 @@ import com.smartticket.agent.tool.parameter.AgentToolValidationResult;
 import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.TicketCreateCommandDTO;
-import com.smartticket.biz.service.TicketService;
+import com.smartticket.biz.service.TicketCommandService;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
@@ -24,13 +24,14 @@ import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
  * 创建工单 Tool。
  *
  * <p>该 Tool 可以做创建前相似案例参考，但真正创建动作必须通过 biz 层
- * {@link TicketService#createTicket} 完成，不直接写 repository。</p>
+ * {@link TicketCommandService#createTicket} 完成，不直接写 repository。</p>
  */
 @Component
 public class CreateTicketTool implements AgentTool {
@@ -39,7 +40,7 @@ public class CreateTicketTool implements AgentTool {
     /**
      * 工单业务服务，负责创建、幂等、日志和业务校验。
      */
-    private final TicketService ticketService;
+    private final TicketCommandService ticketCommandService;
 
     /**
      * Tool 参数校验器。
@@ -56,16 +57,21 @@ public class CreateTicketTool implements AgentTool {
      */
     private final SpringAiToolSupport springAiToolSupport;
 
+    /** 创建前分流建议阈值。 */
+    private final double deflectionThreshold;
+
     public CreateTicketTool(
-            TicketService ticketService,
+            TicketCommandService ticketCommandService,
             AgentToolRequestValidator validator,
             RetrievalService retrievalService,
-            SpringAiToolSupport springAiToolSupport
+            SpringAiToolSupport springAiToolSupport,
+            @Value("${smart-ticket.agent.create.deflection-threshold:0.72}") double deflectionThreshold
     ) {
-        this.ticketService = ticketService;
+        this.ticketCommandService = ticketCommandService;
         this.validator = validator;
         this.retrievalService = retrievalService;
         this.springAiToolSupport = springAiToolSupport;
+        this.deflectionThreshold = deflectionThreshold;
     }
 
     @Override
@@ -107,27 +113,62 @@ public class CreateTicketTool implements AgentTool {
                 request.getParameters().getDescription(),
                 3
         );
+        boolean userAlreadyTried = userAlreadyTriedSolution(request.getMessage(), request.getParameters().getDescription());
+        boolean deflectionSuggested = shouldSuggestDeflection(similarCases);
+        boolean deflectionSucceeded = deflectionSuggested && !userAlreadyTried;
 
-        Ticket ticket = ticketService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
+        Ticket ticket = ticketCommandService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
                 .title(request.getParameters().getTitle())
                 .description(request.getParameters().getDescription())
                 .category(request.getParameters().getCategory())
                 .priority(request.getParameters().getPriority())
                 .idempotencyKey(request.getParameters().getIdempotencyKey())
                 .build());
-        String reply = similarCases.getHits().isEmpty()
-                ? "已创建工单。"
-                : "已创建工单，并找到相似历史案例供处理时参考。相似案例不会阻止本次创建。";
+        String reply = buildReply(similarCases, deflectionSuggested, userAlreadyTried);
         return AgentToolResults.success(
                 NAME,
                 reply,
                 Map.of(
                         "ticket", ticket,
-                        "similarCases", similarCases
+                        "similarCases", similarCases,
+                        "deflectionSuggested", deflectionSuggested,
+                        "deflectionSucceeded", deflectionSucceeded,
+                        "userAlreadyTried", userAlreadyTried,
+                        "similarityThreshold", deflectionThreshold
                 ),
                 ticket.getId(),
                 null
         );
+    }
+
+    private String buildReply(RetrievalResult similarCases, boolean deflectionSuggested, boolean userAlreadyTried) {
+        if (similarCases.getHits().isEmpty()) {
+            return "已创建工单。";
+        }
+        if (deflectionSuggested && userAlreadyTried) {
+            return "已创建工单。检测到相似历史方案，但你已说明试过相关处理，因此未做分流拦截，仅附上相似案例供处理人参考。";
+        }
+        if (deflectionSuggested) {
+            return "已创建工单，并附上高相关历史案例。当前结果可用于创建前分流参考，但不会阻止本次创建。";
+        }
+        return "已创建工单，并找到相似历史案例供处理时参考。相似案例不会阻止本次创建。";
+    }
+
+    private boolean shouldSuggestDeflection(RetrievalResult similarCases) {
+        if (similarCases == null || similarCases.getHits().isEmpty()) {
+            return false;
+        }
+        Double score = similarCases.getHits().get(0).getScore();
+        return score != null && score >= deflectionThreshold;
+    }
+
+    private boolean userAlreadyTriedSolution(String message, String description) {
+        String text = (message == null ? "" : message) + " " + (description == null ? "" : description);
+        return text.contains("试过")
+                || text.contains("已经试")
+                || text.contains("没用")
+                || text.contains("无效")
+                || text.toLowerCase().contains("already tried");
     }
 
     /**

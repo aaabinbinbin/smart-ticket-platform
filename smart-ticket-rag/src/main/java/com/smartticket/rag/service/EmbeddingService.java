@@ -31,6 +31,7 @@ public class EmbeddingService {
     private static final Logger log = LoggerFactory.getLogger(EmbeddingService.class);
     private static final int CHUNK_SIZE = 500;
     private static final int CHUNK_OVERLAP = 80;
+    private static final int DEFAULT_RETRY_TIMES = 2;
 
     /** Embedding 模型客户端，主实现由 Spring AI EmbeddingModel 适配。 */
     private final EmbeddingModelClient embeddingModelClient;
@@ -71,11 +72,13 @@ public class EmbeddingService {
         }
         embeddingRepository.deleteByKnowledgeId(knowledge.getId());
         List<String> chunks = splitText(knowledge.getContent());
+        log.info("embedding build started: knowledgeId={}, vectorStoreEnabled={}, chunks={}",
+                knowledge.getId(), vectorStoreEnabled, chunks.size());
         List<TicketKnowledgeEmbedding> saved = new ArrayList<>(chunks.size());
         List<Document> vectorDocuments = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             String chunk = chunks.get(i);
-            List<Double> vector = embeddingModelClient.embed(chunk);
+            List<Double> vector = embedWithRetry(knowledge.getId(), i, chunk);
             TicketKnowledgeEmbedding embedding = TicketKnowledgeEmbedding.builder()
                     .knowledgeId(knowledge.getId())
                     .chunkIndex(i)
@@ -87,6 +90,7 @@ public class EmbeddingService {
             vectorDocuments.add(toVectorDocument(knowledge, chunk, i));
         }
         writeVectorStore(knowledge.getId(), vectorDocuments);
+        log.info("embedding build finished: knowledgeId={}, mysqlChunks={}", knowledge.getId(), saved.size());
         return saved;
     }
 
@@ -121,18 +125,37 @@ public class EmbeddingService {
      */
     private void writeVectorStore(Long knowledgeId, List<Document> documents) {
         if (!vectorStoreEnabled || documents == null || documents.isEmpty()) {
+            log.info("vector store skipped: knowledgeId={}, reason={}",
+                    knowledgeId, vectorStoreEnabled ? "no-documents" : "vector-store-disabled");
             return;
         }
         SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
         if (holder == null || holder.vectorStore() == null) {
+            log.warn("vector store unavailable: knowledgeId={}, fallback remains mysql-only", knowledgeId);
             return;
         }
         try {
             holder.vectorStore().delete(documents.stream().map(Document::getId).toList());
             holder.vectorStore().add(documents);
+            log.info("vector store write finished: knowledgeId={}, documents={}", knowledgeId, documents.size());
         } catch (RuntimeException ex) {
             log.warn("write spring ai vector store failed, knowledgeId={}, reason={}", knowledgeId, ex.getMessage());
         }
+    }
+
+    private List<Double> embedWithRetry(Long knowledgeId, int chunkIndex, String chunk) {
+        RuntimeException last = null;
+        for (int attempt = 1; attempt <= DEFAULT_RETRY_TIMES + 1; attempt++) {
+            try {
+                return embeddingModelClient.embed(chunk);
+            } catch (RuntimeException ex) {
+                last = ex;
+                log.warn("embedding chunk failed: knowledgeId={}, chunkIndex={}, attempt={}, reason={}",
+                        knowledgeId, chunkIndex, attempt, ex.getMessage());
+            }
+        }
+        log.error("embedding chunk permanently failed: knowledgeId={}, chunkIndex={}", knowledgeId, chunkIndex, last);
+        throw last;
     }
 
     /** 将一段知识文本转换为 Spring AI Document，并附加业务元数据。 */

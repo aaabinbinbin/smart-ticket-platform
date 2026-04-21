@@ -1,257 +1,57 @@
 # 企业智能工单协同平台
 
-本项目是一个 Java 17 + Spring Boot 3.x 的模块化单体项目，目标是构建面向企业服务台场景的智能工单协同平台。
+基于 Java 17、Spring Boot 3、Spring Security、Spring AI 和 MyBatis 的模块化单体项目，目标是提供一个可演示、可扩展的智能工单平台主干。
 
-项目定位：
+## 当前状态
 
-- 后端主系统负责工单生命周期、权限、状态流转、审计、缓存和一致性。
-- Agent 增强层负责自然语言入口、意图识别、Tool 调用编排、历史案例检索和结果摘要。
-- 第一版不采用微服务，不引入 Spring Cloud，不引入注册发现或复杂配置中心。
+当前主干已经打通：
+- 工单核心流程：创建、详情、分页、分配、转派、状态流转、评论、关闭、操作日志
+- 认证与权限：JWT 登录、基础 RBAC
+- Agent 主链路：`POST /api/agent/chat`
+- Tool Calling：`QUERY_TICKET`、`CREATE_TICKET`、`TRANSFER_TICKET`、`SEARCH_HISTORY`
+- 会话上下文：Redis 短会话、最近消息、当前工单引用、`pendingAction` 草稿
+- RAG：知识构建、Embedding、query rewrite、规则 rerank、fallback 路径日志
+- SLA 主干：定时扫描、违约分类、优先级升级、管理员接管占位、通知占位、审计日志
+- 队列主干：工单组、队列、队列成员、队列绑定、自动分派规则、真实最小负载分派
+
+## 已完成 / 未完成 / 下一步
+
+| 状态 | 内容 |
+| --- | --- |
+| 已完成 | 阶段 A：文档对齐、注释校正、AgentController 认证健壮性、Agent API 与 Tool 测试 |
+| 已完成 | 阶段 B：`TicketService` 拆分、IntentRouter 低置信度澄清、CREATE_TICKET 多轮补参、创建前相似案例分流、RAG rewrite/rerank/fallback |
+| 已完成 | 阶段 C1：SLA 定时扫描、违约升级、通知占位、审计日志 |
+| 已完成 | 阶段 C2 主干：基于队列成员的最小负载自动分派、组内跨队列选人、组负责人回退、无人可分派时保留待认领 |
+| 未完成 | C1 真实通知通道、C3 多类型工单、C4 审批流、C5 多视角摘要、后续平台化能力 |
+| 下一步 | 继续阶段 C3/C4，或者补齐 C1 的真实通知通道与可配置升级策略 |
 
 ## 模块说明
 
 ```text
 smart-ticket-platform
-├─ smart-ticket-app
-├─ smart-ticket-common
-├─ smart-ticket-auth
-├─ smart-ticket-domain
-├─ smart-ticket-biz
-├─ smart-ticket-agent
-├─ smart-ticket-rag
-├─ smart-ticket-infra
-└─ smart-ticket-api
+|- smart-ticket-app
+|- smart-ticket-common
+|- smart-ticket-auth
+|- smart-ticket-domain
+|- smart-ticket-biz
+|- smart-ticket-agent
+|- smart-ticket-rag
+|- smart-ticket-infra
+`- smart-ticket-api
 ```
 
-### smart-ticket-app
-
-应用启动模块，包含 `SmartTicketApplication`。负责组合所有内部模块并启动 Spring Boot 应用。
-
-### smart-ticket-common
-
-公共基础模块。后续用于放置通用异常、错误码、统一返回结构、基础常量和少量无业务含义的工具类。
-
-### smart-ticket-auth
-
-认证与基础授权模块。后续用于登录认证、Spring Security、JWT、当前用户上下文和基础 RBAC。
-
-边界：`auth` 负责“你是谁”和“你有哪些角色”，不负责判断“你能不能操作某张工单”。
-
-### smart-ticket-domain
-
-领域数据模块。后续用于放置核心数据对象、枚举、Mapper / Repository 接口等。
-
-边界：`domain` 定义对象和数据结构，不编排业务流程，不做权限判断。
-
-### smart-ticket-biz
-
-核心业务模块。后续用于工单创建、查询、分配、转派、评论、状态流转、关闭、幂等、操作日志和业务权限判断。
-
-边界：所有改变工单事实状态的操作都应经过 `biz`。
-
-### smart-ticket-agent
-
-智能入口模块。后续用于自然语言入口、意图识别、澄清追问、参数抽取、Tool 调用编排、会话上下文和结果摘要。
-
-边界：`agent` 不直接写数据库，不绕过 `biz` 执行业务操作。
-
-### smart-ticket-rag
-
-知识检索模块。后续用于已关闭工单的知识文本处理、切片、Embedding、查询改写、向量检索和相似历史案例召回。
-
-边界：`rag` 提供历史经验参考，不参与工单主事务写入。
-
-### smart-ticket-infra
-
-基础设施模块。后续用于 Redis、MySQL、pgvector、文件存储、LLM Client、Embedding Client 和第三方 SDK 适配。
-
-边界：`infra` 提供技术访问能力，不反向依赖业务模块。
-
-### smart-ticket-api
-
-HTTP 接口模块。后续用于 Controller、DTO / VO、参数校验、Assembler / Converter 和 OpenAPI 暴露。
-
-边界：`api` 负责协议适配，不承载核心业务规则。
-
-## 依赖方向
-
-推荐依赖方向：
-
-```text
-api -> biz
-api -> agent
-
-agent -> biz
-agent -> rag
-
-biz -> domain
-biz -> infra
-
-rag -> domain
-rag -> infra
-
-auth -> domain
-auth -> common
-
-infra -> common
-domain -> common
-
-app -> api / auth / biz / agent / rag / infra / domain / common
-```
-
-需要避免：
-
-- `api` 直接操作持久化对象。
-- `agent` 绕过 `biz` 写业务数据。
-- `rag` 参与工单主事务。
-- `infra` 反向依赖业务模块。
-- `common` 变成业务规则堆放处。
-
-## 本地构建
-
-```bash
-mvn clean package
-```
-
-## 启动应用
-
-```bash
-mvn -pl smart-ticket-app spring-boot:run
-```
-
-当前仅完成工程初始化和基础包结构，暂未实现具体业务逻辑。
-
-## 数据库说明
-
-当前阶段使用 MySQL 作为主业务库，初始化脚本位于：
-
-- `docs/sql/schema.sql`
-- `docs/sql/seed.sql`
-
-默认本地连接配置位于 `smart-ticket-app/src/main/resources/application.yml`：
-
-```yaml
-spring:
-  datasource:
-    url: jdbc:mysql://127.0.0.1:3306/smart_ticket_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: 123456
-```
-
-初始化顺序：
-
-```bash
-mysql -h127.0.0.1 -uroot -p123456 < docs/sql/schema.sql
-mysql -h127.0.0.1 -uroot -p123456 < docs/sql/seed.sql
-```
-
-已建表：
-
-- `sys_user`
-- `sys_role`
-- `sys_user_role`
-- `ticket`
-- `ticket_comment`
-- `ticket_operation_log`
-- `ticket_attachment`
-- `ticket_knowledge`
-- `ticket_knowledge_embedding`
-
-初始角色：
-
-- `USER`
-- `STAFF`
-- `ADMIN`
-
-数据访问层当前采用 MyBatis mapper 接口，位于 `smart-ticket-domain` 模块。实体类与表结构保持一致，暂未实现业务 Service。
-
-## 认证与基础权限
-
-当前版本基于 Spring Security + JWT 实现基础登录认证和 RBAC 控制，详细流程见：
-
-- 流程说明：`docs/flow/auth-flow.md`
-- 学习理解：`docs/learning/stage-3-auth-rbac-explained.md`
-- Apifox 导入：`docs/apifox/auth-rbac.openapi.yaml`
-
-登录接口：
-
-```http
-POST /api/auth/login
-```
-
-本地演示账号：
-
-```text
-user1 / 123456   -> USER
-staff1 / 123456  -> USER + STAFF
-admin1 / 123456  -> USER + STAFF + ADMIN
-```
-
-受保护接口示例：
-
-```http
-GET /api/examples/security/me
-GET /api/examples/security/user
-GET /api/examples/security/staff
-GET /api/examples/security/admin
-```
-
-访问受保护接口时需要携带：
-
-```http
-Authorization: Bearer <accessToken>
-```
-
-当前 `auth` 模块只负责“你是谁”和“你有哪些系统角色”。某张工单能否关闭、转派、评论等业务权限，后续由 `biz` 模块结合工单关系和状态判断。
-
-## 工单核心业务 MVP
-
-当前已实现工单核心闭环：
-
-- 创建工单
-- 查询工单详情
-- 分页查询工单列表
-- 管理员分配工单
-- 当前负责人或管理员转派工单
-- 更新工单状态
-- 添加工单评论
-- 关闭工单
-- 自动记录操作日志
-
-接口说明见：
-
-- `docs/ticket-api.md`
-
-状态流转约束：
-
-```text
-PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED
-```
-
-工单业务权限由 `smart-ticket-biz` 模块判断。`auth` 只提供当前用户身份和 USER / STAFF / ADMIN 基础角色。
-
-## Redis 缓存与幂等
-
-当前阶段已引入 Redis，默认连接本地：
-
-```text
-127.0.0.1:6379
-```
-
-无密码，使用 database 0。
-
-已实现能力：
-
-- 工单详情缓存：`ticket:detail:{ticketId}`
-- 创建工单幂等防重：`ticket:idempotency:{userId}:{idempotencyKey}`
-- Agent 会话上下文预留：`agent:session:{sessionId}`
-
-详细设计见：
-
-- `docs/redis-design.md`
-
-## 阶段 5 验收
-
-进入 Agent 阶段前，建议先按下面文档手动跑通完整业务链路：
-
-- `docs/stage-5-acceptance.md`
+- `smart-ticket-app`：启动模块，负责装配全部业务模块
+- `smart-ticket-common`：公共响应、异常、通用工具
+- `smart-ticket-auth`：JWT 认证和基础授权
+- `smart-ticket-domain`：实体、枚举、Mapper
+- `smart-ticket-biz`：工单、SLA、队列、自动分派等核心业务
+- `smart-ticket-agent`：意图路由、工具执行、会话上下文
+- `smart-ticket-rag`：知识构建、向量化、历史案例检索
+- `smart-ticket-infra`：Redis、MySQL、PGvector、Spring AI 相关配置
+- `smart-ticket-api`：Controller、DTO/VO、参数校验、异常映射
+
+## API 范围
+
+- 工单与 P1 配置接口：见 [docs/ticket-api.md](D:/aaaAgent/smart-ticket-platform/docs/ticket-api.md)
+- Agent 对话接口：`POST /api/agent/chat`
+- 当前实现状态：见 [docs/current-status.md](D:/aaaAgent/smart-ticket-platform/docs/current-status.md)

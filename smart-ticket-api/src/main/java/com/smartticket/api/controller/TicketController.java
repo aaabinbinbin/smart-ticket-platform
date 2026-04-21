@@ -14,7 +14,11 @@ import com.smartticket.biz.dto.TicketCreateCommandDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
 import com.smartticket.biz.dto.TicketUpdateStatusCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
-import com.smartticket.biz.service.TicketService;
+import com.smartticket.biz.service.TicketCommandService;
+import com.smartticket.biz.service.TicketCommentService;
+import com.smartticket.biz.service.TicketQueryService;
+import com.smartticket.biz.service.TicketQueueBindingService;
+import com.smartticket.biz.service.TicketWorkflowService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.ApiResponse;
@@ -43,31 +47,45 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 工单 HTTP 接口控制器。
- *
- * <p>负责接收工单相关 HTTP 请求，完成参数转换和响应组装；具体业务规则由 {@link TicketService} 处理。</p>
+ * 宸ュ崟 HTTP 鎺ュ彛鎺у埗鍣ㄣ€? *
+ * <p>璐熻矗鎺ユ敹宸ュ崟鐩稿叧 HTTP 璇锋眰锛屽畬鎴愬弬鏁拌浆鎹㈠拰鍝嶅簲缁勮锛涘叿浣撲笟鍔¤鍒欑敱 {@link TicketService} 澶勭悊銆?/p>
  */
 @Validated
 @RestController
 @RequestMapping("/api/tickets")
-@Tag(name = "工单核心接口", description = "创建、查询、分配、转派、状态更新、评论和关闭工单")
+@Tag(name = "宸ュ崟鏍稿績鎺ュ彛", description = "鍒涘缓銆佹煡璇€佸垎閰嶃€佽浆娲俱€佺姸鎬佹洿鏂般€佽瘎璁哄拰鍏抽棴宸ュ崟")
 public class TicketController {
-    private final TicketService ticketService;
+    private final TicketCommandService ticketCommandService;
+    private final TicketQueryService ticketQueryService;
+    private final TicketWorkflowService ticketWorkflowService;
+    private final TicketCommentService ticketCommentService;
+    private final TicketQueueBindingService ticketQueueBindingService;
     private final TicketAssembler ticketAssembler;
 
-    public TicketController(TicketService ticketService, TicketAssembler ticketAssembler) {
-        this.ticketService = ticketService;
+    public TicketController(
+            TicketCommandService ticketCommandService,
+            TicketQueryService ticketQueryService,
+            TicketWorkflowService ticketWorkflowService,
+            TicketCommentService ticketCommentService,
+            TicketQueueBindingService ticketQueueBindingService,
+            TicketAssembler ticketAssembler
+    ) {
+        this.ticketCommandService = ticketCommandService;
+        this.ticketQueryService = ticketQueryService;
+        this.ticketWorkflowService = ticketWorkflowService;
+        this.ticketCommentService = ticketCommentService;
+        this.ticketQueueBindingService = ticketQueueBindingService;
         this.ticketAssembler = ticketAssembler;
     }
 
     @PostMapping
-    @Operation(summary = "创建工单", description = "创建后的工单初始状态为 PENDING_ASSIGN")
+    @Operation(summary = "鍒涘缓宸ュ崟", description = "鍒涘缓鍚庣殑宸ュ崟鍒濆鐘舵€佷负 PENDING_ASSIGN")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateTicketRequestDTO request
     ) {
-        Ticket ticket = ticketService.createTicket(currentUser(authentication), TicketCreateCommandDTO.builder()
+        Ticket ticket = ticketCommandService.createTicket(currentUser(authentication), TicketCreateCommandDTO.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .category(parseCategory(request.getCategory()))
@@ -78,27 +96,27 @@ public class TicketController {
     }
 
     @GetMapping("/{ticketId}")
-    @Operation(summary = "查询工单详情", description = "返回工单主信息、评论列表和操作日志")
+    @Operation(summary = "鏌ヨ宸ュ崟璇︽儏", description = "杩斿洖宸ュ崟涓讳俊鎭€佽瘎璁哄垪琛ㄥ拰鎿嶄綔鏃ュ織")
     public ApiResponse<TicketDetailVO> getTicketDetail(
             Authentication authentication,
-            @Parameter(description = "工单 ID") @PathVariable("ticketId") Long ticketId
+            @Parameter(description = "宸ュ崟 ID") @PathVariable("ticketId") Long ticketId
     ) {
-        return ApiResponse.success(ticketAssembler.toDetailVO(ticketService.getDetail(currentUser(authentication), ticketId)));
+        return ApiResponse.success(ticketAssembler.toDetailVO(ticketQueryService.getDetail(currentUser(authentication), ticketId)));
     }
 
     @GetMapping
-    @Operation(summary = "分页查询工单列表", description = "管理员可看全部，普通用户只看自己创建或当前负责的工单")
+    @Operation(summary = "鍒嗛〉鏌ヨ宸ュ崟鍒楄〃", description = "绠＄悊鍛樺彲鐪嬪叏閮紝鏅€氱敤鎴峰彧鐪嬭嚜宸卞垱寤烘垨褰撳墠璐熻矗鐨勫伐鍗?)
     public ApiResponse<PageResult<TicketVO>> pageTickets(
             Authentication authentication,
-            @Min(value = 1, message = "页码不能小于 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
-            @Min(value = 1, message = "每页大小不能小于 1")
-            @Max(value = 100, message = "每页大小不能超过 100")
+            @Min(value = 1, message = "椤电爜涓嶈兘灏忎簬 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
+            @Min(value = 1, message = "姣忛〉澶у皬涓嶈兘灏忎簬 1")
+            @Max(value = 100, message = "姣忛〉澶у皬涓嶈兘瓒呰繃 100")
             @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
             @RequestParam(value = "status", required = false) String status,
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "priority", required = false) String priority
     ) {
-        PageResult<Ticket> page = ticketService.pageTickets(currentUser(authentication), TicketPageQueryDTO.builder()
+        PageResult<Ticket> page = ticketQueryService.pageTickets(currentUser(authentication), TicketPageQueryDTO.builder()
                 .pageNo(pageNo)
                 .pageSize(pageSize)
                 .status(parseStatus(status))
@@ -115,24 +133,34 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/assign")
-    @Operation(summary = "分配工单", description = "管理员分配待分配工单，状态从 PENDING_ASSIGN 流转为 PROCESSING")
+    @Operation(summary = "鍒嗛厤宸ュ崟", description = "绠＄悊鍛樺垎閰嶅緟鍒嗛厤宸ュ崟锛岀姸鎬佷粠 PENDING_ASSIGN 娴佽浆涓?PROCESSING")
     public ApiResponse<TicketVO> assignTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AssignTicketRequestDTO request
     ) {
-        Ticket ticket = ticketService.assignTicket(currentUser(authentication), ticketId, request.getAssigneeId());
+        Ticket ticket = ticketWorkflowService.assignTicket(currentUser(authentication), ticketId, request.getAssigneeId());
+        return ApiResponse.success(ticketAssembler.toVO(ticket));
+    }
+
+    @PutMapping("/{ticketId}/claim")
+    @Operation(summary = "认领工单", description = "队列成员、组负责人或管理员可认领待分配工单")
+    public ApiResponse<TicketVO> claimTicket(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId
+    ) {
+        Ticket ticket = ticketWorkflowService.claimTicket(currentUser(authentication), ticketId);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
     @PutMapping("/{ticketId}/queue")
-    @Operation(summary = "绑定工单队列", description = "管理员将工单绑定到指定工单组和队列，不修改处理人和状态")
+    @Operation(summary = "缁戝畾宸ュ崟闃熷垪", description = "绠＄悊鍛樺皢宸ュ崟缁戝畾鍒版寚瀹氬伐鍗曠粍鍜岄槦鍒楋紝涓嶄慨鏀瑰鐞嗕汉鍜岀姸鎬?)
     public ApiResponse<TicketVO> bindTicketQueue(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody BindTicketQueueRequestDTO request
     ) {
-        Ticket ticket = ticketService.bindTicketQueue(
+        Ticket ticket = ticketQueueBindingService.bindTicketQueue(
                 currentUser(authentication),
                 ticketId,
                 request.getGroupId(),
@@ -142,24 +170,24 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/transfer")
-    @Operation(summary = "转派工单", description = "当前负责人或管理员可转派处理中的工单")
+    @Operation(summary = "杞淳宸ュ崟", description = "褰撳墠璐熻矗浜烘垨绠＄悊鍛樺彲杞淳澶勭悊涓殑宸ュ崟")
     public ApiResponse<TicketVO> transferTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AssignTicketRequestDTO request
     ) {
-        Ticket ticket = ticketService.transferTicket(currentUser(authentication), ticketId, request.getAssigneeId());
+        Ticket ticket = ticketWorkflowService.transferTicket(currentUser(authentication), ticketId, request.getAssigneeId());
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
     @PutMapping("/{ticketId}/status")
-    @Operation(summary = "更新工单状态", description = "只允许 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED")
+    @Operation(summary = "鏇存柊宸ュ崟鐘舵€?, description = "鍙厑璁?PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED")
     public ApiResponse<TicketVO> updateStatus(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody UpdateTicketStatusRequestDTO request
     ) {
-        Ticket ticket = ticketService.updateStatus(currentUser(authentication), ticketId, TicketUpdateStatusCommandDTO.builder()
+        Ticket ticket = ticketWorkflowService.updateStatus(currentUser(authentication), ticketId, TicketUpdateStatusCommandDTO.builder()
                 .targetStatus(parseStatus(request.getTargetStatus()))
                 .solutionSummary(request.getSolutionSummary())
                 .build());
@@ -167,21 +195,21 @@ public class TicketController {
     }
 
     @PostMapping("/{ticketId}/comments")
-    @Operation(summary = "添加工单评论", description = "提单人、当前负责人或管理员可以对未关闭工单添加评论")
+    @Operation(summary = "娣诲姞宸ュ崟璇勮", description = "鎻愬崟浜恒€佸綋鍓嶈礋璐ｄ汉鎴栫鐞嗗憳鍙互瀵规湭鍏抽棴宸ュ崟娣诲姞璇勮")
     public ApiResponse<TicketCommentVO> addComment(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
             @Valid @RequestBody AddTicketCommentRequestDTO request
     ) {
         return ApiResponse.success(ticketAssembler.toCommentVO(
-                ticketService.addComment(currentUser(authentication), ticketId, request.getContent())
+                ticketCommentService.addComment(currentUser(authentication), ticketId, request.getContent())
         ));
     }
 
     @PutMapping("/{ticketId}/close")
-    @Operation(summary = "关闭工单", description = "提单人或管理员关闭已解决工单，状态从 RESOLVED 流转为 CLOSED")
+    @Operation(summary = "鍏抽棴宸ュ崟", description = "鎻愬崟浜烘垨绠＄悊鍛樺叧闂凡瑙ｅ喅宸ュ崟锛岀姸鎬佷粠 RESOLVED 娴佽浆涓?CLOSED")
     public ApiResponse<TicketVO> closeTicket(Authentication authentication, @PathVariable("ticketId") Long ticketId) {
-        Ticket ticket = ticketService.closeTicket(currentUser(authentication), ticketId);
+        Ticket ticket = ticketWorkflowService.closeTicket(currentUser(authentication), ticketId);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 

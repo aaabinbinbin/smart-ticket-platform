@@ -15,15 +15,11 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketSlaInstance">
-        SELECT *
-        FROM ticket_sla_instance
-        WHERE id = #{id}
+        SELECT * FROM ticket_sla_instance WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketSlaInstance">
-        SELECT *
-        FROM ticket_sla_instance
-        WHERE ticket_id = #{ticketId}
+        SELECT * FROM ticket_sla_instance WHERE ticket_id = #{ticketId}
     </select>
 
     <update id="updateByTicketId" parameterType="com.smartticket.domain.entity.TicketSlaInstance">
@@ -39,15 +35,12 @@
         SELECT *
         FROM ticket_sla_instance
         WHERE breached = 0
-          AND resolve_deadline &lt;= #{now}
+          AND (first_response_deadline &lt;= #{now} OR resolve_deadline &lt;= #{now})
         ORDER BY resolve_deadline ASC
         LIMIT #{limit}
     </select>
 
     <update id="markBreached">
-        UPDATE ticket_sla_instance
-        SET breached = 1
-        WHERE id = #{id}
-          AND breached = 0
+        UPDATE ticket_sla_instance SET breached = 1 WHERE id = #{id} AND breached = 0
     </update>
 </mapper>
