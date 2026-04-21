@@ -35,6 +35,8 @@ public class TicketAssembler {
                 .statusInfo(ticket.getStatus() == null ? null : ticket.getStatus().getInfo())
                 .creatorId(ticket.getCreatorId())
                 .assigneeId(ticket.getAssigneeId())
+                .groupId(ticket.getGroupId())
+                .queueId(ticket.getQueueId())
                 .solutionSummary(ticket.getSolutionSummary())
                 .source(ticket.getSource())
                 .createdAt(ticket.getCreatedAt())

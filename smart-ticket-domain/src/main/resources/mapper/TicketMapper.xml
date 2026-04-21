@@ -8,11 +8,11 @@
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ticket (
             ticket_no, title, description, category, priority, status,
-            creator_id, assignee_id, solution_summary, source, idempotency_key
+            creator_id, assignee_id, group_id, queue_id, solution_summary, source, idempotency_key
         )
         VALUES (
             #{ticketNo}, #{title}, #{description}, #{category.code}, #{priority.code}, #{status.code},
-            #{creatorId}, #{assigneeId}, #{solutionSummary}, #{source}, #{idempotencyKey}
+            #{creatorId}, #{assigneeId}, #{groupId}, #{queueId}, #{solutionSummary}, #{source}, #{idempotencyKey}
         )
     </insert>
 
@@ -109,6 +109,13 @@
             status = #{status.code}
         WHERE id = #{id}
           AND status = #{expectedStatus.code}
+    </update>
+
+    <update id="updateQueueBinding">
+        UPDATE ticket
+        SET group_id = #{groupId},
+            queue_id = #{queueId}
+        WHERE id = #{id}
     </update>
 
     <update id="updateStatus">

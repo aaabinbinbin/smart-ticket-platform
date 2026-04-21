@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS ticket (
     status VARCHAR(32) NOT NULL COMMENT '状态：PENDING_ASSIGN/PROCESSING/RESOLVED/CLOSED',
     creator_id BIGINT NOT NULL COMMENT '提单人用户 ID',
     assignee_id BIGINT DEFAULT NULL COMMENT '当前处理人用户 ID，待分配时可为空',
+    group_id BIGINT DEFAULT NULL COMMENT '当前绑定的工单组 ID',
+    queue_id BIGINT DEFAULT NULL COMMENT '当前绑定的工单队列 ID',
     solution_summary TEXT COMMENT '解决方案摘要，通常在解决或关闭阶段填写',
     source VARCHAR(32) NOT NULL DEFAULT 'MANUAL' COMMENT '创建来源：MANUAL-手工创建，AGENT-Agent 创建',
     idempotency_key VARCHAR(128) DEFAULT NULL COMMENT '创建幂等键，用于防止重复提交',
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS ticket (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_creator_id (creator_id),
     INDEX idx_assignee_id (assignee_id),
+    INDEX idx_ticket_group_id (group_id),
+    INDEX idx_ticket_queue_id (queue_id),
     INDEX idx_status (status),
     INDEX idx_category (category),
     INDEX idx_created_at (created_at)
@@ -137,4 +141,84 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
     embedding_vector TEXT COMMENT '向量 JSON 文本，第一版用于打通知识向量化入库链路',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_knowledge_id (knowledge_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: ticket group.
+-- 工单组是队列、SLA 和自动分派的基础配置；当前阶段只做配置管理，不改变工单主流程。
+CREATE TABLE IF NOT EXISTS ticket_group (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '工单组主键',
+    group_name VARCHAR(128) NOT NULL COMMENT '工单组名称',
+    group_code VARCHAR(64) NOT NULL COMMENT '工单组编码',
+    owner_user_id BIGINT DEFAULT NULL COMMENT '组负责人用户 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_group_code (group_code),
+    INDEX idx_ticket_group_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: ticket queue.
+-- 工单队列隶属于工单组，后续用于队列视图、SLA 匹配和自动分派。
+CREATE TABLE IF NOT EXISTS ticket_queue (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '队列主键',
+    queue_name VARCHAR(128) NOT NULL COMMENT '队列名称',
+    queue_code VARCHAR(64) NOT NULL COMMENT '队列编码',
+    group_id BIGINT NOT NULL COMMENT '所属工单组 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_queue_code (queue_code),
+    INDEX idx_ticket_queue_group_id (group_id),
+    INDEX idx_ticket_queue_enabled (enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: SLA policy.
+-- SLA 策略按工单分类和优先级匹配；category/priority 为空表示通配。
+CREATE TABLE IF NOT EXISTS ticket_sla_policy (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 策略主键',
+    policy_name VARCHAR(128) NOT NULL COMMENT 'SLA 策略名称',
+    category VARCHAR(64) DEFAULT NULL COMMENT '适用工单分类，空值表示通配',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '适用工单优先级，空值表示通配',
+    first_response_minutes INT NOT NULL COMMENT '首次响应时限，单位分钟',
+    resolve_minutes INT NOT NULL COMMENT '解决时限，单位分钟',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_ticket_sla_policy_match (category, priority, enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: ticket SLA instance.
+-- SLA 实例记录某张工单命中的策略和截止时间；当前阶段不做定时违约扫描。
+CREATE TABLE IF NOT EXISTS ticket_sla_instance (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 实例主键',
+    ticket_id BIGINT NOT NULL COMMENT '工单 ID',
+    policy_id BIGINT NOT NULL COMMENT 'SLA 策略 ID',
+    first_response_deadline DATETIME NOT NULL COMMENT '首次响应截止时间',
+    resolve_deadline DATETIME NOT NULL COMMENT '解决截止时间',
+    breached TINYINT NOT NULL DEFAULT 0 COMMENT '是否已违约：1-已违约，0-未违约',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_sla_ticket_id (ticket_id),
+    INDEX idx_ticket_sla_policy_id (policy_id),
+    INDEX idx_ticket_sla_deadline (resolve_deadline)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- P1: assignment rule.
+-- 自动分派规则当前只用于 preview 推荐，不直接更新工单处理人或状态。
+CREATE TABLE IF NOT EXISTS ticket_assignment_rule (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '自动分派规则主键',
+    rule_name VARCHAR(128) NOT NULL COMMENT '规则名称',
+    category VARCHAR(64) DEFAULT NULL COMMENT '适用工单分类，空值表示通配',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '适用工单优先级，空值表示通配',
+    target_group_id BIGINT DEFAULT NULL COMMENT '目标工单组 ID',
+    target_queue_id BIGINT DEFAULT NULL COMMENT '目标队列 ID',
+    target_user_id BIGINT DEFAULT NULL COMMENT '目标处理人 ID',
+    weight INT NOT NULL DEFAULT 0 COMMENT '规则权重，越大越优先',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_ticket_assignment_rule_match (category, priority, enabled, weight),
+    INDEX idx_ticket_assignment_rule_target_group (target_group_id),
+    INDEX idx_ticket_assignment_rule_target_queue (target_queue_id),
+    INDEX idx_ticket_assignment_rule_target_user (target_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

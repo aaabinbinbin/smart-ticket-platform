@@ -71,6 +71,12 @@ public interface TicketMapper {
             @Param("status") TicketStatusEnum status
     );
 
+    int updateQueueBinding(
+            @Param("id") Long id,
+            @Param("groupId") Long groupId,
+            @Param("queueId") Long queueId
+    );
+
     int updateStatus(
             @Param("id") Long id,
             @Param("expectedStatus") TicketStatusEnum expectedStatus,

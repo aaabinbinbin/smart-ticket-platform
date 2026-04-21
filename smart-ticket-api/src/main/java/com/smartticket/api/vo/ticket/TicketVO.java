@@ -30,6 +30,8 @@ public class TicketVO {
     private String statusInfo;
     private Long creatorId;
     private Long assigneeId;
+    private Long groupId;
+    private Long queueId;
     private String solutionSummary;
     private String source;
     private LocalDateTime createdAt;

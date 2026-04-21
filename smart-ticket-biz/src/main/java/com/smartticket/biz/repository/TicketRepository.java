@@ -72,6 +72,10 @@ public class TicketRepository {
         return ticketMapper.updateAssigneeAndStatus(id, assigneeId, expectedStatus, status);
     }
 
+    public int updateQueueBinding(Long id, Long groupId, Long queueId) {
+        return ticketMapper.updateQueueBinding(id, groupId, queueId);
+    }
+
     public int updateStatus(
             Long id,
             TicketStatusEnum expectedStatus,

@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketSlaPolicyMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketSlaPolicy"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_sla_policy (
+            policy_name, category, priority, first_response_minutes, resolve_minutes, enabled
+        )
+        VALUES (
+            #{policyName}, #{category}, #{priority}, #{firstResponseMinutes}, #{resolveMinutes}, #{enabled}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
+        SELECT *
+        FROM ticket_sla_policy
+        WHERE id = #{id}
+    </select>
+
+    <select id="page" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
+        SELECT *
+        FROM ticket_sla_policy
+        WHERE 1 = 1
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_sla_policy
+        WHERE 1 = 1
+        <if test="category != null">AND category = #{category}</if>
+        <if test="priority != null">AND priority = #{priority}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+    </select>
+
+    <update id="update" parameterType="com.smartticket.domain.entity.TicketSlaPolicy">
+        UPDATE ticket_sla_policy
+        SET policy_name = #{policyName},
+            category = #{category},
+            priority = #{priority},
+            first_response_minutes = #{firstResponseMinutes},
+            resolve_minutes = #{resolveMinutes},
+            enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateEnabled">
+        UPDATE ticket_sla_policy
+        SET enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findBestMatch" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
+        SELECT *
+        FROM ticket_sla_policy
+        WHERE enabled = 1
+          AND (category IS NULL OR category = #{category})
+          AND (priority IS NULL OR priority = #{priority})
+        ORDER BY
+          CASE WHEN category IS NULL THEN 0 ELSE 1 END
+          + CASE WHEN priority IS NULL THEN 0 ELSE 1 END DESC,
+          id DESC
+        LIMIT 1
+    </select>
+</mapper>

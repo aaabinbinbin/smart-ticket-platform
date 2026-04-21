@@ -17,6 +17,7 @@ import com.smartticket.domain.entity.SysUser;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketComment;
 import com.smartticket.domain.entity.TicketOperationLog;
+import com.smartticket.domain.entity.TicketQueue;
 import com.smartticket.domain.enums.CodeInfoEnum;
 import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
@@ -46,6 +47,9 @@ public class TicketService {
     private final TicketPermissionService permissionService;
     private final TicketDetailCacheService ticketDetailCacheService;
     private final TicketIdempotencyService ticketIdempotencyService;
+    private final TicketSlaService ticketSlaService;
+    private final TicketGroupService ticketGroupService;
+    private final TicketQueueService ticketQueueService;
     private final ApplicationEventPublisher eventPublisher;
 
     public TicketService(
@@ -55,6 +59,9 @@ public class TicketService {
             TicketPermissionService permissionService,
             TicketDetailCacheService ticketDetailCacheService,
             TicketIdempotencyService ticketIdempotencyService,
+            TicketSlaService ticketSlaService,
+            TicketGroupService ticketGroupService,
+            TicketQueueService ticketQueueService,
             ApplicationEventPublisher eventPublisher
     ) {
         this.ticketRepository = ticketRepository;
@@ -63,6 +70,9 @@ public class TicketService {
         this.permissionService = permissionService;
         this.ticketDetailCacheService = ticketDetailCacheService;
         this.ticketIdempotencyService = ticketIdempotencyService;
+        this.ticketSlaService = ticketSlaService;
+        this.ticketGroupService = ticketGroupService;
+        this.ticketQueueService = ticketQueueService;
         this.eventPublisher = eventPublisher;
     }
 
@@ -109,7 +119,9 @@ public class TicketService {
                 .build();
         ticketRepository.insert(ticket);
         writeLog(ticket.getId(), operator.getUserId(), OperationTypeEnum.CREATE, "创建工单", null, snapshot(ticket));
-        return requireTicket(ticket.getId());
+        Ticket created = requireTicket(ticket.getId());
+        ticketSlaService.createOrRefreshInstance(created);
+        return created;
     }
 
     public TicketDetailDTO getDetail(CurrentUser operator, Long ticketId) {
@@ -187,7 +199,29 @@ public class TicketService {
                 TicketStatusEnum.PROCESSING
         ));
         Ticket after = requireTicket(ticketId);
+        ticketSlaService.createOrRefreshInstance(after);
         writeLog(ticketId, operator.getUserId(), OperationTypeEnum.ASSIGN, "分配工单", snapshot(before), snapshot(after));
+        ticketDetailCacheService.evict(ticketId);
+        return after;
+    }
+
+    /**
+     * 绑定工单到指定工单组和队列。
+     *
+     * <p>该方法只修改工单当前队列归属，不修改处理人和状态。关闭工单不允许再调整队列。</p>
+     */
+    @Transactional
+    public Ticket bindTicketQueue(CurrentUser operator, Long ticketId, Long groupId, Long queueId) {
+        permissionService.requireAdmin(operator);
+        Ticket before = requireTicket(ticketId);
+        if (before.getStatus() == TicketStatusEnum.CLOSED) {
+            throw new BusinessException(BusinessErrorCode.TICKET_CLOSED);
+        }
+        validateQueueBinding(groupId, queueId);
+
+        requireUpdated(ticketRepository.updateQueueBinding(ticketId, groupId, queueId));
+        Ticket after = requireTicket(ticketId);
+        writeLog(ticketId, operator.getUserId(), OperationTypeEnum.BIND_QUEUE, "绑定工单队列", snapshot(before), snapshot(after));
         ticketDetailCacheService.evict(ticketId);
         return after;
     }
@@ -381,6 +415,18 @@ public class TicketService {
         }
     }
 
+    /** 校验工单组和队列绑定关系。 */
+    private void validateQueueBinding(Long groupId, Long queueId) {
+        if (groupId == null || queueId == null) {
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "工单组和队列不能为空");
+        }
+        ticketGroupService.requireEnabled(groupId);
+        TicketQueue queue = ticketQueueService.requireEnabled(queueId);
+        if (!groupId.equals(queue.getGroupId())) {
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "队列不属于指定工单组");
+        }
+    }
+
     private void writeLog(
             Long ticketId,
             Long operatorId,
@@ -410,6 +456,8 @@ public class TicketService {
                 + ", ticketNo=" + ticket.getTicketNo()
                 + ", status=" + enumCode(ticket.getStatus())
                 + ", assigneeId=" + ticket.getAssigneeId()
+                + ", groupId=" + ticket.getGroupId()
+                + ", queueId=" + ticket.getQueueId()
                 + ", solutionSummary=" + ticket.getSolutionSummary();
     }
 

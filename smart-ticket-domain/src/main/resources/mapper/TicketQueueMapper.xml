@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketQueueMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketQueue"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_queue (
+            queue_name, queue_code, group_id, enabled
+        )
+        VALUES (
+            #{queueName}, #{queueCode}, #{groupId}, #{enabled}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketQueue">
+        SELECT *
+        FROM ticket_queue
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByCode" resultType="com.smartticket.domain.entity.TicketQueue">
+        SELECT *
+        FROM ticket_queue
+        WHERE queue_code = #{queueCode}
+    </select>
+
+    <select id="page" resultType="com.smartticket.domain.entity.TicketQueue">
+        SELECT *
+        FROM ticket_queue
+        WHERE 1 = 1
+        <if test="groupId != null">AND group_id = #{groupId}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (queue_name LIKE CONCAT('%', #{keyword}, '%') OR queue_code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_queue
+        WHERE 1 = 1
+        <if test="groupId != null">AND group_id = #{groupId}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+        <if test="keyword != null and keyword != ''">
+            AND (queue_name LIKE CONCAT('%', #{keyword}, '%') OR queue_code LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </select>
+
+    <update id="update" parameterType="com.smartticket.domain.entity.TicketQueue">
+        UPDATE ticket_queue
+        SET queue_name = #{queueName},
+            group_id = #{groupId},
+            enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateEnabled">
+        UPDATE ticket_queue
+        SET enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+</mapper>

@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * Agent 会话上下文更新器。
  *
- * <p>该类只维护通用会话指针和最近消息，不直接写工单事实数据。pending action 的保存和清理由
- * {@link AgentPendingActionService} 负责，避免普通上下文更新和待执行动作管理耦合在一起。</p>
+ * <p>该类只维护通用会话指针和最近消息，不直接写工单事实数据，也不承担长期记忆。
+ * 当前 Spring AI 主链路和确定性兜底链路都会在 Tool 执行后调用它。</p>
  */
 @Component
 public class AgentContextUpdater {

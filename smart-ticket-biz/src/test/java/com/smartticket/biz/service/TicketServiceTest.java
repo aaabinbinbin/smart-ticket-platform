@@ -24,6 +24,7 @@ import com.smartticket.domain.entity.SysUser;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketComment;
 import com.smartticket.domain.entity.TicketOperationLog;
+import com.smartticket.domain.entity.TicketQueue;
 import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
@@ -63,6 +64,12 @@ class TicketServiceTest {
     @Mock
     private TicketIdempotencyService ticketIdempotencyService;
     @Mock
+    private TicketSlaService ticketSlaService;
+    @Mock
+    private TicketGroupService ticketGroupService;
+    @Mock
+    private TicketQueueService ticketQueueService;
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     private TicketService ticketService;
@@ -77,6 +84,9 @@ class TicketServiceTest {
                 permissionService,
                 ticketDetailCacheService,
                 ticketIdempotencyService,
+                ticketSlaService,
+                ticketGroupService,
+                ticketQueueService,
                 eventPublisher
         );
     }
@@ -255,6 +265,30 @@ class TicketServiceTest {
         printException(ex);
         verify(ticketRepository, never()).updateAssigneeAndStatus(any(), any(), any(), any());
         verify(operationLogRepository, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("绑定工单队列：管理员可将未关闭工单绑定到启用队列")
+    void bindTicketQueueShouldUpdateQueueBinding() {
+        Ticket before = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
+        Ticket after = ticket(TicketStatusEnum.PENDING_ASSIGN, CREATOR_ID, null);
+        after.setGroupId(30L);
+        after.setQueueId(40L);
+        when(ticketRepository.findById(TICKET_ID)).thenReturn(before, after);
+        when(ticketQueueService.requireEnabled(40L)).thenReturn(TicketQueue.builder()
+                .id(40L)
+                .groupId(30L)
+                .enabled(1)
+                .build());
+        when(ticketRepository.updateQueueBinding(TICKET_ID, 30L, 40L)).thenReturn(1);
+
+        Ticket result = ticketService.bindTicketQueue(admin(), TICKET_ID, 30L, 40L);
+
+        assertEquals(30L, result.getGroupId());
+        assertEquals(40L, result.getQueueId());
+        verify(ticketGroupService).requireEnabled(30L);
+        verify(ticketRepository).updateQueueBinding(TICKET_ID, 30L, 40L);
+        verifyLog(OperationTypeEnum.BIND_QUEUE, 9L);
     }
 
     @Test

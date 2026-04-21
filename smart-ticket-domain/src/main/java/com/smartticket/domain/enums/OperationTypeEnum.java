@@ -11,6 +11,7 @@ public enum OperationTypeEnum implements CodeInfoEnum {
     CREATE("CREATE", "创建工单"),
     ASSIGN("ASSIGN", "分配处理人"),
     TRANSFER("TRANSFER", "转派处理人"),
+    BIND_QUEUE("BIND_QUEUE", "绑定工单队列"),
     UPDATE_STATUS("UPDATE_STATUS", "更新状态"),
     COMMENT("COMMENT", "添加评论"),
     CLOSE("CLOSE", "关闭工单");

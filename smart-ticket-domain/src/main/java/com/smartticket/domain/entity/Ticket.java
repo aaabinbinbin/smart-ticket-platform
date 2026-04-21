@@ -38,6 +38,10 @@ public class Ticket {
     private Long creatorId;
     /** 当前处理人用户 ID，待分配时可为空。 */
     private Long assigneeId;
+    /** 当前绑定的工单组 ID，可为空。 */
+    private Long groupId;
+    /** 当前绑定的工单队列 ID，可为空。 */
+    private Long queueId;
     /** 解决方案摘要，通常在解决或关闭阶段填写。 */
     private String solutionSummary;
     /** 创建来源：MANUAL-手工创建，AGENT-Agent 创建。 */

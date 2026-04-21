@@ -2,6 +2,7 @@ package com.smartticket.rag.service;
 
 import com.smartticket.domain.entity.TicketKnowledge;
 import com.smartticket.domain.entity.TicketKnowledgeEmbedding;
+import com.smartticket.infra.ai.VectorStoreConfig.SpringAiVectorStoreHolder;
 import com.smartticket.rag.embedding.EmbeddingModelClient;
 import com.smartticket.rag.model.RetrievalHit;
 import com.smartticket.rag.model.RetrievalRequest;
@@ -12,36 +13,54 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
  * 历史工单 RAG 检索服务。
  *
- * <p>第一版负责接收查询文本、可选轻量 query rewrite、生成查询向量、在已入库知识切片中做 TopK
- * 余弦相似度检索，并返回结构化命中结果。不做 Elasticsearch、不做复杂 rerank。</p>
+ * <p>启用 PGvector 时优先使用 Spring AI VectorStore 做相似度检索；默认本地开发仍使用
+ * MySQL JSON 向量 + 内存 TopK 兜底，避免没有 PostgreSQL/模型密钥时影响 P0 闭环。</p>
  */
 @Service
 public class RetrievalService {
+    private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
     private static final int DEFAULT_TOP_K = 3;
     private static final int MAX_TOP_K = 10;
 
-    /** Embedding 模型客户端，用于生成查询向量。 */
+    /** Embedding 模型客户端，用于默认 MySQL 兜底检索生成查询向量。 */
     private final EmbeddingModelClient embeddingModelClient;
 
-    /** 知识切片仓储，用于读取已向量化的历史知识切片。 */
+    /** 知识切片仓储，用于默认 MySQL 兜底检索。 */
     private final TicketKnowledgeEmbeddingRepository embeddingRepository;
 
-    /** 知识读取仓储，用于补充知识摘要和来源工单信息。 */
+    /** 知识读取仓储，用于补充摘要和来源工单信息。 */
     private final TicketKnowledgeReadRepository knowledgeRepository;
+
+    /** Spring AI VectorStore 持有对象，启用 PGvector 后用于相似度检索。 */
+    private final ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider;
+
+    /** 是否启用 Spring AI VectorStore 检索。 */
+    private final boolean vectorStoreEnabled;
 
     public RetrievalService(
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
-            TicketKnowledgeReadRepository knowledgeRepository
+            TicketKnowledgeReadRepository knowledgeRepository,
+            ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider,
+            @Value("${smart-ticket.ai.vector-store.enabled:false}") boolean vectorStoreEnabled
     ) {
         this.embeddingModelClient = embeddingModelClient;
         this.embeddingRepository = embeddingRepository;
         this.knowledgeRepository = knowledgeRepository;
+        this.vectorStoreHolderProvider = vectorStoreHolderProvider;
+        this.vectorStoreEnabled = vectorStoreEnabled;
     }
 
     /**
@@ -63,25 +82,11 @@ public class RetrievalService {
                     .build();
         }
 
-        List<Double> queryVector = embeddingModelClient.embed(rewrittenQuery);
-        Map<Long, TicketKnowledge> knowledgeMap = activeKnowledgeMap();
-        List<RetrievalHit> hits = embeddingRepository.findAll()
-                .stream()
-                .filter(embedding -> embedding.getKnowledgeId() != null)
-                .filter(embedding -> knowledgeMap.containsKey(embedding.getKnowledgeId()))
-                .filter(embedding -> hasText(embedding.getEmbeddingVector()))
-                .map(embedding -> toHit(embedding, knowledgeMap.get(embedding.getKnowledgeId()), queryVector))
-                .filter(hit -> hit.getScore() != null)
-                .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
-                .limit(topK)
-                .toList();
-
-        return RetrievalResult.builder()
-                .queryText(queryText)
-                .rewrittenQuery(rewrittenQuery)
-                .topK(topK)
-                .hits(hits)
-                .build();
+        Optional<RetrievalResult> vectorStoreResult = retrieveFromVectorStore(queryText, rewrittenQuery, topK);
+        if (vectorStoreResult.isPresent()) {
+            return vectorStoreResult.get();
+        }
+        return retrieveFromMysqlFallback(queryText, rewrittenQuery, topK);
     }
 
     /**
@@ -104,13 +109,66 @@ public class RetrievalService {
                 .build());
     }
 
+    /** 使用 Spring AI VectorStore 执行 PGvector 相似度检索。 */
+    private Optional<RetrievalResult> retrieveFromVectorStore(String queryText, String rewrittenQuery, int topK) {
+        if (!vectorStoreEnabled) {
+            return Optional.empty();
+        }
+        SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
+        if (holder == null || holder.vectorStore() == null) {
+            return Optional.empty();
+        }
+        try {
+            List<Document> documents = holder.vectorStore().similaritySearch(SearchRequest.builder()
+                    .query(rewrittenQuery)
+                    .topK(topK)
+                    .similarityThresholdAll()
+                    .build());
+            List<RetrievalHit> hits = documents.stream()
+                    .map(this::toHit)
+                    .toList();
+            return Optional.of(RetrievalResult.builder()
+                    .queryText(queryText)
+                    .rewrittenQuery(rewrittenQuery)
+                    .topK(topK)
+                    .hits(hits)
+                    .build());
+        } catch (RuntimeException ex) {
+            log.warn("spring ai vector store retrieval failed, fallback to mysql vectors: reason={}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** 使用 MySQL JSON 向量执行默认兜底检索。 */
+    private RetrievalResult retrieveFromMysqlFallback(String queryText, String rewrittenQuery, int topK) {
+        List<Double> queryVector = embeddingModelClient.embed(rewrittenQuery);
+        Map<Long, TicketKnowledge> knowledgeMap = activeKnowledgeMap();
+        List<RetrievalHit> hits = embeddingRepository.findAll()
+                .stream()
+                .filter(embedding -> embedding.getKnowledgeId() != null)
+                .filter(embedding -> knowledgeMap.containsKey(embedding.getKnowledgeId()))
+                .filter(embedding -> hasText(embedding.getEmbeddingVector()))
+                .map(embedding -> toHit(embedding, knowledgeMap.get(embedding.getKnowledgeId()), queryVector))
+                .filter(hit -> hit.getScore() != null)
+                .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
+                .limit(topK)
+                .toList();
+
+        return RetrievalResult.builder()
+                .queryText(queryText)
+                .rewrittenQuery(rewrittenQuery)
+                .topK(topK)
+                .hits(hits)
+                .build();
+    }
+
     /** 轻量 query rewrite，第一版只做去噪和场景前缀增强。 */
     private String rewriteQuery(String queryText) {
         String normalized = normalizeQuery(queryText);
         if (!hasText(normalized)) {
             return normalized;
         }
-        return "历史工单相似问题 检索: " + normalized;
+        return "历史工单相似问题 检索 " + normalized;
     }
 
     /** 归一化查询文本。 */
@@ -127,7 +185,20 @@ public class RetrievalService {
         return map;
     }
 
-    /** 将切片记录转换为检索命中。 */
+    /** 将 Spring AI Document 转换为检索命中。 */
+    private RetrievalHit toHit(Document document) {
+        Map<String, Object> metadata = document.getMetadata() == null ? Map.of() : document.getMetadata();
+        return RetrievalHit.builder()
+                .knowledgeId(toLong(metadata.get("knowledgeId")))
+                .ticketId(toLong(metadata.get("ticketId")))
+                .chunkIndex(toInteger(metadata.get("chunkIndex")))
+                .score(document.getScore())
+                .contentSummary(asString(metadata.get("contentSummary")))
+                .chunkText(document.getText())
+                .build();
+    }
+
+    /** 将 MySQL 切片记录转换为检索命中。 */
     private RetrievalHit toHit(
             TicketKnowledgeEmbedding embedding,
             TicketKnowledge knowledge,
@@ -206,6 +277,41 @@ public class RetrievalService {
             return DEFAULT_TOP_K;
         }
         return Math.min(Math.max(topK, 1), MAX_TOP_K);
+    }
+
+    /** 将元数据值转换为 Long。 */
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && hasText(text)) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** 将元数据值转换为 Integer。 */
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && hasText(text)) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException ex) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    /** 将元数据值转换为字符串。 */
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /** 字符串非空判断。 */

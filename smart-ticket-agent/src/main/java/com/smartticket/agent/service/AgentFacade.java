@@ -1,14 +1,17 @@
 package com.smartticket.agent.service;
 
-import com.smartticket.agent.dto.AgentChatRequestDTO;
-import com.smartticket.agent.dto.AgentChatResponseDTO;
-import com.smartticket.agent.llm.config.AgentLlmProperties;
+import com.smartticket.agent.execution.AgentExecutionDecision;
+import com.smartticket.agent.execution.AgentExecutionGuard;
 import com.smartticket.agent.model.AgentChatResult;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
-import com.smartticket.agent.orchestration.TicketAgentOrchestrator;
+import com.smartticket.agent.orchestration.ToolCallPlan;
+import com.smartticket.agent.tool.core.AgentTool;
+import com.smartticket.agent.tool.core.AgentToolRequest;
 import com.smartticket.agent.tool.core.AgentToolResult;
+import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
+import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.agent.tool.support.SpringAiToolCallState;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.agent.tool.ticket.CreateTicketTool;
@@ -23,68 +26,62 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
  * Agent 对话门面。
  *
- * <p>该门面是 api 模块访问 agent 模块的统一入口。本阶段优先尝试 Spring AI
- * Tool Calling；当 Spring AI 未启用、模型未调用工具或调用失败时，回退到现有
- * {@link TicketAgentOrchestrator} 受控编排链路。</p>
+ * <p>api 模块只访问该门面。第一版入口以 Spring AI ChatClient + Tool Calling 为主链路；
+ * 当模型未启用、模型没有触发工具或模型调用失败时，回退到同一套 Tool、Guard 和会话上下文，
+ * 不再保留旧的自定义 LLM 编排链路。</p>
  */
 @Service
 public class AgentFacade {
     private static final Logger log = LoggerFactory.getLogger(AgentFacade.class);
 
-    /**
-     * 既有单 Agent 编排器，作为 Spring AI Tool Calling 失败时的稳定回退链路。
-     */
-    private final TicketAgentOrchestrator orchestrator;
-
-    /**
-     * Spring AI ChatClient 提供者。
-     */
+    /** Spring AI ChatClient 提供者，未启用模型时可以为空。 */
     private final ObjectProvider<ChatClient> chatClientProvider;
 
-    /**
-     * Agent 对真实模型调用的业务开关。
-     */
-    private final AgentLlmProperties llmProperties;
+    /** Agent 对真实模型调用的业务开关。 */
+    private final boolean chatEnabled;
 
-    /**
-     * 规则意图路由器，用于按意图只暴露本轮允许的单个 Spring AI Tool。
-     */
+    /** 规则意图路由器，用于限制本轮只暴露一个业务 Tool。 */
     private final IntentRouter intentRouter;
 
-    /**
-     * Agent 会话上下文服务。
-     */
+    /** Agent 会话上下文服务。 */
     private final AgentSessionService sessionService;
 
-    /**
-     * 四个核心 Spring AI Tool Bean。
-     */
+    /** Tool 执行前边界守卫，集中做风险、权限前置和必填参数判断。 */
+    private final AgentExecutionGuard executionGuard;
+
+    /** 确定性兜底链路使用的浅层参数抽取器。 */
+    private final AgentToolParameterExtractor parameterExtractor;
+
+    /** 四个核心 Spring AI Tool Bean，同时实现项目内 AgentTool 接口。 */
     private final QueryTicketTool queryTicketTool;
     private final CreateTicketTool createTicketTool;
     private final TransferTicketTool transferTicketTool;
     private final SearchHistoryTool searchHistoryTool;
 
     public AgentFacade(
-            TicketAgentOrchestrator orchestrator,
             ObjectProvider<ChatClient> chatClientProvider,
-            AgentLlmProperties llmProperties,
+            @Value("${smart-ticket.ai.chat.enabled:false}") boolean chatEnabled,
             IntentRouter intentRouter,
             AgentSessionService sessionService,
+            AgentExecutionGuard executionGuard,
+            AgentToolParameterExtractor parameterExtractor,
             QueryTicketTool queryTicketTool,
             CreateTicketTool createTicketTool,
             TransferTicketTool transferTicketTool,
             SearchHistoryTool searchHistoryTool
     ) {
-        this.orchestrator = orchestrator;
         this.chatClientProvider = chatClientProvider;
-        this.llmProperties = llmProperties;
+        this.chatEnabled = chatEnabled;
         this.intentRouter = intentRouter;
         this.sessionService = sessionService;
+        this.executionGuard = executionGuard;
+        this.parameterExtractor = parameterExtractor;
         this.queryTicketTool = queryTicketTool;
         this.createTicketTool = createTicketTool;
         this.transferTicketTool = transferTicketTool;
@@ -102,34 +99,38 @@ public class AgentFacade {
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
         AgentSessionContext context = sessionService.load(sessionId);
-        log.info("agent facade chat: sessionId={}, userId={}, springAiChatReady={}",
-                sessionId, currentUser.getUserId(), springAiReady);
+        IntentRoute route = intentRouter.route(message, context);
+        log.info("agent facade chat: sessionId={}, userId={}, intent={}, springAiChatReady={}",
+                sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
+
         if (springAiReady) {
-            Optional<AgentChatResult> springAiResult = trySpringAiToolCalling(currentUser, sessionId, message, context);
+            Optional<AgentChatResult> springAiResult =
+                    trySpringAiToolCalling(currentUser, sessionId, message, context, route);
             if (springAiResult.isPresent()) {
                 return springAiResult.get();
             }
         }
-        return fallbackToOrchestrator(currentUser, sessionId, message, springAiReady);
+        return executeDeterministicFallback(currentUser, sessionId, message, context, route, springAiReady);
     }
 
     /**
      * 尝试使用 Spring AI 原生 Tool Calling。
      *
-     * <p>本阶段不会把所有意图塞进一个超级 prompt，而是先用规则路由确定意图，
+     * <p>本阶段不把所有意图塞进一个超级 prompt，而是先由代码侧路由确定意图，
      * 再只向模型暴露该意图对应的一个 Tool。</p>
      */
     private Optional<AgentChatResult> trySpringAiToolCalling(
             CurrentUser currentUser,
             String sessionId,
             String message,
-            AgentSessionContext context
+            AgentSessionContext context,
+            IntentRoute route
     ) {
         ChatClient chatClient = chatClientProvider.getIfAvailable();
         if (chatClient == null) {
             return Optional.empty();
         }
-        IntentRoute route = intentRouter.route(message, context);
+
         SpringAiToolCallState state = new SpringAiToolCallState();
         Map<String, Object> toolContext = new HashMap<>();
         toolContext.put(SpringAiToolSupport.CURRENT_USER_KEY, currentUser);
@@ -142,60 +143,70 @@ public class AgentFacade {
             String content = chatClient.prompt()
                     .system(systemPrompt(route.getIntent()))
                     .user(userPrompt(message, route))
-                    .tools(toolFor(route.getIntent()))
+                    .tools(springAiToolFor(route.getIntent()))
                     .toolContext(toolContext)
                     .call()
                     .content();
             AgentToolResult toolResult = state.getResult();
             if (toolResult == null) {
-                log.info("spring ai tool calling produced no tool result, fallback to orchestrator: sessionId={}", sessionId);
+                log.info("spring ai tool calling produced no tool result, use deterministic fallback: sessionId={}",
+                        sessionId);
                 return Optional.empty();
             }
             sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-            return Optional.of(AgentChatResult.builder()
-                    .sessionId(sessionId)
-                    .intent(route.getIntent().name())
-                    .reply(hasText(content) ? content : toolResult.getReply())
-                    .route(route)
-                    .context(context)
-                    .result(toolResult.getData())
-                    .springAiChatReady(true)
-                    .build());
+            return Optional.of(toChatResult(sessionId, route, context, toolResult,
+                    hasText(content) ? content : toolResult.getReply(), true));
         } catch (RuntimeException ex) {
-            log.warn("spring ai tool calling failed, fallback to orchestrator: sessionId={}, reason={}",
+            log.warn("spring ai tool calling failed, use deterministic fallback: sessionId={}, reason={}",
                     sessionId, ex.getMessage());
             return Optional.empty();
         }
     }
 
     /**
-     * 回退到现有受控编排器。
+     * 模型不可用时的确定性兜底执行。
+     *
+     * <p>兜底链路只负责让 P0 闭环可运行：按规则抽取参数，经过 Guard 校验后调用同一个 Tool。
+     * 任何写操作仍然只能通过 Tool 内部的 biz service 完成。</p>
      */
-    private AgentChatResult fallbackToOrchestrator(
+    private AgentChatResult executeDeterministicFallback(
             CurrentUser currentUser,
             String sessionId,
             String message,
+            AgentSessionContext context,
+            IntentRoute route,
             boolean springAiReady
     ) {
-        AgentChatResponseDTO response = orchestrator.chat(currentUser, AgentChatRequestDTO.builder()
-                .sessionId(sessionId)
-                .message(message)
-                .build());
-        return AgentChatResult.builder()
-                .sessionId(response.getSessionId())
-                .intent(response.getIntent())
-                .reply(response.getReply())
-                .route(response.getRoute())
-                .context(response.getContext())
-                .result(response.getResult())
-                .springAiChatReady(springAiReady)
+        AgentTool tool = agentToolFor(route.getIntent());
+        AgentToolParameters parameters = parameterExtractor.extract(message, context);
+        sessionService.resolveReferences(message, context, parameters);
+        ToolCallPlan plan = ToolCallPlan.builder()
+                .intent(route.getIntent())
+                .toolName(tool.name())
+                .parameters(parameters)
+                .llmGenerated(false)
+                .reason("Spring AI ChatClient unavailable or no tool call")
                 .build();
+
+        AgentExecutionDecision decision = executionGuard.check(currentUser, message, context, route, plan);
+        AgentToolResult toolResult;
+        if (decision.isAllowed()) {
+            toolResult = decision.getTool().execute(AgentToolRequest.builder()
+                    .currentUser(currentUser)
+                    .message(message)
+                    .context(context)
+                    .route(route)
+                    .parameters(parameters)
+                    .build());
+        } else {
+            toolResult = decision.toToolResult(tool.name());
+        }
+        sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
     }
 
-    /**
-     * 按意图选择本轮唯一允许暴露给 Spring AI 的 Tool Bean。
-     */
-    private Object toolFor(AgentIntent intent) {
+    /** 按意图选择本轮唯一允许暴露给 Spring AI 的 Tool Bean。 */
+    private Object springAiToolFor(AgentIntent intent) {
         return switch (intent) {
             case CREATE_TICKET -> createTicketTool;
             case TRANSFER_TICKET -> transferTicketTool;
@@ -204,9 +215,37 @@ public class AgentFacade {
         };
     }
 
-    /**
-     * 按意图生成系统提示词，避免把所有意图塞进一个超级 prompt。
-     */
+    /** 按意图选择项目内部 AgentTool，用于确定性兜底执行。 */
+    private AgentTool agentToolFor(AgentIntent intent) {
+        return switch (intent) {
+            case CREATE_TICKET -> createTicketTool;
+            case TRANSFER_TICKET -> transferTicketTool;
+            case SEARCH_HISTORY -> searchHistoryTool;
+            case QUERY_TICKET -> queryTicketTool;
+        };
+    }
+
+    /** 组装统一的 Agent 对外结果。 */
+    private AgentChatResult toChatResult(
+            String sessionId,
+            IntentRoute route,
+            AgentSessionContext context,
+            AgentToolResult toolResult,
+            String reply,
+            boolean springAiReady
+    ) {
+        return AgentChatResult.builder()
+                .sessionId(sessionId)
+                .intent(route.getIntent().name())
+                .reply(hasText(reply) ? reply : toolResult.getReply())
+                .route(route)
+                .context(context)
+                .result(toolResult.getData())
+                .springAiChatReady(springAiReady)
+                .build();
+    }
+
+    /** 按意图生成系统提示词，避免把所有意图塞进一个超级 prompt。 */
     private String systemPrompt(AgentIntent intent) {
         return switch (intent) {
             case QUERY_TICKET -> "你是工单查询助手。本轮只能调用 queryTicket，查询当前工单事实，不得检索历史知识库。";
@@ -216,9 +255,7 @@ public class AgentFacade {
         };
     }
 
-    /**
-     * 生成用户提示词，明确本轮路由结果和用户原始输入。
-     */
+    /** 生成用户提示词，明确本轮路由结果和用户原始输入。 */
     private String userPrompt(String message, IntentRoute route) {
         return """
                 本轮意图：%s
@@ -229,16 +266,12 @@ public class AgentFacade {
                 """.formatted(route.getIntent().name(), route.getReason(), message);
     }
 
-    /**
-     * 判断 Spring AI ChatClient 是否已经可用于真实模型调用。
-     */
+    /** 判断 Spring AI ChatClient 是否已经可用于真实模型调用。 */
     private boolean isSpringAiChatReady() {
-        return llmProperties.isEffectiveEnabled() && chatClientProvider.getIfAvailable() != null;
+        return chatEnabled && chatClientProvider.getIfAvailable() != null;
     }
 
-    /**
-     * 判断字符串是否有有效内容。
-     */
+    /** 判断字符串是否有有效内容。 */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

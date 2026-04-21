@@ -3,6 +3,7 @@ package com.smartticket.api.controller;
 import com.smartticket.api.assembler.TicketAssembler;
 import com.smartticket.api.dto.ticket.AddTicketCommentRequestDTO;
 import com.smartticket.api.dto.ticket.AssignTicketRequestDTO;
+import com.smartticket.api.dto.ticket.BindTicketQueueRequestDTO;
 import com.smartticket.api.dto.ticket.CreateTicketRequestDTO;
 import com.smartticket.api.dto.ticket.UpdateTicketStatusRequestDTO;
 import com.smartticket.api.vo.ticket.TicketCommentVO;
@@ -121,6 +122,22 @@ public class TicketController {
             @Valid @RequestBody AssignTicketRequestDTO request
     ) {
         Ticket ticket = ticketService.assignTicket(currentUser(authentication), ticketId, request.getAssigneeId());
+        return ApiResponse.success(ticketAssembler.toVO(ticket));
+    }
+
+    @PutMapping("/{ticketId}/queue")
+    @Operation(summary = "绑定工单队列", description = "管理员将工单绑定到指定工单组和队列，不修改处理人和状态")
+    public ApiResponse<TicketVO> bindTicketQueue(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId,
+            @Valid @RequestBody BindTicketQueueRequestDTO request
+    ) {
+        Ticket ticket = ticketService.bindTicketQueue(
+                currentUser(authentication),
+                ticketId,
+                request.getGroupId(),
+                request.getQueueId()
+        );
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
