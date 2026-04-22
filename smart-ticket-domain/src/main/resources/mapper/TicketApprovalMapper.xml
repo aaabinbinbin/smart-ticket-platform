@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketApprovalMapper">
+
+    <resultMap id="ticketApprovalResultMap" type="com.smartticket.domain.entity.TicketApproval">
+        <id property="id" column="id"/>
+        <result property="ticketId" column="ticket_id"/>
+        <result property="templateId" column="template_id"/>
+        <result property="currentStepOrder" column="current_step_order"/>
+        <result property="approvalStatus" column="approval_status"/>
+        <result property="approverId" column="approver_id"/>
+        <result property="requestedBy" column="requested_by"/>
+        <result property="submitComment" column="submit_comment"/>
+        <result property="decisionComment" column="decision_comment"/>
+        <result property="submittedAt" column="submitted_at"/>
+        <result property="decidedAt" column="decided_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="ticketApprovalColumns">
+        id, ticket_id, template_id, current_step_order, approval_status, approver_id, requested_by,
+        submit_comment, decision_comment, submitted_at, decided_at, created_at, updated_at
+    </sql>
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketApproval"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_approval (
+            ticket_id, template_id, current_step_order, approval_status, approver_id, requested_by,
+            submit_comment, decision_comment, submitted_at, decided_at
+        )
+        VALUES (
+            #{ticketId}, #{templateId}, #{currentStepOrder}, #{approvalStatus.code}, #{approverId}, #{requestedBy},
+            #{submitComment}, #{decisionComment}, #{submittedAt}, #{decidedAt}
+        )
+    </insert>
+
+    <select id="findByTicketId" resultMap="ticketApprovalResultMap">
+        SELECT <include refid="ticketApprovalColumns"/>
+        FROM ticket_approval
+        WHERE ticket_id = #{ticketId}
+    </select>
+
+    <update id="updateForResubmit">
+        UPDATE ticket_approval
+        SET template_id = #{templateId},
+            current_step_order = #{currentStepOrder},
+            approval_status = #{approvalStatus.code},
+            approver_id = #{approverId},
+            requested_by = #{requestedBy},
+            submit_comment = #{submitComment},
+            decision_comment = NULL,
+            submitted_at = #{submittedAt},
+            decided_at = NULL
+        WHERE ticket_id = #{ticketId}
+    </update>
+
+    <update id="updateDecision">
+        UPDATE ticket_approval
+        SET approval_status = #{approvalStatus.code},
+            current_step_order = #{currentStepOrder},
+            approver_id = #{approverId},
+            decision_comment = #{decisionComment},
+            decided_at = #{decidedAt}
+        WHERE ticket_id = #{ticketId}
+          AND approval_status = #{expectedStatus.code}
+    </update>
+</mapper>

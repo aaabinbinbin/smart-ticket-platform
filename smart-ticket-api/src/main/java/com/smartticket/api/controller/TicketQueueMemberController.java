@@ -56,12 +56,7 @@ public class TicketQueueMemberController {
             @PathVariable("memberId") Long memberId,
             @Valid @RequestBody UpdateEnabledRequest request
     ) {
-        TicketQueueMember member = ticketQueueMemberService.updateEnabled(
-                currentUser(authentication),
-                queueId,
-                memberId,
-                request.getEnabled()
-        );
+        TicketQueueMember member = ticketQueueMemberService.updateEnabled(currentUser(authentication), queueId, memberId, request.getEnabled());
         return ApiResponse.success(assembler.toQueueMemberVO(member));
     }
 
@@ -89,8 +84,7 @@ public class TicketQueueMemberController {
         return CurrentUser.builder()
                 .userId(authUser.getUserId())
                 .username(authUser.getUsername())
-                .roles(authentication.getAuthorities()
-                        .stream()
+                .roles(authentication.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .map(authority -> authority.replace("ROLE_", ""))
                         .toList())

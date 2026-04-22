@@ -1,29 +1,36 @@
-# 企业智能工单协同平台
+# 智能工单平台
 
-基于 Java 17、Spring Boot 3、Spring Security、Spring AI 和 MyBatis 的模块化单体项目，目标是提供一个可演示、可扩展的智能工单平台主干。
+基于 `Java 17`、`Spring Boot 3`、`Spring Security`、`MyBatis`、`Spring AI` 的模块化单体项目，目标是实现一套可演示、可扩展、同时具备后端工程性和 Agent 应用特征的智能工单平台。
 
 ## 当前状态
 
-当前主干已经打通：
-- 工单核心流程：创建、详情、分页、分配、转派、状态流转、评论、关闭、操作日志
-- 认证与权限：JWT 登录、基础 RBAC
-- Agent 主链路：`POST /api/agent/chat`
-- Tool Calling：`QUERY_TICKET`、`CREATE_TICKET`、`TRANSFER_TICKET`、`SEARCH_HISTORY`
-- 会话上下文：Redis 短会话、最近消息、当前工单引用、`pendingAction` 草稿
-- RAG：知识构建、Embedding、query rewrite、规则 rerank、fallback 路径日志
-- SLA 主干：定时扫描、违约分类、优先级升级、管理员接管占位、通知占位、审计日志
-- 队列主干：工单组、队列、队列成员、队列绑定、自动分派规则、真实最小负载分派
+截至 `2026-04-22`，项目已完成高完成度 MVP，并进入平台能力增强阶段。
 
-## 已完成 / 未完成 / 下一步
+- 工单主流程已打通：创建、分页查询、详情、分配、认领、转派、状态流转、评论、关闭、操作日志
+- 认证与权限已打通：JWT 登录、RBAC、Agent 接口鉴权校验
+- Agent 主链已打通：`/api/agent/chat`、意图路由、Tool Calling、会话上下文、待创建草稿、多轮澄清
+- RAG 主链已打通：知识构建、Embedding、query rewrite、轻量 rerank、MySQL fallback、PGvector 主路径开关
+- P1/P2 业务能力已接入：SLA 定时扫描、自动分派、队列成员、工单类型扩展、审批流、多视角摘要
 
-| 状态 | 内容 |
-| --- | --- |
-| 已完成 | 阶段 A：文档对齐、注释校正、AgentController 认证健壮性、Agent API 与 Tool 测试 |
-| 已完成 | 阶段 B：`TicketService` 拆分、IntentRouter 低置信度澄清、CREATE_TICKET 多轮补参、创建前相似案例分流、RAG rewrite/rerank/fallback |
-| 已完成 | 阶段 C1：SLA 定时扫描、违约升级、通知占位、审计日志 |
-| 已完成 | 阶段 C2 主干：基于队列成员的最小负载自动分派、组内跨队列选人、组负责人回退、无人可分派时保留待认领 |
-| 未完成 | C1 真实通知通道、C3 多类型工单、C4 审批流、C5 多视角摘要、后续平台化能力 |
-| 下一步 | 继续阶段 C3/C4，或者补齐 C1 的真实通知通道与可配置升级策略 |
+## 阶段完成度
+
+| 阶段 | 状态 | 说明 |
+| --- | --- | --- |
+| A | 基本完成 | 文档已对齐到当前阶段，认证健壮性已补，Agent/Tool 测试已具备基础覆盖，仍可继续补更完整集成测试 |
+| B | 基本完成 | `TicketService` 已拆分，IntentRouter 已升级，多轮澄清创建、RAG rewrite/rerank/fallback 已落地 |
+| C1 | 已完成第一版 | SLA 定时扫描、违约判断、升级占位、审计日志已落地，真实通知通道仍待补 |
+| C2 | 已完成 | 组/队列/成员、自动分派、认领、统计接口已落地 |
+| C3 | 已完成 | 多类型工单、`typeProfile`、差异化校验、默认分类和优先级已落地 |
+| C4 | 已完成第一版 | 审批模板、审批步骤、提交/通过/驳回、多级审批与审批前限制已落地 |
+| C5 | 已完成第一版 | 提单人/处理人/管理员多视角摘要已接入 biz、API 与 Agent 查询链路 |
+
+## 面试可讲亮点
+
+- 模块化单体拆分：`common/domain/infra/auth/biz/rag/agent/api/app`
+- 工单领域建模：主流程、审批、SLA、队列、自动分派、操作审计
+- Agent 应用设计：规则路由、低置信度澄清、Tool 执行边界、上下文恢复、结构化参数抽取
+- RAG 工程化：知识构建、主检索与 fallback 双路径、检索日志、主路径切换能力
+- 可扩展平台方向：多类型工单、审批流、多视角摘要
 
 ## 模块说明
 
@@ -31,27 +38,35 @@
 smart-ticket-platform
 |- smart-ticket-app
 |- smart-ticket-common
-|- smart-ticket-auth
 |- smart-ticket-domain
-|- smart-ticket-biz
-|- smart-ticket-agent
-|- smart-ticket-rag
 |- smart-ticket-infra
+|- smart-ticket-auth
+|- smart-ticket-biz
+|- smart-ticket-rag
+|- smart-ticket-agent
 `- smart-ticket-api
 ```
 
-- `smart-ticket-app`：启动模块，负责装配全部业务模块
-- `smart-ticket-common`：公共响应、异常、通用工具
-- `smart-ticket-auth`：JWT 认证和基础授权
-- `smart-ticket-domain`：实体、枚举、Mapper
-- `smart-ticket-biz`：工单、SLA、队列、自动分派等核心业务
-- `smart-ticket-agent`：意图路由、工具执行、会话上下文
-- `smart-ticket-rag`：知识构建、向量化、历史案例检索
-- `smart-ticket-infra`：Redis、MySQL、PGvector、Spring AI 相关配置
-- `smart-ticket-api`：Controller、DTO/VO、参数校验、异常映射
+- `smart-ticket-app`：应用启动与配置装配
+- `smart-ticket-common`：统一响应、异常、通用工具
+- `smart-ticket-domain`：实体、枚举、Mapper 定义
+- `smart-ticket-infra`：Redis、Spring AI、向量存储等基础设施适配
+- `smart-ticket-auth`：JWT、认证过滤器、Spring Security 配置
+- `smart-ticket-biz`：工单、SLA、自动分派、审批、摘要等业务能力
+- `smart-ticket-rag`：知识构建、Embedding、检索、重排
+- `smart-ticket-agent`：意图路由、会话上下文、Tool 编排
+- `smart-ticket-api`：Controller、DTO/VO、接口协议
 
-## API 范围
+## 关键接口
 
-- 工单与 P1 配置接口：见 [docs/ticket-api.md](D:/aaaAgent/smart-ticket-platform/docs/ticket-api.md)
+- 工单业务接口：见 [docs/ticket-api.md](/D:/aaaAgent/smart-ticket-platform/docs/ticket-api.md)
 - Agent 对话接口：`POST /api/agent/chat`
-- 当前实现状态：见 [docs/current-status.md](D:/aaaAgent/smart-ticket-platform/docs/current-status.md)
+- 当前阶段说明：见 [docs/current-status.md](/D:/aaaAgent/smart-ticket-platform/docs/current-status.md)
+- 演示脚本：见 [docs/demo-playbook.md](/D:/aaaAgent/smart-ticket-platform/docs/demo-playbook.md)
+
+## 当前已知缺口
+
+- Agent API 端到端集成测试仍可继续加强
+- C1 的站内信 / 邮件 / IM 通知仍是预留位
+- PGvector 主路径已有配置与代码入口，但仍需在真实环境做一次完整演示验证
+- 多视角摘要属于第一版规则摘要，后续可继续引入更强的总结策略

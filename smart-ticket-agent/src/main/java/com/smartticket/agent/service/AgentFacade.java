@@ -37,33 +37,18 @@ import org.springframework.stereotype.Service;
 /**
  * Agent 对话门面。
  *
- * <p>api 模块只访问该门面。第一版入口以 Spring AI ChatClient + Tool Calling 为主链路；
- * 当模型未启用、模型没有触发工具或模型调用失败时，回退到同一套 Tool、Guard 和会话上下文，
- * 不再保留旧的自定义 LLM 编排链路。</p>
+ * <p>由路由器决定当前意图，再由 Spring AI Tool Calling 或确定性兜底链路执行对应工具。</p>
  */
 @Service
 public class AgentFacade {
     private static final Logger log = LoggerFactory.getLogger(AgentFacade.class);
 
-    /** Spring AI ChatClient 提供者，未启用模型时可以为空。 */
     private final ObjectProvider<ChatClient> chatClientProvider;
-
-    /** Agent 对真实模型调用的业务开关。 */
     private final boolean chatEnabled;
-
-    /** 规则意图路由器，用于限制本轮只暴露一个业务 Tool。 */
     private final IntentRouter intentRouter;
-
-    /** Agent 会话上下文服务。 */
     private final AgentSessionService sessionService;
-
-    /** Tool 执行前边界守卫，集中做风险、权限前置和必填参数判断。 */
     private final AgentExecutionGuard executionGuard;
-
-    /** 确定性兜底链路使用的浅层参数抽取器。 */
     private final AgentToolParameterExtractor parameterExtractor;
-
-    /** 四个核心 Spring AI Tool Bean，同时实现项目内 AgentTool 接口。 */
     private final QueryTicketTool queryTicketTool;
     private final CreateTicketTool createTicketTool;
     private final TransferTicketTool transferTicketTool;
@@ -93,20 +78,13 @@ public class AgentFacade {
         this.searchHistoryTool = searchHistoryTool;
     }
 
-    /**
-     * 处理一轮 Agent 对话。
-     *
-     * @param currentUser 当前登录用户
-     * @param sessionId 会话 ID
-     * @param message 用户原始消息
-     * @return Agent 对话结果
-     */
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
         AgentSessionContext context = sessionService.load(sessionId);
         if (hasPendingCreateDraft(context)) {
             return continuePendingCreate(currentUser, sessionId, message, context, springAiReady);
         }
+
         IntentRoute route = intentRouter.route(message, context);
         log.info("agent facade chat: sessionId={}, userId={}, intent={}, springAiChatReady={}",
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
@@ -116,8 +94,7 @@ public class AgentFacade {
         }
 
         if (springAiReady) {
-            Optional<AgentChatResult> springAiResult =
-                    trySpringAiToolCalling(currentUser, sessionId, message, context, route);
+            Optional<AgentChatResult> springAiResult = trySpringAiToolCalling(currentUser, sessionId, message, context, route);
             if (springAiResult.isPresent()) {
                 return springAiResult.get();
             }
@@ -141,12 +118,6 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
     }
 
-    /**
-     * 尝试使用 Spring AI 原生 Tool Calling。
-     *
-     * <p>本阶段不把所有意图塞进一个超级 prompt，而是先由代码侧路由确定意图，
-     * 再只向模型暴露该意图对应的一个 Tool。</p>
-     */
     private Optional<AgentChatResult> trySpringAiToolCalling(
             CurrentUser currentUser,
             String sessionId,
@@ -177,27 +148,25 @@ public class AgentFacade {
                     .content();
             AgentToolResult toolResult = state.getResult();
             if (toolResult == null) {
-                log.info("spring ai tool calling produced no tool result, use deterministic fallback: sessionId={}",
-                        sessionId);
+                log.info("spring ai tool calling produced no tool result, use deterministic fallback: sessionId={}", sessionId);
                 return Optional.empty();
             }
             syncCreatePendingAction(context, route, null, message, toolResult);
             sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-            return Optional.of(toChatResult(sessionId, route, context, toolResult,
-                    hasText(content) ? content : toolResult.getReply(), true));
+            return Optional.of(toChatResult(
+                    sessionId,
+                    route,
+                    context,
+                    toolResult,
+                    hasText(content) ? content : toolResult.getReply(),
+                    true
+            ));
         } catch (RuntimeException ex) {
-            log.warn("spring ai tool calling failed, use deterministic fallback: sessionId={}, reason={}",
-                    sessionId, ex.getMessage());
+            log.warn("spring ai tool calling failed, use deterministic fallback: sessionId={}, reason={}", sessionId, ex.getMessage());
             return Optional.empty();
         }
     }
 
-    /**
-     * 模型不可用时的确定性兜底执行。
-     *
-     * <p>兜底链路只负责让 P0 闭环可运行：按规则抽取参数，经过 Guard 校验后调用同一个 Tool。
-     * 任何写操作仍然只能通过 Tool 内部的 biz service 完成。</p>
-     */
     private AgentChatResult executeDeterministicFallback(
             CurrentUser currentUser,
             String sessionId,
@@ -333,6 +302,9 @@ public class AgentFacade {
             List<AgentToolParameterField> awaitingFields
     ) {
         AgentToolParameters merged = copyParameters(draft == null ? AgentToolParameters.builder().build() : draft);
+        if (extracted.getType() != null) {
+            merged.setType(extracted.getType());
+        }
         if (extracted.getCategory() != null) {
             merged.setCategory(extracted.getCategory());
         }
@@ -380,7 +352,7 @@ public class AgentFacade {
         }
         String trimmed = message.trim();
         return trimmed.length() <= 20
-                && (extracted.getCategory() != null || extracted.getPriority() != null)
+                && (extracted.getType() != null || extracted.getCategory() != null || extracted.getPriority() != null)
                 && !containsProblemNarrative(trimmed);
     }
 
@@ -405,7 +377,7 @@ public class AgentFacade {
         if (missingFields.size() == 1) {
             AgentToolParameterField field = missingFields.get(0);
             return switch (field) {
-                case TITLE -> "请补充工单标题，尽量一句话说明核心问题。";
+                case TITLE -> "请补充工单标题，尽量用一句话说明核心问题。";
                 case DESCRIPTION -> "请补充更完整的问题描述，例如现象、影响范围和你已尝试过的操作。";
                 case CATEGORY -> "请补充工单分类：ACCOUNT、SYSTEM、ENVIRONMENT、OTHER。";
                 case PRIORITY -> "请补充工单优先级：LOW、MEDIUM、HIGH、URGENT。";
@@ -423,7 +395,7 @@ public class AgentFacade {
             }
             reply.append(missingFields.get(i).getLabel());
         }
-        reply.append("。");
+        reply.append("。消息内容：").append(message == null ? "" : message.trim());
         return reply.toString();
     }
 
@@ -434,8 +406,11 @@ public class AgentFacade {
                 .title(source.getTitle())
                 .description(source.getDescription())
                 .idempotencyKey(source.getIdempotencyKey())
+                .type(source.getType())
                 .category(source.getCategory())
                 .priority(source.getPriority())
+                .summaryRequested(source.getSummaryRequested())
+                .summaryView(source.getSummaryView())
                 .numbers(source.getNumbers() == null ? List.of() : new ArrayList<>(source.getNumbers()))
                 .build();
     }
@@ -451,7 +426,6 @@ public class AgentFacade {
                 || normalized.equals("cancel");
     }
 
-    /** 按意图选择本轮唯一允许暴露给 Spring AI 的 Tool Bean。 */
     private Object springAiToolFor(AgentIntent intent) {
         return switch (intent) {
             case CREATE_TICKET -> createTicketTool;
@@ -461,7 +435,6 @@ public class AgentFacade {
         };
     }
 
-    /** 按意图选择项目内部 AgentTool，用于确定性兜底执行。 */
     private AgentTool agentToolFor(AgentIntent intent) {
         return switch (intent) {
             case CREATE_TICKET -> createTicketTool;
@@ -471,7 +444,6 @@ public class AgentFacade {
         };
     }
 
-    /** 组装统一的 Agent 对外结果。 */
     private AgentChatResult toChatResult(
             String sessionId,
             IntentRoute route,
@@ -491,17 +463,15 @@ public class AgentFacade {
                 .build();
     }
 
-    /** 按意图生成系统提示词，避免把所有意图塞进一个超级 prompt。 */
     private String systemPrompt(AgentIntent intent) {
         return switch (intent) {
-            case QUERY_TICKET -> "你是工单查询助手。本轮只能调用 queryTicket，查询当前工单事实，不得检索历史知识库。";
-            case CREATE_TICKET -> "你是工单创建助手。本轮只能调用 createTicket。创建动作必须通过工具完成，不能编造创建结果。";
-            case TRANSFER_TICKET -> "你是工单转派助手。本轮只能调用 transferTicket。转派是高风险写操作，必须遵守工具返回的确认或失败信息。";
-            case SEARCH_HISTORY -> "你是历史经验检索助手。本轮只能调用 searchHistory。检索结果只作参考，不代表当前工单事实。";
+            case QUERY_TICKET -> "你是工单查询助手。本轮只允许调用 queryTicket，用于查询当前工单事实，不得检索历史知识库。";
+            case CREATE_TICKET -> "你是工单创建助手。本轮只允许调用 createTicket。创建动作必须通过工具完成，不能编造创建结果。";
+            case TRANSFER_TICKET -> "你是工单转派助手。本轮只允许调用 transferTicket。转派是高风险写操作，必须遵守工具返回的确认或失败信息。";
+            case SEARCH_HISTORY -> "你是历史经验检索助手。本轮只允许调用 searchHistory。检索结果只作参考，不代表当前工单事实。";
         };
     }
 
-    /** 生成用户提示词，明确本轮路由结果和用户原始输入。 */
     private String userPrompt(String message, IntentRoute route) {
         return """
                 本轮意图：%s
@@ -512,12 +482,10 @@ public class AgentFacade {
                 """.formatted(route.getIntent().name(), route.getReason(), message);
     }
 
-    /** 判断 Spring AI ChatClient 是否已经可用于真实模型调用。 */
     private boolean isSpringAiChatReady() {
         return chatEnabled && chatClientProvider.getIfAvailable() != null;
     }
 
-    /** 判断字符串是否有有效内容。 */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

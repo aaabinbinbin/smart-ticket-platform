@@ -18,6 +18,7 @@ import com.smartticket.agent.tool.parameter.AgentToolRequestValidator;
 import com.smartticket.agent.tool.parameter.AgentToolValidationResult;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.TicketDetailDTO;
+import com.smartticket.biz.dto.TicketSummaryDTO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.service.TicketCommandService;
 import com.smartticket.biz.service.TicketQueryService;
@@ -27,6 +28,7 @@ import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import com.smartticket.domain.enums.TicketSummaryViewEnum;
 import com.smartticket.rag.model.RetrievalHit;
 import com.smartticket.rag.model.RetrievalRequest;
 import com.smartticket.rag.model.RetrievalResult;
@@ -178,6 +180,33 @@ class TicketToolsTest {
 
         assertEquals(AgentToolStatus.SUCCESS, result.getStatus());
         verify(ticketQueryService).pageTickets(eq(currentUser()), any());
+    }
+
+    @Test
+    void queryTicketToolShouldReturnSummaryWhenSummaryRequested() {
+        QueryTicketTool tool = new QueryTicketTool(ticketQueryService, springAiToolSupport);
+        when(ticketQueryService.getSummary(currentUser(), 1006L, TicketSummaryViewEnum.ADMIN)).thenReturn(TicketSummaryDTO.builder()
+                .view(TicketSummaryViewEnum.ADMIN)
+                .title("管理员风险摘要")
+                .summary("当前风险等级为高，需关注审批和处理推进。")
+                .highlights(List.of("审批仍未完成"))
+                .riskLevel("HIGH")
+                .build());
+
+        AgentToolResult result = tool.execute(AgentToolRequest.builder()
+                .currentUser(currentUser())
+                .parameters(AgentToolParameters.builder()
+                        .ticketId(1006L)
+                        .summaryRequested(true)
+                        .summaryView(TicketSummaryViewEnum.ADMIN)
+                        .build())
+                .build());
+
+        assertEquals(AgentToolStatus.SUCCESS, result.getStatus());
+        assertEquals(1006L, result.getActiveTicketId());
+        assertTrue(result.getReply().contains("管理员风险摘要"));
+        verify(ticketQueryService).getSummary(currentUser(), 1006L, TicketSummaryViewEnum.ADMIN);
+        verify(ticketQueryService, never()).getDetail(any(), any());
     }
 
     private CurrentUser currentUser() {

@@ -11,9 +11,11 @@ import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.TicketDetailDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
+import com.smartticket.biz.dto.TicketSummaryDTO;
 import com.smartticket.biz.service.TicketQueryService;
 import com.smartticket.common.response.PageResult;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.enums.TicketSummaryViewEnum;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -67,6 +69,9 @@ public class QueryTicketTool implements AgentTool {
 
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
+        if (Boolean.TRUE.equals(request.getParameters().getSummaryRequested())) {
+            return summarizeTicket(request);
+        }
         Long ticketId = request.getParameters().getTicketId();
         if (ticketId != null) {
             TicketDetailDTO detail = ticketQueryService.getDetail(request.getCurrentUser(), ticketId);
@@ -79,6 +84,25 @@ public class QueryTicketTool implements AgentTool {
         return AgentToolResults.success(NAME, "已查询最近可见工单列表。", page);
     }
 
+    private AgentToolResult summarizeTicket(AgentToolRequest request) {
+        Long ticketId = request.getParameters().getTicketId();
+        if (ticketId == null) {
+            return AgentToolResults.failed(NAME, "请先指定要摘要的工单 ID，或先查询某个工单后再继续提问。", null);
+        }
+        TicketSummaryDTO summary = ticketQueryService.getSummary(
+                request.getCurrentUser(),
+                ticketId,
+                request.getParameters().getSummaryView()
+        );
+        return AgentToolResults.success(
+                NAME,
+                buildSummaryReply(summary),
+                summary,
+                ticketId,
+                null
+        );
+    }
+
     /**
      * Spring AI Tool Calling 入口。
      *
@@ -86,16 +110,43 @@ public class QueryTicketTool implements AgentTool {
      * @param toolContext Spring AI Tool 上下文
      * @return Tool 执行结果
      */
-    @Tool(name = NAME, description = "查询当前工单事实数据。可按工单ID查详情；未提供ID时查询当前用户可见工单列表。该工具不检索历史知识库。")
+    @Tool(name = NAME, description = "查询当前工单事实数据，或按指定视角生成工单摘要。可按工单ID查详情；未提供ID时查询当前用户可见工单列表。该工具不检索历史知识库。")
     public AgentToolResult queryTicket(
             @ToolParam(required = false, description = "工单ID，为空时查询当前用户可见工单列表") Long ticketId,
+            @ToolParam(required = false, description = "是否返回工单摘要；true 时优先返回摘要") Boolean summaryRequested,
+            @ToolParam(required = false, description = "摘要视角：SUBMITTER、ASSIGNEE、ADMIN") String summaryView,
             ToolContext toolContext
     ) {
         return springAiToolSupport.execute(
                 this,
                 toolContext,
                 AgentIntent.QUERY_TICKET,
-                AgentToolParameters.builder().ticketId(ticketId).build()
+                AgentToolParameters.builder()
+                        .ticketId(ticketId)
+                        .summaryRequested(summaryRequested)
+                        .summaryView(parseSummaryView(summaryView))
+                        .build()
         );
+    }
+
+    private TicketSummaryViewEnum parseSummaryView(String summaryView) {
+        if (summaryView == null || summaryView.isBlank()) {
+            return null;
+        }
+        try {
+            return TicketSummaryViewEnum.fromCode(summaryView.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    private String buildSummaryReply(TicketSummaryDTO summary) {
+        if (summary == null) {
+            return "未生成摘要结果。";
+        }
+        String firstHighlight = summary.getHighlights() == null || summary.getHighlights().isEmpty()
+                ? ""
+                : " 重点：" + summary.getHighlights().get(0);
+        return summary.getTitle() + "：" + summary.getSummary() + firstHighlight;
     }
 }

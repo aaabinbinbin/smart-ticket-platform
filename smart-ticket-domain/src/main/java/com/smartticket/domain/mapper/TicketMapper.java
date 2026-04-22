@@ -26,13 +26,13 @@ public interface TicketMapper {
 
     List<Ticket> findByStatus(@Param("status") TicketStatusEnum status);
 
-    List<Ticket> pageAll(@Param("status") String status, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
+    List<Ticket> pageAll(@Param("status") String status, @Param("type") String type, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
 
-    long countAll(@Param("status") String status, @Param("category") String category, @Param("priority") String priority);
+    long countAll(@Param("status") String status, @Param("type") String type, @Param("category") String category, @Param("priority") String priority);
 
-    List<Ticket> pageVisible(@Param("userId") Long userId, @Param("status") String status, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
+    List<Ticket> pageVisible(@Param("userId") Long userId, @Param("status") String status, @Param("type") String type, @Param("category") String category, @Param("priority") String priority, @Param("offset") int offset, @Param("limit") int limit);
 
-    long countVisible(@Param("userId") Long userId, @Param("status") String status, @Param("category") String category, @Param("priority") String priority);
+    long countVisible(@Param("userId") Long userId, @Param("status") String status, @Param("type") String type, @Param("category") String category, @Param("priority") String priority);
 
     int updateAssignee(@Param("id") Long id, @Param("assigneeId") Long assigneeId, @Param("expectedStatus") TicketStatusEnum expectedStatus);
 

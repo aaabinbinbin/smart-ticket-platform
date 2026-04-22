@@ -4,8 +4,6 @@ import java.util.Arrays;
 
 /**
  * 工单分类枚举。
- *
- * <p>用于标识问题所属类别，前后端通过 code 交互。</p>
  */
 public enum TicketCategoryEnum implements CodeInfoEnum {
     ACCOUNT("ACCOUNT", "账号权限"),
@@ -21,10 +19,12 @@ public enum TicketCategoryEnum implements CodeInfoEnum {
         this.info = info;
     }
 
+    @Override
     public String getCode() {
         return code;
     }
 
+    @Override
     public String getInfo() {
         return info;
     }

@@ -35,12 +35,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        // 1. 从请求头拿 Token
         String token = resolveToken(request);
         if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
+                // 2. 验证 Token 是否合法（签名、过期）
                 jwtTokenProvider.validateToken(token);
+                // 3. 从 Token 里拿出用户名
                 String username = jwtTokenProvider.getUsername(token);
+                // 4. 根据用户名查数据库，获取最新权限
                 UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                // 5. 把用户信息存入 Spring Security 上下文
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         userDetails,
                         null,
@@ -53,6 +58,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 SecurityContextHolder.clearContext();
             }
         }
+        // 6. 放行，去执行 Controller
         filterChain.doFilter(request, response);
     }
 

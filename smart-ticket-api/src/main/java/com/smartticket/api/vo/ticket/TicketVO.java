@@ -2,26 +2,25 @@ package com.smartticket.api.vo.ticket;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.LocalDateTime;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/**
- * 工单基础响应对象。
- *
- * <p>用于创建、分配、状态更新、关闭和分页列表等接口返回工单主信息。</p>
- */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "工单响应对象")
+@Schema(description = "������Ӧ����")
 public class TicketVO {
     private Long id;
     private String ticketNo;
     private String title;
     private String description;
+    private String type;
+    private String typeInfo;
+    private Map<String, Object> typeProfile;
     private String category;
     private String categoryInfo;
     private String priority;

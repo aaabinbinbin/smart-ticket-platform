@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketTypeProfileMapper">
+
+    <resultMap id="ticketTypeProfileResultMap" type="com.smartticket.domain.entity.TicketTypeProfile">
+        <id property="id" column="id"/>
+        <result property="ticketId" column="ticket_id"/>
+        <result property="profileSchema" column="profile_schema"/>
+        <result property="profileData" column="profile_data"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketTypeProfile"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_type_profile (ticket_id, profile_schema, profile_data)
+        VALUES (#{ticketId}, #{profileSchema}, #{profileData})
+    </insert>
+
+    <update id="updateByTicketId">
+        UPDATE ticket_type_profile
+        SET profile_schema = #{profileSchema},
+            profile_data = #{profileData}
+        WHERE ticket_id = #{ticketId}
+    </update>
+
+    <select id="findByTicketId" resultMap="ticketTypeProfileResultMap">
+        SELECT id, ticket_id, profile_schema, profile_data, created_at, updated_at
+        FROM ticket_type_profile
+        WHERE ticket_id = #{ticketId}
+    </select>
+
+    <select id="findByTicketIds" resultMap="ticketTypeProfileResultMap">
+        SELECT id, ticket_id, profile_schema, profile_data, created_at, updated_at
+        FROM ticket_type_profile
+        WHERE ticket_id IN
+        <foreach collection="ticketIds" item="ticketId" open="(" close=")" separator=",">
+            #{ticketId}
+        </foreach>
+    </select>
+</mapper>

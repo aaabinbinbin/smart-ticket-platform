@@ -46,16 +46,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // CSRF 防护主要针对 Cookie+Session 模式。我们现在用 JWT（放在 Header 里），天然免疫 CSRF，所以关掉它可以减少不必要的开销。
                 .csrf(csrf -> csrf.disable())
+                // 设置无状态会话，每次请求都自己带 Token 来验证
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler)
                 )
+                // 白名单
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/login", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
+                // 注册 JWT 过滤器
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

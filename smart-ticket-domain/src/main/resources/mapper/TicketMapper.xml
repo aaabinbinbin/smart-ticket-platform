@@ -4,36 +4,62 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.smartticket.domain.mapper.TicketMapper">
 
+    <resultMap id="ticketResultMap" type="com.smartticket.domain.entity.Ticket">
+        <id property="id" column="id"/>
+        <result property="ticketNo" column="ticket_no"/>
+        <result property="title" column="title"/>
+        <result property="description" column="description"/>
+        <result property="type" column="ticket_type"/>
+        <result property="category" column="category"/>
+        <result property="priority" column="priority"/>
+        <result property="status" column="status"/>
+        <result property="creatorId" column="creator_id"/>
+        <result property="assigneeId" column="assignee_id"/>
+        <result property="groupId" column="group_id"/>
+        <result property="queueId" column="queue_id"/>
+        <result property="solutionSummary" column="solution_summary"/>
+        <result property="source" column="source"/>
+        <result property="idempotencyKey" column="idempotency_key"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="ticketColumns">
+        id, ticket_no, title, description, ticket_type, category, priority, status,
+        creator_id, assignee_id, group_id, queue_id, solution_summary, source, idempotency_key,
+        created_at, updated_at
+    </sql>
+
     <insert id="insert" parameterType="com.smartticket.domain.entity.Ticket"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ticket (
-            ticket_no, title, description, category, priority, status,
+            ticket_no, title, description, ticket_type, category, priority, status,
             creator_id, assignee_id, group_id, queue_id, solution_summary, source, idempotency_key
         )
         VALUES (
-            #{ticketNo}, #{title}, #{description}, #{category.code}, #{priority.code}, #{status.code},
+            #{ticketNo}, #{title}, #{description}, #{type.code}, #{category.code}, #{priority.code}, #{status.code},
             #{creatorId}, #{assigneeId}, #{groupId}, #{queueId}, #{solutionSummary}, #{source}, #{idempotencyKey}
         )
     </insert>
 
-    <select id="findById" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE id = #{id}
+    <select id="findById" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE id = #{id}
     </select>
 
-    <select id="findVisibleById" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE id = #{id} AND (creator_id = #{userId} OR assignee_id = #{userId})
+    <select id="findVisibleById" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE id = #{id} AND (creator_id = #{userId} OR assignee_id = #{userId})
     </select>
 
-    <select id="findByTicketNo" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE ticket_no = #{ticketNo}
+    <select id="findByTicketNo" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE ticket_no = #{ticketNo}
     </select>
 
-    <select id="findByCreatorId" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE creator_id = #{creatorId} ORDER BY created_at DESC
+    <select id="findByCreatorId" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE creator_id = #{creatorId} ORDER BY created_at DESC
     </select>
 
-    <select id="findByAssigneeId" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE assignee_id = #{assigneeId} ORDER BY created_at DESC
+    <select id="findByAssigneeId" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE assignee_id = #{assigneeId} ORDER BY created_at DESC
     </select>
 
     <select id="countOpenAssignedTickets" resultType="long">
@@ -43,14 +69,15 @@
           AND status IN ('PENDING_ASSIGN', 'PROCESSING', 'RESOLVED')
     </select>
 
-    <select id="findByStatus" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket WHERE status = #{status.code} ORDER BY created_at DESC
+    <select id="findByStatus" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket WHERE status = #{status.code} ORDER BY created_at DESC
     </select>
 
-    <select id="pageAll" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket
+    <select id="pageAll" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket
         WHERE 1 = 1
         <if test="status != null">AND status = #{status}</if>
+        <if test="type != null">AND ticket_type = #{type}</if>
         <if test="category != null">AND category = #{category}</if>
         <if test="priority != null">AND priority = #{priority}</if>
         ORDER BY created_at DESC
@@ -61,14 +88,16 @@
         SELECT COUNT(1) FROM ticket
         WHERE 1 = 1
         <if test="status != null">AND status = #{status}</if>
+        <if test="type != null">AND ticket_type = #{type}</if>
         <if test="category != null">AND category = #{category}</if>
         <if test="priority != null">AND priority = #{priority}</if>
     </select>
 
-    <select id="pageVisible" resultType="com.smartticket.domain.entity.Ticket">
-        SELECT * FROM ticket
+    <select id="pageVisible" resultMap="ticketResultMap">
+        SELECT <include refid="ticketColumns"/> FROM ticket
         WHERE (creator_id = #{userId} OR assignee_id = #{userId})
         <if test="status != null">AND status = #{status}</if>
+        <if test="type != null">AND ticket_type = #{type}</if>
         <if test="category != null">AND category = #{category}</if>
         <if test="priority != null">AND priority = #{priority}</if>
         ORDER BY created_at DESC
@@ -79,6 +108,7 @@
         SELECT COUNT(1) FROM ticket
         WHERE (creator_id = #{userId} OR assignee_id = #{userId})
         <if test="status != null">AND status = #{status}</if>
+        <if test="type != null">AND ticket_type = #{type}</if>
         <if test="category != null">AND category = #{category}</if>
         <if test="priority != null">AND priority = #{priority}</if>
     </select>

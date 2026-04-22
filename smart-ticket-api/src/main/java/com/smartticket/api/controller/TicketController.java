@@ -5,15 +5,21 @@ import com.smartticket.api.dto.ticket.AddTicketCommentRequestDTO;
 import com.smartticket.api.dto.ticket.AssignTicketRequestDTO;
 import com.smartticket.api.dto.ticket.BindTicketQueueRequestDTO;
 import com.smartticket.api.dto.ticket.CreateTicketRequestDTO;
+import com.smartticket.api.dto.ticket.DecideTicketApprovalRequestDTO;
+import com.smartticket.api.dto.ticket.SubmitTicketApprovalRequestDTO;
 import com.smartticket.api.dto.ticket.UpdateTicketStatusRequestDTO;
+import com.smartticket.api.vo.ticket.TicketApprovalVO;
 import com.smartticket.api.vo.ticket.TicketCommentVO;
 import com.smartticket.api.vo.ticket.TicketDetailVO;
+import com.smartticket.api.vo.ticket.TicketSummaryVO;
 import com.smartticket.api.vo.ticket.TicketVO;
 import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.dto.TicketCreateCommandDTO;
 import com.smartticket.biz.dto.TicketPageQueryDTO;
+import com.smartticket.biz.dto.TicketSummaryDTO;
 import com.smartticket.biz.dto.TicketUpdateStatusCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.biz.service.TicketApprovalService;
 import com.smartticket.biz.service.TicketCommandService;
 import com.smartticket.biz.service.TicketCommentService;
 import com.smartticket.biz.service.TicketQueryService;
@@ -24,9 +30,12 @@ import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.ApiResponse;
 import com.smartticket.common.response.PageResult;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.entity.TicketApproval;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import com.smartticket.domain.enums.TicketSummaryViewEnum;
+import com.smartticket.domain.enums.TicketTypeEnum;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -46,20 +55,17 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * 宸ュ崟 HTTP 鎺ュ彛鎺у埗鍣ㄣ€? *
- * <p>璐熻矗鎺ユ敹宸ュ崟鐩稿叧 HTTP 璇锋眰锛屽畬鎴愬弬鏁拌浆鎹㈠拰鍝嶅簲缁勮锛涘叿浣撲笟鍔¤鍒欑敱 {@link TicketService} 澶勭悊銆?/p>
- */
 @Validated
 @RestController
 @RequestMapping("/api/tickets")
-@Tag(name = "宸ュ崟鏍稿績鎺ュ彛", description = "鍒涘缓銆佹煡璇€佸垎閰嶃€佽浆娲俱€佺姸鎬佹洿鏂般€佽瘎璁哄拰鍏抽棴宸ュ崟")
+@Tag(name = "�������Ľӿ�", description = "��������ѯ�����䡢���졢ת�ɡ�������״̬���¡����ۺ͹رչ���")
 public class TicketController {
     private final TicketCommandService ticketCommandService;
     private final TicketQueryService ticketQueryService;
     private final TicketWorkflowService ticketWorkflowService;
     private final TicketCommentService ticketCommentService;
     private final TicketQueueBindingService ticketQueueBindingService;
+    private final TicketApprovalService ticketApprovalService;
     private final TicketAssembler ticketAssembler;
 
     public TicketController(
@@ -68,6 +74,7 @@ public class TicketController {
             TicketWorkflowService ticketWorkflowService,
             TicketCommentService ticketCommentService,
             TicketQueueBindingService ticketQueueBindingService,
+            TicketApprovalService ticketApprovalService,
             TicketAssembler ticketAssembler
     ) {
         this.ticketCommandService = ticketCommandService;
@@ -75,11 +82,12 @@ public class TicketController {
         this.ticketWorkflowService = ticketWorkflowService;
         this.ticketCommentService = ticketCommentService;
         this.ticketQueueBindingService = ticketQueueBindingService;
+        this.ticketApprovalService = ticketApprovalService;
         this.ticketAssembler = ticketAssembler;
     }
 
     @PostMapping
-    @Operation(summary = "鍒涘缓宸ュ崟", description = "鍒涘缓鍚庣殑宸ュ崟鍒濆鐘舵€佷负 PENDING_ASSIGN")
+    @Operation(summary = "��������", description = "������Ĺ�����ʼ״̬Ϊ PENDING_ASSIGN")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -88,6 +96,8 @@ public class TicketController {
         Ticket ticket = ticketCommandService.createTicket(currentUser(authentication), TicketCreateCommandDTO.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
+                .type(parseType(request.getType()))
+                .typeProfile(request.getTypeProfile())
                 .category(parseCategory(request.getCategory()))
                 .priority(parsePriority(request.getPriority()))
                 .idempotencyKey(resolveIdempotencyKey(idempotencyKey, request.getIdempotencyKey()))
@@ -96,23 +106,88 @@ public class TicketController {
     }
 
     @GetMapping("/{ticketId}")
-    @Operation(summary = "鏌ヨ宸ュ崟璇︽儏", description = "杩斿洖宸ュ崟涓讳俊鎭€佽瘎璁哄垪琛ㄥ拰鎿嶄綔鏃ュ織")
+    @Operation(summary = "��ѯ��������", description = "���ع�������Ϣ��������Ϣ�������б�Ͳ�����־")
     public ApiResponse<TicketDetailVO> getTicketDetail(
             Authentication authentication,
-            @Parameter(description = "宸ュ崟 ID") @PathVariable("ticketId") Long ticketId
+            @Parameter(description = "���� ID") @PathVariable("ticketId") Long ticketId
     ) {
         return ApiResponse.success(ticketAssembler.toDetailVO(ticketQueryService.getDetail(currentUser(authentication), ticketId)));
     }
 
+    @GetMapping("/{ticketId}/summary")
+    @Operation(summary = "查询工单摘要", description = "支持提单人、处理人和管理员三种摘要视角")
+    public ApiResponse<TicketSummaryVO> getTicketSummary(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId,
+            @RequestParam(value = "view", required = false) String view
+    ) {
+        TicketSummaryDTO summary = ticketQueryService.getSummary(
+                currentUser(authentication),
+                ticketId,
+                parseSummaryView(view)
+        );
+        return ApiResponse.success(ticketAssembler.toSummaryVO(summary));
+    }
+
+    @GetMapping("/{ticketId}/approval")
+    @Operation(summary = "��ѯ������������", description = "������Ҫ�����Ĺ�������������¼")
+    public ApiResponse<TicketApprovalVO> getApproval(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId
+    ) {
+        TicketApproval approval = ticketApprovalService.getApproval(currentUser(authentication), ticketId);
+        return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
+    }
+
+    @PostMapping("/{ticketId}/approval/submit")
+    @Operation(summary = "�ύ��������", description = "֧�ְ�ģ�����ɶ༶������Ҳ֧�ֶ��׵�������")
+    public ApiResponse<TicketApprovalVO> submitApproval(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId,
+            @Valid @RequestBody SubmitTicketApprovalRequestDTO request
+    ) {
+        TicketApproval approval = ticketApprovalService.submitApproval(
+                currentUser(authentication),
+                ticketId,
+                request.getTemplateId(),
+                request.getApproverId(),
+                request.getSubmitComment()
+        );
+        return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
+    }
+
+    @PostMapping("/{ticketId}/approval/approve")
+    @Operation(summary = "����ͨ��", description = "��ǰ���������˻����Ա��ִ������ͨ��")
+    public ApiResponse<TicketApprovalVO> approve(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId,
+            @Valid @RequestBody DecideTicketApprovalRequestDTO request
+    ) {
+        TicketApproval approval = ticketApprovalService.approve(currentUser(authentication), ticketId, request.getDecisionComment());
+        return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
+    }
+
+    @PostMapping("/{ticketId}/approval/reject")
+    @Operation(summary = "��������", description = "��ǰ���������˻����Ա��ִ����������")
+    public ApiResponse<TicketApprovalVO> reject(
+            Authentication authentication,
+            @PathVariable("ticketId") Long ticketId,
+            @Valid @RequestBody DecideTicketApprovalRequestDTO request
+    ) {
+        TicketApproval approval = ticketApprovalService.reject(currentUser(authentication), ticketId, request.getDecisionComment());
+        return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
+    }
+
     @GetMapping
-    @Operation(summary = "鍒嗛〉鏌ヨ宸ュ崟鍒楄〃", description = "绠＄悊鍛樺彲鐪嬪叏閮紝鏅€氱敤鎴峰彧鐪嬭嚜宸卞垱寤烘垨褰撳墠璐熻矗鐨勫伐鍗?)
+    @Operation(summary = "��ҳ��ѯ�����б�", description = "����Ա�ɲ鿴ȫ������ͨ�û������Լ�������ǰ����Ĺ���")
     public ApiResponse<PageResult<TicketVO>> pageTickets(
             Authentication authentication,
-            @Min(value = 1, message = "椤电爜涓嶈兘灏忎簬 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
-            @Min(value = 1, message = "姣忛〉澶у皬涓嶈兘灏忎簬 1")
-            @Max(value = 100, message = "姣忛〉澶у皬涓嶈兘瓒呰繃 100")
+            @Min(value = 1, message = "ҳ�벻��С�� 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
+            @Min(value = 1, message = "ÿҳ��С����С�� 1")
+            @Max(value = 100, message = "ÿҳ��С���ܳ��� 100")
             @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
             @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "type", required = false) String type,
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "priority", required = false) String priority
     ) {
@@ -120,20 +195,20 @@ public class TicketController {
                 .pageNo(pageNo)
                 .pageSize(pageSize)
                 .status(parseStatus(status))
+                .type(parseType(type))
                 .category(parseCategory(category))
                 .priority(parsePriority(priority))
                 .build());
-        PageResult<TicketVO> result = PageResult.<TicketVO>builder()
+        return ApiResponse.success(PageResult.<TicketVO>builder()
                 .pageNo(page.getPageNo())
                 .pageSize(page.getPageSize())
                 .total(page.getTotal())
                 .records(page.getRecords().stream().map(ticketAssembler::toVO).toList())
-                .build();
-        return ApiResponse.success(result);
+                .build());
     }
 
     @PutMapping("/{ticketId}/assign")
-    @Operation(summary = "鍒嗛厤宸ュ崟", description = "绠＄悊鍛樺垎閰嶅緟鍒嗛厤宸ュ崟锛岀姸鎬佷粠 PENDING_ASSIGN 娴佽浆涓?PROCESSING")
+    @Operation(summary = "���乤��", description = "����Ա�������乤������������ˣ����ƽ��� PROCESSING")
     public ApiResponse<TicketVO> assignTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -144,7 +219,7 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/claim")
-    @Operation(summary = "认领工单", description = "队列成员、组负责人或管理员可认领待分配工单")
+    @Operation(summary = "���칤��", description = "���г�Ա���鸺���˻����Ա����������乤��")
     public ApiResponse<TicketVO> claimTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -154,7 +229,7 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/queue")
-    @Operation(summary = "缁戝畾宸ュ崟闃熷垪", description = "绠＄悊鍛樺皢宸ュ崟缁戝畾鍒版寚瀹氬伐鍗曠粍鍜岄槦鍒楋紝涓嶄慨鏀瑰鐞嗕汉鍜岀姸鎬?)
+    @Operation(summary = "�󶨹�������", description = "����Ա�������󶨵�ָ��������Ͷ��У����޸Ĵ����˺�״̬")
     public ApiResponse<TicketVO> bindTicketQueue(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -170,7 +245,7 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/transfer")
-    @Operation(summary = "杞淳宸ュ崟", description = "褰撳墠璐熻矗浜烘垨绠＄悊鍛樺彲杞淳澶勭悊涓殑宸ュ崟")
+    @Operation(summary = "ת�ɹ���", description = "��ǰ�����˻����Ա��ת�ɴ����й���")
     public ApiResponse<TicketVO> transferTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -181,7 +256,7 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/status")
-    @Operation(summary = "鏇存柊宸ュ崟鐘舵€?, description = "鍙厑璁?PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED")
+    @Operation(summary = "���¹���״̬", description = "ֻ���� PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED")
     public ApiResponse<TicketVO> updateStatus(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -195,7 +270,7 @@ public class TicketController {
     }
 
     @PostMapping("/{ticketId}/comments")
-    @Operation(summary = "娣诲姞宸ュ崟璇勮", description = "鎻愬崟浜恒€佸綋鍓嶈礋璐ｄ汉鎴栫鐞嗗憳鍙互瀵规湭鍏抽棴宸ュ崟娣诲姞璇勮")
+    @Operation(summary = "��ӹ�������", description = "�ᵥ�ˡ���ǰ�����˻����Ա���Զ�δ�رչ����������")
     public ApiResponse<TicketCommentVO> addComment(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -207,19 +282,20 @@ public class TicketController {
     }
 
     @PutMapping("/{ticketId}/close")
-    @Operation(summary = "鍏抽棴宸ュ崟", description = "鎻愬崟浜烘垨绠＄悊鍛樺叧闂凡瑙ｅ喅宸ュ崟锛岀姸鎬佷粠 RESOLVED 娴佽浆涓?CLOSED")
+    @Operation(summary = "�رչ���", description = "�ᵥ�˻����Ա�ر��ѽ������")
     public ApiResponse<TicketVO> closeTicket(Authentication authentication, @PathVariable("ticketId") Long ticketId) {
         Ticket ticket = ticketWorkflowService.closeTicket(currentUser(authentication), ticketId);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
     private CurrentUser currentUser(Authentication authentication) {
-        AuthUser authUser = (AuthUser) authentication.getPrincipal();
+        if (authentication == null || !(authentication.getPrincipal() instanceof AuthUser authUser)) {
+            throw new BusinessException(BusinessErrorCode.UNAUTHORIZED);
+        }
         return CurrentUser.builder()
                 .userId(authUser.getUserId())
                 .username(authUser.getUsername())
-                .roles(authentication.getAuthorities()
-                        .stream()
+                .roles(authentication.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .map(authority -> authority.replace("ROLE_", ""))
                         .toList())
@@ -231,9 +307,20 @@ public class TicketController {
             return null;
         }
         try {
-            return TicketStatusEnum.fromCode(code);
+            return TicketStatusEnum.fromCode(code.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS, code);
+        }
+    }
+
+    private TicketTypeEnum parseType(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        try {
+            return TicketTypeEnum.fromCode(code.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_TYPE, code);
         }
     }
 
@@ -242,7 +329,7 @@ public class TicketController {
             return null;
         }
         try {
-            return TicketCategoryEnum.fromCode(code);
+            return TicketCategoryEnum.fromCode(code.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_CATEGORY, code);
         }
@@ -253,7 +340,7 @@ public class TicketController {
             return null;
         }
         try {
-            return TicketPriorityEnum.fromCode(code);
+            return TicketPriorityEnum.fromCode(code.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_PRIORITY, code);
         }
@@ -264,5 +351,16 @@ public class TicketController {
             return headerValue;
         }
         return bodyValue;
+    }
+
+    private TicketSummaryViewEnum parseSummaryView(String code) {
+        if (code == null || code.isBlank()) {
+            return null;
+        }
+        try {
+            return TicketSummaryViewEnum.fromCode(code.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_SUMMARY_VIEW, code);
+        }
     }
 }

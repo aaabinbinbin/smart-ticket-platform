@@ -1,20 +1,23 @@
 package com.smartticket.api.assembler;
 
+import com.smartticket.api.vo.ticket.TicketApprovalStepVO;
+import com.smartticket.api.vo.ticket.TicketApprovalVO;
 import com.smartticket.api.vo.ticket.TicketCommentVO;
 import com.smartticket.api.vo.ticket.TicketDetailVO;
 import com.smartticket.api.vo.ticket.TicketOperationLogVO;
+import com.smartticket.api.vo.ticket.TicketSummaryBundleVO;
+import com.smartticket.api.vo.ticket.TicketSummaryVO;
 import com.smartticket.api.vo.ticket.TicketVO;
 import com.smartticket.biz.dto.TicketDetailDTO;
+import com.smartticket.biz.dto.TicketSummaryBundleDTO;
+import com.smartticket.biz.dto.TicketSummaryDTO;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.entity.TicketApproval;
+import com.smartticket.domain.entity.TicketApprovalStep;
 import com.smartticket.domain.entity.TicketComment;
 import com.smartticket.domain.entity.TicketOperationLog;
 import org.springframework.stereotype.Component;
 
-/**
- * 工单 API 响应组装器。
- *
- * <p>负责把 domain/biz 对象转换成 HTTP VO，避免 Controller 中堆积字段转换代码。</p>
- */
 @Component
 public class TicketAssembler {
 
@@ -27,6 +30,9 @@ public class TicketAssembler {
                 .ticketNo(ticket.getTicketNo())
                 .title(ticket.getTitle())
                 .description(ticket.getDescription())
+                .type(ticket.getType() == null ? null : ticket.getType().getCode())
+                .typeInfo(ticket.getType() == null ? null : ticket.getType().getInfo())
+                .typeProfile(ticket.getTypeProfile())
                 .category(ticket.getCategory() == null ? null : ticket.getCategory().getCode())
                 .categoryInfo(ticket.getCategory() == null ? null : ticket.getCategory().getInfo())
                 .priority(ticket.getPriority() == null ? null : ticket.getPriority().getCode())
@@ -44,7 +50,51 @@ public class TicketAssembler {
                 .build();
     }
 
+    public TicketApprovalVO toApprovalVO(TicketApproval approval) {
+        if (approval == null) {
+            return null;
+        }
+        return TicketApprovalVO.builder()
+                .id(approval.getId())
+                .ticketId(approval.getTicketId())
+                .templateId(approval.getTemplateId())
+                .currentStepOrder(approval.getCurrentStepOrder())
+                .approvalStatus(approval.getApprovalStatus() == null ? null : approval.getApprovalStatus().getCode())
+                .approvalStatusInfo(approval.getApprovalStatus() == null ? null : approval.getApprovalStatus().getInfo())
+                .approverId(approval.getApproverId())
+                .requestedBy(approval.getRequestedBy())
+                .submitComment(approval.getSubmitComment())
+                .decisionComment(approval.getDecisionComment())
+                .submittedAt(approval.getSubmittedAt())
+                .decidedAt(approval.getDecidedAt())
+                .createdAt(approval.getCreatedAt())
+                .updatedAt(approval.getUpdatedAt())
+                .steps(approval.getSteps() == null ? null : approval.getSteps().stream().map(this::toApprovalStepVO).toList())
+                .build();
+    }
+
+    public TicketApprovalStepVO toApprovalStepVO(TicketApprovalStep step) {
+        if (step == null) {
+            return null;
+        }
+        return TicketApprovalStepVO.builder()
+                .id(step.getId())
+                .stepOrder(step.getStepOrder())
+                .stepName(step.getStepName())
+                .approverId(step.getApproverId())
+                .stepStatus(step.getStepStatus() == null ? null : step.getStepStatus().getCode())
+                .stepStatusInfo(step.getStepStatus() == null ? null : step.getStepStatus().getInfo())
+                .decisionComment(step.getDecisionComment())
+                .decidedAt(step.getDecidedAt())
+                .createdAt(step.getCreatedAt())
+                .updatedAt(step.getUpdatedAt())
+                .build();
+    }
+
     public TicketCommentVO toCommentVO(TicketComment comment) {
+        if (comment == null) {
+            return null;
+        }
         return TicketCommentVO.builder()
                 .id(comment.getId())
                 .ticketId(comment.getTicketId())
@@ -56,6 +106,9 @@ public class TicketAssembler {
     }
 
     public TicketOperationLogVO toLogVO(TicketOperationLog log) {
+        if (log == null) {
+            return null;
+        }
         return TicketOperationLogVO.builder()
                 .id(log.getId())
                 .ticketId(log.getTicketId())
@@ -72,8 +125,36 @@ public class TicketAssembler {
     public TicketDetailVO toDetailVO(TicketDetailDTO detail) {
         return TicketDetailVO.builder()
                 .ticket(toVO(detail.getTicket()))
+                .approval(toApprovalVO(detail.getApproval()))
                 .comments(detail.getComments().stream().map(this::toCommentVO).toList())
                 .operationLogs(detail.getOperationLogs().stream().map(this::toLogVO).toList())
+                .summaries(toSummaryBundleVO(detail.getSummaries()))
+                .build();
+    }
+
+    public TicketSummaryVO toSummaryVO(TicketSummaryDTO summary) {
+        if (summary == null) {
+            return null;
+        }
+        return TicketSummaryVO.builder()
+                .view(summary.getView() == null ? null : summary.getView().getCode())
+                .viewInfo(summary.getView() == null ? null : summary.getView().getInfo())
+                .title(summary.getTitle())
+                .summary(summary.getSummary())
+                .highlights(summary.getHighlights())
+                .riskLevel(summary.getRiskLevel())
+                .generatedAt(summary.getGeneratedAt())
+                .build();
+    }
+
+    public TicketSummaryBundleVO toSummaryBundleVO(TicketSummaryBundleDTO bundle) {
+        if (bundle == null) {
+            return null;
+        }
+        return TicketSummaryBundleVO.builder()
+                .submitterSummary(toSummaryVO(bundle.getSubmitterSummary()))
+                .assigneeSummary(toSummaryVO(bundle.getAssigneeSummary()))
+                .adminSummary(toSummaryVO(bundle.getAdminSummary()))
                 .build();
     }
 }

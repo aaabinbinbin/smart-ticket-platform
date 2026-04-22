@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketApprovalTemplateMapper">
+
+    <resultMap id="ticketApprovalTemplateResultMap" type="com.smartticket.domain.entity.TicketApprovalTemplate">
+        <id property="id" column="id"/>
+        <result property="templateName" column="template_name"/>
+        <result property="ticketType" column="ticket_type"/>
+        <result property="description" column="description"/>
+        <result property="enabled" column="enabled"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketApprovalTemplate"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_approval_template (template_name, ticket_type, description, enabled)
+        VALUES (#{templateName}, #{ticketType.code}, #{description}, #{enabled})
+    </insert>
+
+    <update id="update" parameterType="com.smartticket.domain.entity.TicketApprovalTemplate">
+        UPDATE ticket_approval_template
+        SET template_name = #{templateName},
+            ticket_type = #{ticketType.code},
+            description = #{description},
+            enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+
+    <select id="findById" resultMap="ticketApprovalTemplateResultMap">
+        SELECT id, template_name, ticket_type, description, enabled, created_at, updated_at
+        FROM ticket_approval_template
+        WHERE id = #{id}
+    </select>
+
+    <select id="findEnabledByTicketType" resultMap="ticketApprovalTemplateResultMap">
+        SELECT id, template_name, ticket_type, description, enabled, created_at, updated_at
+        FROM ticket_approval_template
+        WHERE ticket_type = #{ticketType}
+          AND enabled = 1
+        ORDER BY id ASC
+        LIMIT 1
+    </select>
+
+    <select id="page" resultMap="ticketApprovalTemplateResultMap">
+        SELECT id, template_name, ticket_type, description, enabled, created_at, updated_at
+        FROM ticket_approval_template
+        WHERE 1 = 1
+        <if test="ticketType != null">AND ticket_type = #{ticketType}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+        ORDER BY created_at DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_approval_template
+        WHERE 1 = 1
+        <if test="ticketType != null">AND ticket_type = #{ticketType}</if>
+        <if test="enabled != null">AND enabled = #{enabled}</if>
+    </select>
+
+    <update id="updateEnabled">
+        UPDATE ticket_approval_template
+        SET enabled = #{enabled}
+        WHERE id = #{id}
+    </update>
+</mapper>

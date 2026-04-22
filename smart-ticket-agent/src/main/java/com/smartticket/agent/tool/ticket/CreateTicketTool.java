@@ -17,6 +17,7 @@ import com.smartticket.biz.service.TicketCommandService;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
+import com.smartticket.domain.enums.TicketTypeEnum;
 import com.smartticket.rag.model.RetrievalResult;
 import com.smartticket.rag.service.RetrievalService;
 import java.util.List;
@@ -30,34 +31,16 @@ import org.springframework.stereotype.Component;
 /**
  * 创建工单 Tool。
  *
- * <p>该 Tool 可以做创建前相似案例参考，但真正创建动作必须通过 biz 层
- * {@link TicketCommandService#createTicket} 完成，不直接写 repository。</p>
+ * <p>支持在创建前检索相似案例，但真正的创建逻辑仍由 biz 层负责。</p>
  */
 @Component
 public class CreateTicketTool implements AgentTool {
     private static final String NAME = "createTicket";
 
-    /**
-     * 工单业务服务，负责创建、幂等、日志和业务校验。
-     */
     private final TicketCommandService ticketCommandService;
-
-    /**
-     * Tool 参数校验器。
-     */
     private final AgentToolRequestValidator validator;
-
-    /**
-     * 历史知识检索服务，用于创建前相似案例参考。
-     */
     private final RetrievalService retrievalService;
-
-    /**
-     * Spring AI Tool Calling 适配支持。
-     */
     private final SpringAiToolSupport springAiToolSupport;
-
-    /** 创建前分流建议阈值。 */
     private final double deflectionThreshold;
 
     public CreateTicketTool(
@@ -94,9 +77,7 @@ public class CreateTicketTool implements AgentTool {
                 .requireConfirmation(false)
                 .requiredFields(List.of(
                         AgentToolParameterField.TITLE,
-                        AgentToolParameterField.DESCRIPTION,
-                        AgentToolParameterField.CATEGORY,
-                        AgentToolParameterField.PRIORITY
+                        AgentToolParameterField.DESCRIPTION
                 ))
                 .build();
     }
@@ -120,6 +101,7 @@ public class CreateTicketTool implements AgentTool {
         Ticket ticket = ticketCommandService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
                 .title(request.getParameters().getTitle())
                 .description(request.getParameters().getDescription())
+                .type(request.getParameters().getType())
                 .category(request.getParameters().getCategory())
                 .priority(request.getParameters().getPriority())
                 .idempotencyKey(request.getParameters().getIdempotencyKey())
@@ -146,7 +128,7 @@ public class CreateTicketTool implements AgentTool {
             return "已创建工单。";
         }
         if (deflectionSuggested && userAlreadyTried) {
-            return "已创建工单。检测到相似历史方案，但你已说明试过相关处理，因此未做分流拦截，仅附上相似案例供处理人参考。";
+            return "已创建工单。检测到相似历史方案，但你已经说明试过相关处理，因此未做分流拦截，仅附上相似案例供处理人参考。";
         }
         if (deflectionSuggested) {
             return "已创建工单，并附上高相关历史案例。当前结果可用于创建前分流参考，但不会阻止本次创建。";
@@ -171,21 +153,11 @@ public class CreateTicketTool implements AgentTool {
                 || text.toLowerCase().contains("already tried");
     }
 
-    /**
-     * Spring AI Tool Calling 入口。
-     *
-     * @param title 工单标题
-     * @param description 问题描述
-     * @param category 工单分类编码
-     * @param priority 优先级编码
-     * @param idempotencyKey 可选幂等键
-     * @param toolContext Spring AI Tool 上下文
-     * @return Tool 执行结果
-     */
-    @Tool(name = NAME, description = "创建新工单。写操作必须通过biz层TicketService执行，并复用创建幂等逻辑。")
+    @Tool(name = NAME, description = "创建新工单，内部会复用业务层的幂等和校验逻辑")
     public AgentToolResult createTicket(
             @ToolParam(description = "工单标题") String title,
             @ToolParam(description = "问题描述") String description,
+            @ToolParam(required = false, description = "工单类型编码：INCIDENT、ACCESS_REQUEST、ENVIRONMENT_REQUEST、CONSULTATION、CHANGE_REQUEST") String type,
             @ToolParam(required = false, description = "工单分类编码：ACCOUNT、SYSTEM、ENVIRONMENT、OTHER") String category,
             @ToolParam(required = false, description = "优先级编码：LOW、MEDIUM、HIGH、URGENT") String priority,
             @ToolParam(required = false, description = "创建幂等键，相同用户和相同幂等键重复提交时返回第一次创建结果") String idempotencyKey,
@@ -198,6 +170,7 @@ public class CreateTicketTool implements AgentTool {
                 AgentToolParameters.builder()
                         .title(title)
                         .description(description)
+                        .type(parseType(type))
                         .category(parseCategory(category))
                         .priority(parsePriority(priority))
                         .idempotencyKey(idempotencyKey)
@@ -205,31 +178,36 @@ public class CreateTicketTool implements AgentTool {
         );
     }
 
-    /**
-     * 解析工单分类，非法或为空时使用 OTHER 兜底。
-     */
+    private TicketTypeEnum parseType(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return TicketTypeEnum.fromCode(value.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
     private TicketCategoryEnum parseCategory(String value) {
         if (value == null || value.trim().isEmpty()) {
-            return TicketCategoryEnum.OTHER;
+            return null;
         }
         try {
             return TicketCategoryEnum.fromCode(value.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
-            return TicketCategoryEnum.OTHER;
+            return null;
         }
     }
 
-    /**
-     * 解析优先级，非法或为空时使用 MEDIUM 兜底。
-     */
     private TicketPriorityEnum parsePriority(String value) {
         if (value == null || value.trim().isEmpty()) {
-            return TicketPriorityEnum.MEDIUM;
+            return null;
         }
         try {
             return TicketPriorityEnum.fromCode(value.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
-            return TicketPriorityEnum.MEDIUM;
+            return null;
         }
     }
 }

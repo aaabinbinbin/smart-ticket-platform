@@ -41,7 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api")
-@Tag(name = "P1 自动分派", description = "自动分派规则管理、预览、执行与统计")
+@Tag(name = "P1 自动分派", description = "自动分派规则管理、预览、执行和统计")
 public class TicketAssignmentRuleController {
     private final TicketAssignmentRuleService assignmentRuleService;
     private final P1ConfigAssembler assembler;
@@ -58,7 +58,7 @@ public class TicketAssignmentRuleController {
     }
 
     @PostMapping("/ticket-assignment-rules")
-    @Operation(summary = "创建自动分派规则", description = "仅 ADMIN 可操作")
+    @Operation(summary = "创建自动分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> create(
             Authentication authentication,
             @Valid @RequestBody TicketAssignmentRuleRequest request
@@ -68,7 +68,7 @@ public class TicketAssignmentRuleController {
     }
 
     @PutMapping("/ticket-assignment-rules/{ruleId}")
-    @Operation(summary = "更新自动分派规则", description = "仅 ADMIN 可操作")
+    @Operation(summary = "更新自动分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> update(
             Authentication authentication,
             @PathVariable("ruleId") Long ruleId,
@@ -79,17 +79,13 @@ public class TicketAssignmentRuleController {
     }
 
     @PatchMapping("/ticket-assignment-rules/{ruleId}/enabled")
-    @Operation(summary = "启用或停用自动分派规则", description = "仅 ADMIN 可操作")
+    @Operation(summary = "启用或停用自动分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> updateEnabled(
             Authentication authentication,
             @PathVariable("ruleId") Long ruleId,
             @Valid @RequestBody UpdateEnabledRequest request
     ) {
-        TicketAssignmentRule rule = assignmentRuleService.updateEnabled(
-                currentUser(authentication),
-                ruleId,
-                request.getEnabled()
-        );
+        TicketAssignmentRule rule = assignmentRuleService.updateEnabled(currentUser(authentication), ruleId, request.getEnabled());
         return ApiResponse.success(assembler.toAssignmentRuleVO(rule));
     }
 
@@ -137,9 +133,7 @@ public class TicketAssignmentRuleController {
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
     ) {
-        return ApiResponse.success(assembler.toAssignmentPreviewVO(
-                assignmentRuleService.preview(currentUser(authentication), ticketId)
-        ));
+        return ApiResponse.success(assembler.toAssignmentPreviewVO(assignmentRuleService.preview(currentUser(authentication), ticketId)));
     }
 
     @PostMapping("/tickets/{ticketId}/auto-assign")
@@ -148,9 +142,7 @@ public class TicketAssignmentRuleController {
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
     ) {
-        return ApiResponse.success(ticketAssembler.toVO(
-                assignmentRuleService.autoAssign(currentUser(authentication), ticketId)
-        ));
+        return ApiResponse.success(ticketAssembler.toVO(assignmentRuleService.autoAssign(currentUser(authentication), ticketId)));
     }
 
     private TicketAssignmentRuleCommandDTO toCommand(TicketAssignmentRuleRequest request) {
@@ -171,8 +163,7 @@ public class TicketAssignmentRuleController {
         return CurrentUser.builder()
                 .userId(authUser.getUserId())
                 .username(authUser.getUsername())
-                .roles(authentication.getAuthorities()
-                        .stream()
+                .roles(authentication.getAuthorities().stream()
                         .map(GrantedAuthority::getAuthority)
                         .map(authority -> authority.replace("ROLE_", ""))
                         .toList())

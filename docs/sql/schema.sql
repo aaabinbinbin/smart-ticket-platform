@@ -1,190 +1,192 @@
--- 浼佷笟鏅鸿兘宸ュ崟鍗忓悓骞冲彴鏁版嵁搴撳垵濮嬪寲鑴氭湰銆?-- 褰撳墠鑴氭湰鍙礋璐ｅ垱寤?MySQL 涓讳笟鍔″簱鍜?MVP 闃舵鏍稿績琛ㄣ€?-- RAG 鍚戦噺瀛楁鍚庣画鎺ュ叆 pgvector 鏃跺崟鐙淮鎶わ紝涓嶆斁鍦?MySQL 涓诲簱涓€?
--- 鍒涘缓涓氬姟鏁版嵁搴擄紝缁熶竴浣跨敤 utf8mb4 浠ユ敮鎸佷腑鏂囥€佽嫳鏂囧拰绗﹀彿鍐呭銆?CREATE DATABASE IF NOT EXISTS smart_ticket_platform
+-- 娴间椒绗熼弲楦垮厴瀹搞儱宕熼崡蹇撴倱楠炲啿褰撮弫鐗堝祦鎼存挸鍨垫慨瀣閼存碍婀伴妴?-- 瑜版挸澧犻懘姘拱閸欘亣绀嬬拹锝呭灡瀵?MySQL 娑撹绗熼崝鈥崇氨閸?MVP 闂冭埖顔岄弽绋跨妇鐞涖劊鈧?-- RAG 閸氭垿鍣虹€涙顔岄崥搴ｇ敾閹恒儱鍙?pgvector 閺冭泛宕熼悪顒傛樊閹躲倧绱濇稉宥嗘杹閸?MySQL 娑撹绨辨稉顓溾偓?
+-- 閸掓稑缂撴稉姘閺佺増宓佹惔鎿勭礉缂佺喍绔存担璺ㄦ暏 utf8mb4 娴犮儲鏁幐浣疯厬閺傚洢鈧浇瀚抽弬鍥ф嫲缁楋箑褰块崘鍛啇閵?CREATE DATABASE IF NOT EXISTS smart_ticket_platform
     DEFAULT CHARACTER SET utf8mb4
     DEFAULT COLLATE utf8mb4_unicode_ci;
 
 USE smart_ticket_platform;
 
--- 绯荤粺鐢ㄦ埛琛ㄣ€?-- 淇濆瓨鐧诲綍璐﹀彿銆佸瘑鐮佹憳瑕併€佸睍绀哄鍚嶃€侀偖绠卞拰璐﹀彿鍚仠鐘舵€併€?-- 杩欓噷鍙繚瀛樼敤鎴峰熀纭€韬唤淇℃伅锛屼笉淇濆瓨鐢ㄦ埛鍦ㄦ煇寮犲伐鍗曚腑鐨勪笟鍔′綅缃€?CREATE TABLE IF NOT EXISTS sys_user (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐢ㄦ埛涓婚敭',
-    username VARCHAR(64) NOT NULL UNIQUE COMMENT '鐧诲綍鐢ㄦ埛鍚嶏紝鍏ㄥ眬鍞竴',
-    password_hash VARCHAR(255) NOT NULL COMMENT '瀵嗙爜鍝堝笇鍊硷紝涓嶄繚瀛樻槑鏂囧瘑鐮?,
-    real_name VARCHAR(64) NOT NULL COMMENT '鐢ㄦ埛鐪熷疄濮撳悕鎴栧睍绀哄悕',
-    email VARCHAR(128) COMMENT '閭鍦板潃',
-    status TINYINT NOT NULL DEFAULT 1 COMMENT '璐﹀彿鐘舵€侊細1-鍚敤锛?-绂佺敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿'
+-- 缁崵绮洪悽銊﹀煕鐞涖劊鈧?-- 娣囨繂鐡ㄩ惂璇茬秿鐠愶箑褰块妴浣哥槕閻焦鎲崇憰浣碘偓浣哥潔缁€鍝勵潣閸氬秲鈧線鍋栫粻鍗炴嫲鐠愶箑褰块崥顖氫粻閻樿埖鈧降鈧?-- 鏉╂瑩鍣烽崣顏冪箽鐎涙鏁ら幋宄扮唨绾偓闊偂鍞ゆ穱鈩冧紖閿涘奔绗夋穱婵嗙摠閻劍鍩涢崷銊︾厙瀵姴浼愰崡鏇氳厬閻ㄥ嫪绗熼崝鈥茬秴缂冾喓鈧?CREATE TABLE IF NOT EXISTS sys_user (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閻劍鍩涙稉濠氭暛',
+    username VARCHAR(64) NOT NULL UNIQUE COMMENT '閻ц缍嶉悽銊﹀煕閸氬稄绱濋崗銊ョ湰閸烆垯绔?,
+    password_hash VARCHAR(255) NOT NULL COMMENT '鐎靛棛鐖滈崫鍫濈瑖閸婄》绱濇稉宥勭箽鐎涙ɑ妲戦弬鍥х槕閻?,
+    real_name VARCHAR(64) NOT NULL COMMENT '閻劍鍩涢惇鐔风杽婵挸鎮曢幋鏍х潔缁€鍝勬倳',
+    email VARCHAR(128) COMMENT '闁喚顔堥崷鏉挎絻',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '鐠愶箑褰块悩鑸碘偓渚婄窗1-閸氼垳鏁ら敍?-缁備胶鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 绯荤粺瑙掕壊琛ㄣ€?-- 绗竴鐗堝浐瀹氫娇鐢?USER / STAFF / ADMIN 涓夌被瑙掕壊銆?-- 瑙掕壊鍙〃绀虹郴缁熻兘鍔涳紝涓嶈〃绀烘彁鍗曚汉銆佸鐞嗕汉杩欑被宸ュ崟鍐呬笟鍔″叧绯汇€?CREATE TABLE IF NOT EXISTS sys_role (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '瑙掕壊涓婚敭',
-    role_code VARCHAR(64) NOT NULL UNIQUE COMMENT '瑙掕壊缂栫爜锛歎SER/STAFF/ADMIN',
-    role_name VARCHAR(64) NOT NULL COMMENT '瑙掕壊鍚嶇О',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿'
+-- 缁崵绮虹憴鎺曞鐞涖劊鈧?-- 缁楊兛绔撮悧鍫濇祼鐎规矮濞囬悽?USER / STAFF / ADMIN 娑撳琚憴鎺曞閵?-- 鐟欐帟澹婇崣顏囥€冪粈铏归兇缂佺喕鍏橀崝娑崇礉娑撳秷銆冪粈鐑樺絹閸楁洑姹夐妴浣割槱閻炲棔姹夋潻娆戣瀹搞儱宕熼崘鍛瑹閸斺€冲彠缁眹鈧?CREATE TABLE IF NOT EXISTS sys_role (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐟欐帟澹婃稉濠氭暛',
+    role_code VARCHAR(64) NOT NULL UNIQUE COMMENT '鐟欐帟澹婄紓鏍垳閿涙瓗SER/STAFF/ADMIN',
+    role_name VARCHAR(64) NOT NULL COMMENT '鐟欐帟澹婇崥宥囆?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 鐢ㄦ埛瑙掕壊鍏宠仈琛ㄣ€?-- 涓€涓敤鎴峰彲浠ユ嫢鏈夊涓鑹诧紝渚嬪澶勭悊浜哄憳鍚屾椂鎷ユ湁 USER 鍜?STAFF銆?CREATE TABLE IF NOT EXISTS sys_user_role (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鍏宠仈涓婚敭',
-    user_id BIGINT NOT NULL COMMENT '鐢ㄦ埛 ID',
-    role_id BIGINT NOT NULL COMMENT '瑙掕壊 ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+-- 閻劍鍩涚憴鎺曞閸忓疇浠堢悰銊ｂ偓?-- 娑撯偓娑擃亞鏁ら幋宄板讲娴犮儲瀚㈤張澶婎樋娑擃亣顫楅懝璇х礉娓氬顩ф径鍕倞娴滃搫鎲抽崥灞炬閹枫儲婀?USER 閸?STAFF閵?CREATE TABLE IF NOT EXISTS sys_user_role (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閸忓疇浠堟稉濠氭暛',
+    user_id BIGINT NOT NULL COMMENT '閻劍鍩?ID',
+    role_id BIGINT NOT NULL COMMENT '鐟欐帟澹?ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
     UNIQUE KEY uk_user_role (user_id, role_id),
     INDEX idx_user_id (user_id),
     INDEX idx_role_id (role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟涓昏〃銆?-- 淇濆瓨宸ュ崟褰撳墠浜嬪疄鐘舵€侊細褰撳墠鐘舵€併€佸綋鍓嶈礋璐ｄ汉銆佷紭鍏堢骇銆佸垎绫荤瓑銆?-- 璇勮銆佹搷浣滄棩蹇椼€侀檮浠剁瓑杩囩▼鏁版嵁鎷嗗垎鍒扮嫭绔嬭〃銆?CREATE TABLE IF NOT EXISTS ticket (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '宸ュ崟涓婚敭',
-    ticket_no VARCHAR(32) NOT NULL UNIQUE COMMENT '涓氬姟宸ュ崟鍙凤紝渚嬪 INC202604170001',
-    title VARCHAR(200) NOT NULL COMMENT '宸ュ崟鏍囬',
-    description TEXT NOT NULL COMMENT '闂鎻忚堪',
-    category VARCHAR(64) NOT NULL COMMENT '宸ュ崟鍒嗙被锛欰CCOUNT/SYSTEM/ENVIRONMENT/OTHER',
-    priority VARCHAR(32) NOT NULL COMMENT '浼樺厛绾э細LOW/MEDIUM/HIGH/URGENT',
-    status VARCHAR(32) NOT NULL COMMENT '鐘舵€侊細PENDING_ASSIGN/PROCESSING/RESOLVED/CLOSED',
-    creator_id BIGINT NOT NULL COMMENT '鎻愬崟浜虹敤鎴?ID',
-    assignee_id BIGINT DEFAULT NULL COMMENT '褰撳墠澶勭悊浜虹敤鎴?ID锛屽緟鍒嗛厤鏃跺彲涓虹┖',
-    group_id BIGINT DEFAULT NULL COMMENT '褰撳墠缁戝畾鐨勫伐鍗曠粍 ID',
-    queue_id BIGINT DEFAULT NULL COMMENT '褰撳墠缁戝畾鐨勫伐鍗曢槦鍒?ID',
-    solution_summary TEXT COMMENT '瑙ｅ喅鏂规鎽樿锛岄€氬父鍦ㄨВ鍐虫垨鍏抽棴闃舵濉啓',
-    source VARCHAR(32) NOT NULL DEFAULT 'MANUAL' COMMENT '鍒涘缓鏉ユ簮锛歁ANUAL-鎵嬪伐鍒涘缓锛孉GENT-Agent 鍒涘缓',
-    idempotency_key VARCHAR(128) DEFAULT NULL COMMENT '鍒涘缓骞傜瓑閿紝鐢ㄤ簬闃叉閲嶅鎻愪氦',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- 瀹搞儱宕熸稉鏄忋€冮妴?-- 娣囨繂鐡ㄥ銉ュ礋瑜版挸澧犳禍瀣杽閻樿埖鈧緤绱拌ぐ鎾冲閻樿埖鈧降鈧礁缍嬮崜宥堢鐠愶絼姹夐妴浣风喘閸忓牏楠囬妴浣稿瀻缁崵鐡戦妴?-- 鐠囧嫯顔戦妴浣规惙娴ｆ粍妫╄箛妞尖偓渚€妾禒鍓佺搼鏉╁洨鈻奸弫鐗堝祦閹峰棗鍨庨崚鎵缁斿銆冮妴?CREATE TABLE IF NOT EXISTS ticket (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '瀹搞儱宕熸稉濠氭暛',
+    ticket_no VARCHAR(32) NOT NULL UNIQUE COMMENT '娑撴艾濮熷銉ュ礋閸欏嚖绱濇笟瀣洤 INC202604170001',
+    title VARCHAR(200) NOT NULL COMMENT '工单标题',
+    description TEXT NOT NULL COMMENT '问题描述',
+    ticket_type VARCHAR(64) NOT NULL COMMENT '工单类型：INCIDENT/ACCESS_REQUEST/ENVIRONMENT_REQUEST/CONSULTATION/CHANGE_REQUEST',
+    category VARCHAR(64) NOT NULL COMMENT '工单分类：ACCOUNT/SYSTEM/ENVIRONMENT/OTHER',
+    priority VARCHAR(32) NOT NULL COMMENT '娴兼ê鍘涚痪褝绱癓OW/MEDIUM/HIGH/URGENT',
+    status VARCHAR(32) NOT NULL COMMENT '閻樿埖鈧緤绱癙ENDING_ASSIGN/PROCESSING/RESOLVED/CLOSED',
+    creator_id BIGINT NOT NULL COMMENT '閹绘劕宕熸禍铏规暏閹?ID',
+    assignee_id BIGINT DEFAULT NULL COMMENT '瑜版挸澧犳径鍕倞娴滆櫣鏁ら幋?ID閿涘苯绶熼崚鍡涘帳閺冭泛褰叉稉铏光敄',
+    group_id BIGINT DEFAULT NULL COMMENT '瑜版挸澧犵紒鎴濈暰閻ㄥ嫬浼愰崡鏇犵矋 ID',
+    queue_id BIGINT DEFAULT NULL COMMENT '瑜版挸澧犵紒鎴濈暰閻ㄥ嫬浼愰崡鏇㈡Е閸?ID',
+    solution_summary TEXT COMMENT '鐟欙絽鍠呴弬瑙勵攳閹芥顩﹂敍宀勨偓姘埗閸︺劏袙閸愯櫕鍨ㄩ崗鎶芥４闂冭埖顔屾繅顐㈠晸',
+    source VARCHAR(32) NOT NULL DEFAULT 'MANUAL' COMMENT '閸掓稑缂撻弶銉︾爱閿涙瓉ANUAL-閹靛浼愰崚娑樼紦閿涘瓑GENT-Agent 閸掓稑缂?,
+    idempotency_key VARCHAR(128) DEFAULT NULL COMMENT '閸掓稑缂撻獮鍌滅搼闁款噯绱濋悽銊ょ艾闂冨弶顒涢柌宥咁槻閹绘劒姘?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     INDEX idx_creator_id (creator_id),
     INDEX idx_assignee_id (assignee_id),
     INDEX idx_ticket_group_id (group_id),
     INDEX idx_ticket_queue_id (queue_id),
     INDEX idx_status (status),
+    INDEX idx_ticket_type (ticket_type),
     INDEX idx_category (category),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟璇勮琛ㄣ€?-- 淇濆瓨鐢ㄦ埛鍥炲銆佸鐞嗚繃绋嬭褰曘€佽В鍐虫柟妗堣ˉ鍏呯瓑鍗忎綔鍐呭銆?CREATE TABLE IF NOT EXISTS ticket_comment (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '璇勮涓婚敭',
-    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
-    commenter_id BIGINT NOT NULL COMMENT '璇勮浜虹敤鎴?ID',
-    comment_type VARCHAR(32) NOT NULL COMMENT '璇勮绫诲瀷锛歎SER_REPLY/PROCESS_LOG/SOLUTION',
-    content TEXT NOT NULL COMMENT '璇勮姝ｆ枃',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+-- 瀹搞儱宕熺拠鍕啈鐞涖劊鈧?-- 娣囨繂鐡ㄩ悽銊﹀煕閸ョ偛顦查妴浣割槱閻炲棜绻冪粙瀣唶瑜版洏鈧浇袙閸愯櫕鏌熷鍫Ｋ夐崗鍛搼閸楀繋缍旈崘鍛啇閵?CREATE TABLE IF NOT EXISTS ticket_comment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐠囧嫯顔戞稉濠氭暛',
+    ticket_id BIGINT NOT NULL COMMENT '閹碘偓鐏炵偛浼愰崡?ID',
+    commenter_id BIGINT NOT NULL COMMENT '鐠囧嫯顔戞禍铏规暏閹?ID',
+    comment_type VARCHAR(32) NOT NULL COMMENT '鐠囧嫯顔戠猾璇茬€烽敍姝嶴ER_REPLY/PROCESS_LOG/SOLUTION',
+    content TEXT NOT NULL COMMENT '鐠囧嫯顔戝锝嗘瀮',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
     INDEX idx_ticket_id (ticket_id),
     INDEX idx_commenter_id (commenter_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟鎿嶄綔鏃ュ織琛ㄣ€?-- 淇濆瓨鍒涘缓銆佸垎閰嶃€佽浆娲俱€佺姸鎬佸彉鏇淬€佽瘎璁恒€佸叧闂瓑鍏抽敭鎿嶄綔杞ㄨ抗銆?-- 璇ヨ〃鏈嶅姟浜庡璁″拰杩芥函锛屼笉浣滀负褰撳墠浜嬪疄鏉ユ簮銆?CREATE TABLE IF NOT EXISTS ticket_operation_log (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鏃ュ織涓婚敭',
-    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
-    operator_id BIGINT NOT NULL COMMENT '鎿嶄綔浜虹敤鎴?ID',
-    operation_type VARCHAR(64) NOT NULL COMMENT '鎿嶄綔绫诲瀷锛欳REATE/ASSIGN/TRANSFER/UPDATE_STATUS/COMMENT/CLOSE',
-    operation_desc VARCHAR(500) NOT NULL COMMENT '鎿嶄綔璇存槑',
-    before_value TEXT COMMENT '鍙樻洿鍓嶅唴瀹癸紝鍙瓨 JSON 鎴栨枃鏈?,
-    after_value TEXT COMMENT '鍙樻洿鍚庡唴瀹癸紝鍙瓨 JSON 鎴栨枃鏈?,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+-- 瀹搞儱宕熼幙宥勭稊閺冦儱绻旂悰銊ｂ偓?-- 娣囨繂鐡ㄩ崚娑樼紦閵嗕礁鍨庨柊宥冣偓浣芥祮濞蹭勘鈧胶濮搁幀浣稿綁閺囨番鈧浇鐦庣拋鎭掆偓浣稿彠闂傤厾鐡戦崗鎶芥暛閹垮秳缍旀潪銊ㄦ姉閵?-- 鐠囥儴銆冮張宥呭娴滃骸顓哥拋鈥虫嫲鏉╄姤鍑介敍灞肩瑝娴ｆ粈璐熻ぐ鎾冲娴滃鐤勯弶銉︾爱閵?CREATE TABLE IF NOT EXISTS ticket_operation_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閺冦儱绻旀稉濠氭暛',
+    ticket_id BIGINT NOT NULL COMMENT '閹碘偓鐏炵偛浼愰崡?ID',
+    operator_id BIGINT NOT NULL COMMENT '閹垮秳缍旀禍铏规暏閹?ID',
+    operation_type VARCHAR(64) NOT NULL COMMENT '閹垮秳缍旂猾璇茬€烽敍娆砇EATE/ASSIGN/TRANSFER/UPDATE_STATUS/COMMENT/CLOSE',
+    operation_desc VARCHAR(500) NOT NULL COMMENT '閹垮秳缍旂拠瀛樻',
+    before_value TEXT COMMENT '閸欐ɑ娲块崜宥呭敶鐎圭櫢绱濋崣顖氱摠 JSON 閹存牗鏋冮張?,
+    after_value TEXT COMMENT '閸欐ɑ娲块崥搴″敶鐎圭櫢绱濋崣顖氱摠 JSON 閹存牗鏋冮張?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
     INDEX idx_ticket_id (ticket_id),
     INDEX idx_operator_id (operator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟闄勪欢琛ㄣ€?-- MVP 闃舵鍙繚瀛樻枃浠?URL锛屼笉鍦ㄦ暟鎹簱涓繚瀛樻枃浠朵簩杩涘埗鍐呭銆?CREATE TABLE IF NOT EXISTS ticket_attachment (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闄勪欢涓婚敭',
-    ticket_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗?ID',
-    file_name VARCHAR(255) NOT NULL COMMENT '鍘熷鏂囦欢鍚?,
-    file_url VARCHAR(500) NOT NULL COMMENT '鏂囦欢璁块棶鍦板潃鎴栧璞″瓨鍌ㄥ湴鍧€',
-    file_type VARCHAR(64) COMMENT '鏂囦欢绫诲瀷鎴栨墿灞曞悕',
-    file_size BIGINT COMMENT '鏂囦欢澶у皬锛屽崟浣嶅瓧鑺?,
-    uploader_id BIGINT NOT NULL COMMENT '涓婁紶浜虹敤鎴?ID',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+-- 瀹搞儱宕熼梽鍕鐞涖劊鈧?-- MVP 闂冭埖顔岄崣顏冪箽鐎涙ɑ鏋冩禒?URL閿涘奔绗夐崷銊︽殶閹诡喖绨辨稉顓濈箽鐎涙ɑ鏋冩禒鏈电癌鏉╂稑鍩楅崘鍛啇閵?CREATE TABLE IF NOT EXISTS ticket_attachment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闂勫嫪娆㈡稉濠氭暛',
+    ticket_id BIGINT NOT NULL COMMENT '閹碘偓鐏炵偛浼愰崡?ID',
+    file_name VARCHAR(255) NOT NULL COMMENT '閸樼喎顫愰弬鍥︽閸?,
+    file_url VARCHAR(500) NOT NULL COMMENT '閺傚洣娆㈢拋鍧楁６閸︽澘娼冮幋鏍ь嚠鐠炩€崇摠閸屻劌婀撮崸鈧?,
+    file_type VARCHAR(64) COMMENT '閺傚洣娆㈢猾璇茬€烽幋鏍ㄥ⒖鐏炴洖鎮?,
+    file_size BIGINT COMMENT '閺傚洣娆㈡径褍鐨敍灞藉礋娴ｅ秴鐡ч懞?,
+    uploader_id BIGINT NOT NULL COMMENT '娑撳﹣绱舵禍铏规暏閹?ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
     INDEX idx_ticket_id (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟鐭ヨ瘑琛ㄣ€?-- 淇濆瓨宸插叧闂伐鍗曟矇娣€鍑虹殑鐭ヨ瘑鏂囨湰锛屾槸鍚庣画 RAG 鍒囩墖鍜屾绱㈢殑鏉ユ簮銆?-- 璇ヨ〃灞炰簬鐭ヨ瘑鏁版嵁锛屼笉鍙備笌宸ュ崟涓讳簨鍔＄姸鎬佸垽鏂€?CREATE TABLE IF NOT EXISTS ticket_knowledge (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐭ヨ瘑涓婚敭',
-    ticket_id BIGINT NOT NULL COMMENT '鏉ユ簮宸ュ崟 ID',
-    content TEXT NOT NULL COMMENT '鐢ㄤ簬鍒囩墖鍜屽悜閲忓寲鐨勭煡璇嗘鏂?,
-    content_summary VARCHAR(1000) COMMENT '鐭ヨ瘑鎽樿锛屼究浜庡垪琛ㄥ睍绀哄拰鍙洖缁撴灉灞曠ず',
-    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '鐭ヨ瘑鐘舵€侊細ACTIVE-鍙敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- 瀹搞儱宕熼惌銉ㄧ槕鐞涖劊鈧?-- 娣囨繂鐡ㄥ鎻掑彠闂傤厼浼愰崡鏇熺焽濞ｂ偓閸戣櫣娈戦惌銉ㄧ槕閺傚洦婀伴敍灞炬Ц閸氬海鐢?RAG 閸掑洨澧栭崪灞绢梾缁便垻娈戦弶銉︾爱閵?-- 鐠囥儴銆冪仦鐐扮艾閻儴鐦戦弫鐗堝祦閿涘奔绗夐崣鍌欑瑢瀹搞儱宕熸稉璁崇皑閸旓紕濮搁幀浣稿灲閺傤厹鈧?CREATE TABLE IF NOT EXISTS ticket_knowledge (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閻儴鐦戞稉濠氭暛',
+    ticket_id BIGINT NOT NULL COMMENT '閺夈儲绨銉ュ礋 ID',
+    content TEXT NOT NULL COMMENT '閻劋绨崚鍥╁閸滃苯鎮滈柌蹇撳閻ㄥ嫮鐓＄拠鍡橆劀閺?,
+    content_summary VARCHAR(1000) COMMENT '閻儴鐦戦幗妯款洣閿涘奔绌舵禍搴″灙鐞涖劌鐫嶇粈鍝勬嫲閸欘剙娲栫紒鎾寸亯鐏炴洜銇?,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '閻儴鐦戦悩鑸碘偓渚婄窗ACTIVE-閸欘垳鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     UNIQUE KEY uk_ticket_id (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 宸ュ崟鐭ヨ瘑鍒囩墖琛ㄣ€?-- 淇濆瓨鐭ヨ瘑鏂囨湰鍒囩墖鍜岀涓€鐗堝悜閲?JSON銆傚悗缁帴鍏?pgvector 鏃跺彲杩佺Щ鍒颁笓鐢ㄥ悜閲忓瓧娈点€?CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鐭ヨ瘑鍒囩墖涓婚敭',
-    knowledge_id BIGINT NOT NULL COMMENT '鎵€灞炵煡璇?ID',
-    chunk_index INT NOT NULL COMMENT '鍒囩墖搴忓彿锛屼粠 0 鎴?1 寮€濮嬬敱 RAG 妯″潡绾﹀畾',
-    chunk_text TEXT NOT NULL COMMENT '鍒囩墖鏂囨湰鍐呭',
-    embedding_vector TEXT COMMENT '鍚戦噺 JSON 鏂囨湰锛岀涓€鐗堢敤浜庢墦閫氱煡璇嗗悜閲忓寲鍏ュ簱閾捐矾',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+-- 瀹搞儱宕熼惌銉ㄧ槕閸掑洨澧栫悰銊ｂ偓?-- 娣囨繂鐡ㄩ惌銉ㄧ槕閺傚洦婀伴崚鍥╁閸滃瞼顑囨稉鈧悧鍫濇倻闁?JSON閵嗗倸鎮楃紒顓熷复閸?pgvector 閺冭泛褰叉潻浣盒╅崚棰佺瑩閻劌鎮滈柌蹇撶摟濞堢偣鈧?CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閻儴鐦戦崚鍥╁娑撳鏁?,
+    knowledge_id BIGINT NOT NULL COMMENT '閹碘偓鐏炵偟鐓＄拠?ID',
+    chunk_index INT NOT NULL COMMENT '閸掑洨澧栨惔蹇撳娇閿涘奔绮?0 閹?1 瀵偓婵鏁?RAG 濡€虫健缁撅箑鐣?,
+    chunk_text TEXT NOT NULL COMMENT '閸掑洨澧栭弬鍥ㄦ拱閸愬懎顔?,
+    embedding_vector TEXT COMMENT '閸氭垿鍣?JSON 閺傚洦婀伴敍宀€顑囨稉鈧悧鍫㈡暏娴滃孩澧﹂柅姘辩叀鐠囧棗鎮滈柌蹇撳閸忋儱绨遍柧鎹愮熅',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
     INDEX idx_knowledge_id (knowledge_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket group.
--- 宸ュ崟缁勬槸闃熷垪銆丼LA 鍜岃嚜鍔ㄥ垎娲剧殑鍩虹閰嶇疆锛涘綋鍓嶉樁娈靛彧鍋氶厤缃鐞嗭紝涓嶆敼鍙樺伐鍗曚富娴佺▼銆?CREATE TABLE IF NOT EXISTS ticket_group (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '宸ュ崟缁勪富閿?,
-    group_name VARCHAR(128) NOT NULL COMMENT '宸ュ崟缁勫悕绉?,
-    group_code VARCHAR(64) NOT NULL COMMENT '宸ュ崟缁勭紪鐮?,
-    owner_user_id BIGINT DEFAULT NULL COMMENT '缁勮礋璐ｄ汉鐢ㄦ埛 ID',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- 瀹搞儱宕熺紒鍕Ц闂冪喎鍨妴涓糒A 閸滃矁鍤滈崝銊ュ瀻濞插墽娈戦崺铏诡攨闁板秶鐤嗛敍娑樼秼閸撳秹妯佸▓闈涘涧閸嬫岸鍘ょ純顔绢吀閻炲棴绱濇稉宥嗘暭閸欐ê浼愰崡鏇氬瘜濞翠胶鈻奸妴?CREATE TABLE IF NOT EXISTS ticket_group (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '瀹搞儱宕熺紒鍕瘜闁?,
+    group_name VARCHAR(128) NOT NULL COMMENT '瀹搞儱宕熺紒鍕倳缁?,
+    group_code VARCHAR(64) NOT NULL COMMENT '瀹搞儱宕熺紒鍕椽閻?,
+    owner_user_id BIGINT DEFAULT NULL COMMENT '缂佸嫯绀嬬拹锝勬眽閻劍鍩?ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '閺勵垰鎯侀崥顖滄暏閿?-閸氼垳鏁ら敍?-閸嬫粎鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     UNIQUE KEY uk_ticket_group_code (group_code),
     INDEX idx_ticket_group_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket queue.
--- 宸ュ崟闃熷垪闅跺睘浜庡伐鍗曠粍锛屽悗缁敤浜庨槦鍒楄鍥俱€丼LA 鍖归厤鍜岃嚜鍔ㄥ垎娲俱€?CREATE TABLE IF NOT EXISTS ticket_queue (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闃熷垪涓婚敭',
-    queue_name VARCHAR(128) NOT NULL COMMENT '闃熷垪鍚嶇О',
-    queue_code VARCHAR(64) NOT NULL COMMENT '闃熷垪缂栫爜',
-    group_id BIGINT NOT NULL COMMENT '鎵€灞炲伐鍗曠粍 ID',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- 瀹搞儱宕熼梼鐔峰灙闂呰泛鐫樻禍搴′紣閸楁洜绮嶉敍灞芥倵缂侇厾鏁ゆ禍搴ㄦЕ閸掓顫嬮崶淇扁偓涓糒A 閸栧綊鍘ら崪宀冨殰閸斻劌鍨庡ú淇扁偓?CREATE TABLE IF NOT EXISTS ticket_queue (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闂冪喎鍨稉濠氭暛',
+    queue_name VARCHAR(128) NOT NULL COMMENT '闂冪喎鍨崥宥囆?,
+    queue_code VARCHAR(64) NOT NULL COMMENT '闂冪喎鍨紓鏍垳',
+    group_id BIGINT NOT NULL COMMENT '閹碘偓鐏炵偛浼愰崡鏇犵矋 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '閺勵垰鎯侀崥顖滄暏閿?-閸氼垳鏁ら敍?-閸嬫粎鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     UNIQUE KEY uk_ticket_queue_code (queue_code),
     INDEX idx_ticket_queue_group_id (group_id),
     INDEX idx_ticket_queue_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: SLA policy.
--- SLA 绛栫暐鎸夊伐鍗曞垎绫诲拰浼樺厛绾у尮閰嶏紱category/priority 涓虹┖琛ㄧず閫氶厤銆?CREATE TABLE IF NOT EXISTS ticket_sla_policy (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 绛栫暐涓婚敭',
-    policy_name VARCHAR(128) NOT NULL COMMENT 'SLA 绛栫暐鍚嶇О',
-    category VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟鍒嗙被锛岀┖鍊艰〃绀洪€氶厤',
-    priority VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟浼樺厛绾э紝绌哄€艰〃绀洪€氶厤',
-    first_response_minutes INT NOT NULL COMMENT '棣栨鍝嶅簲鏃堕檺锛屽崟浣嶅垎閽?,
-    resolve_minutes INT NOT NULL COMMENT '瑙ｅ喅鏃堕檺锛屽崟浣嶅垎閽?,
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- SLA 缁涙牜鏆愰幐澶婁紣閸楁洖鍨庣猾璇叉嫲娴兼ê鍘涚痪褍灏柊宥忕幢category/priority 娑撹櫣鈹栫悰銊с仛闁岸鍘ら妴?CREATE TABLE IF NOT EXISTS ticket_sla_policy (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 缁涙牜鏆愭稉濠氭暛',
+    policy_name VARCHAR(128) NOT NULL COMMENT 'SLA 缁涙牜鏆愰崥宥囆?,
+    category VARCHAR(64) DEFAULT NULL COMMENT '闁倻鏁ゅ銉ュ礋閸掑棛琚敍宀€鈹栭崐鑹般€冪粈娲偓姘跺帳',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '闁倻鏁ゅ銉ュ礋娴兼ê鍘涚痪褝绱濈粚鍝勨偓鑹般€冪粈娲偓姘跺帳',
+    first_response_minutes INT NOT NULL COMMENT '妫ｆ牗顐奸崫宥呯安閺冨爼妾洪敍灞藉礋娴ｅ秴鍨庨柦?,
+    resolve_minutes INT NOT NULL COMMENT '鐟欙絽鍠呴弮鍫曟閿涘苯宕熸担宥呭瀻闁?,
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '閺勵垰鎯侀崥顖滄暏閿?-閸氼垳鏁ら敍?-閸嬫粎鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     INDEX idx_ticket_sla_policy_match (category, priority, enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket SLA instance.
--- SLA 瀹炰緥璁板綍鏌愬紶宸ュ崟鍛戒腑鐨勭瓥鐣ュ拰鎴鏃堕棿锛涘綋鍓嶉樁娈典笉鍋氬畾鏃惰繚绾︽壂鎻忋€?CREATE TABLE IF NOT EXISTS ticket_sla_instance (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 瀹炰緥涓婚敭',
-    ticket_id BIGINT NOT NULL COMMENT '宸ュ崟 ID',
-    policy_id BIGINT NOT NULL COMMENT 'SLA 绛栫暐 ID',
-    first_response_deadline DATETIME NOT NULL COMMENT '棣栨鍝嶅簲鎴鏃堕棿',
-    resolve_deadline DATETIME NOT NULL COMMENT '瑙ｅ喅鎴鏃堕棿',
-    breached TINYINT NOT NULL DEFAULT 0 COMMENT '鏄惁宸茶繚绾︼細1-宸茶繚绾︼紝0-鏈繚绾?,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- SLA 鐎圭偘绶ョ拋鏉跨秿閺屾劕绱跺銉ュ礋閸涙垝鑵戦惃鍕摜閻ｃ儱鎷伴幋顏咁剾閺冨爼妫块敍娑樼秼閸撳秹妯佸▓鍏哥瑝閸嬫艾鐣鹃弮鎯扮箽缁撅附澹傞幓蹇嬧偓?CREATE TABLE IF NOT EXISTS ticket_sla_instance (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'SLA 鐎圭偘绶ユ稉濠氭暛',
+    ticket_id BIGINT NOT NULL COMMENT '瀹搞儱宕?ID',
+    policy_id BIGINT NOT NULL COMMENT 'SLA 缁涙牜鏆?ID',
+    first_response_deadline DATETIME NOT NULL COMMENT '妫ｆ牗顐奸崫宥呯安閹搭亝顒涢弮鍫曟？',
+    resolve_deadline DATETIME NOT NULL COMMENT '鐟欙絽鍠呴幋顏咁剾閺冨爼妫?,
+    breached TINYINT NOT NULL DEFAULT 0 COMMENT '閺勵垰鎯佸鑼剁箽缁撅讣绱?-瀹歌尪绻氱痪锔肩礉0-閺堫亣绻氱痪?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     UNIQUE KEY uk_ticket_sla_ticket_id (ticket_id),
     INDEX idx_ticket_sla_policy_id (policy_id),
     INDEX idx_ticket_sla_deadline (resolve_deadline)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: assignment rule.
--- 鑷姩鍒嗘淳瑙勫垯褰撳墠鍙敤浜?preview 鎺ㄨ崘锛屼笉鐩存帴鏇存柊宸ュ崟澶勭悊浜烘垨鐘舵€併€?CREATE TABLE IF NOT EXISTS ticket_assignment_rule (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '鑷姩鍒嗘淳瑙勫垯涓婚敭',
-    rule_name VARCHAR(128) NOT NULL COMMENT '瑙勫垯鍚嶇О',
-    category VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟鍒嗙被锛岀┖鍊艰〃绀洪€氶厤',
-    priority VARCHAR(64) DEFAULT NULL COMMENT '閫傜敤宸ュ崟浼樺厛绾э紝绌哄€艰〃绀洪€氶厤',
-    target_group_id BIGINT DEFAULT NULL COMMENT '鐩爣宸ュ崟缁?ID',
-    target_queue_id BIGINT DEFAULT NULL COMMENT '鐩爣闃熷垪 ID',
-    target_user_id BIGINT DEFAULT NULL COMMENT '鐩爣澶勭悊浜?ID',
-    weight INT NOT NULL DEFAULT 0 COMMENT '瑙勫垯鏉冮噸锛岃秺澶ц秺浼樺厛',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
+-- 閼奉亜濮╅崚鍡樻烦鐟欏嫬鍨ぐ鎾冲閸欘亞鏁ゆ禍?preview 閹恒劏宕橀敍灞肩瑝閻╁瓨甯撮弴瀛樻煀瀹搞儱宕熸径鍕倞娴滅儤鍨ㄩ悩鑸碘偓浣碘偓?CREATE TABLE IF NOT EXISTS ticket_assignment_rule (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '閼奉亜濮╅崚鍡樻烦鐟欏嫬鍨稉濠氭暛',
+    rule_name VARCHAR(128) NOT NULL COMMENT '鐟欏嫬鍨崥宥囆?,
+    category VARCHAR(64) DEFAULT NULL COMMENT '闁倻鏁ゅ銉ュ礋閸掑棛琚敍宀€鈹栭崐鑹般€冪粈娲偓姘跺帳',
+    priority VARCHAR(64) DEFAULT NULL COMMENT '闁倻鏁ゅ銉ュ礋娴兼ê鍘涚痪褝绱濈粚鍝勨偓鑹般€冪粈娲偓姘跺帳',
+    target_group_id BIGINT DEFAULT NULL COMMENT '閻╊喗鐖ｅ銉ュ礋缂?ID',
+    target_queue_id BIGINT DEFAULT NULL COMMENT '閻╊喗鐖ｉ梼鐔峰灙 ID',
+    target_user_id BIGINT DEFAULT NULL COMMENT '閻╊喗鐖ｆ径鍕倞娴?ID',
+    weight INT NOT NULL DEFAULT 0 COMMENT '鐟欏嫬鍨弶鍐櫢閿涘矁绉烘径褑绉烘导妯哄帥',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '閺勵垰鎯侀崥顖滄暏閿?-閸氼垳鏁ら敍?-閸嬫粎鏁?,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '閸掓稑缂撻弮鍫曟？',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '閺囧瓨鏌婇弮鍫曟？',
     INDEX idx_ticket_assignment_rule_match (category, priority, enabled, weight),
     INDEX idx_ticket_assignment_rule_target_group (target_group_id),
     INDEX idx_ticket_assignment_rule_target_queue (target_queue_id),
@@ -192,17 +194,98 @@ USE smart_ticket_platform;
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- P1: ticket queue member.
--- 队列成员用于真实自动分派和后续认领能力；同一用户可加入多个队列。
-CREATE TABLE IF NOT EXISTS ticket_queue_member (
-    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '队列成员主键',
-    queue_id BIGINT NOT NULL COMMENT '所属队列 ID',
-    user_id BIGINT NOT NULL COMMENT '成员用户 ID',
-    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用：1-启用，0-停用',
-    last_assigned_at DATETIME DEFAULT NULL COMMENT '最近一次被自动分派时间',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+-- 闃熷垪鎴愬憳鐢ㄤ簬鐪熷疄鑷姩鍒嗘淳鍜屽悗缁棰嗚兘鍔涳紱鍚屼竴鐢ㄦ埛鍙姞鍏ュ涓槦鍒椼€?CREATE TABLE IF NOT EXISTS ticket_queue_member (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '闃熷垪鎴愬憳涓婚敭',
+    queue_id BIGINT NOT NULL COMMENT '鎵€灞為槦鍒?ID',
+    user_id BIGINT NOT NULL COMMENT '鎴愬憳鐢ㄦ埛 ID',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '鏄惁鍚敤锛?-鍚敤锛?-鍋滅敤',
+    last_assigned_at DATETIME DEFAULT NULL COMMENT '鏈€杩戜竴娆¤鑷姩鍒嗘淳鏃堕棿',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '鍒涘缓鏃堕棿',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '鏇存柊鏃堕棿',
     UNIQUE KEY uk_ticket_queue_member (queue_id, user_id),
     INDEX idx_ticket_queue_member_queue_id (queue_id),
     INDEX idx_ticket_queue_member_user_id (user_id),
     INDEX idx_ticket_queue_member_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- C4: 最小审批流。当前仅用于权限申请工单。
+CREATE TABLE IF NOT EXISTS ticket_approval (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '审批主键',
+    ticket_id BIGINT NOT NULL COMMENT '工单 ID',
+    approval_status VARCHAR(32) NOT NULL COMMENT '审批状态：PENDING/APPROVED/REJECTED',
+    approver_id BIGINT NOT NULL COMMENT '审批人用户 ID',
+    requested_by BIGINT NOT NULL COMMENT '提交审批人用户 ID',
+    submit_comment VARCHAR(500) DEFAULT NULL COMMENT '提交审批说明',
+    decision_comment VARCHAR(500) DEFAULT NULL COMMENT '审批说明',
+    submitted_at DATETIME NOT NULL COMMENT '提交审批时间',
+    decided_at DATETIME DEFAULT NULL COMMENT '审批完成时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_approval_ticket_id (ticket_id),
+    INDEX idx_ticket_approval_status (approval_status),
+    INDEX idx_ticket_approval_approver_id (approver_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================
+-- 2026-04-21 C3/C4 �����ű�
+-- ��ǰ��ȫ���ű���ִ�У��ɰ�������������
+-- =========================
+
+-- C3�������͹�����չ����
+CREATE TABLE IF NOT EXISTS ticket_type_profile (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '������������',
+    ticket_id BIGINT NOT NULL COMMENT '���� ID',
+    profile_schema VARCHAR(64) NOT NULL COMMENT '����ģ�ͱ��룬ͨ���� ticket_type һ��',
+    profile_data JSON NOT NULL COMMENT '�������� JSON',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    UNIQUE KEY uk_ticket_type_profile_ticket_id (ticket_id),
+    INDEX idx_ticket_type_profile_schema (profile_schema)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- C4������ģ��
+CREATE TABLE IF NOT EXISTS ticket_approval_template (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '����ģ������',
+    template_name VARCHAR(128) NOT NULL COMMENT 'ģ������',
+    ticket_type VARCHAR(64) NOT NULL COMMENT '���ù�������',
+    description VARCHAR(500) DEFAULT NULL COMMENT 'ģ��˵��',
+    enabled TINYINT NOT NULL DEFAULT 1 COMMENT '�Ƿ����ã�1 ���ã�0 ͣ��',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    INDEX idx_ticket_approval_template_type (ticket_type, enabled)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ticket_approval_template_step (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '����ģ�岽������',
+    template_id BIGINT NOT NULL COMMENT '����ģ�� ID',
+    step_order INT NOT NULL COMMENT '����˳�򣬴� 1 ��ʼ',
+    step_name VARCHAR(128) NOT NULL COMMENT '��������',
+    approver_id BIGINT NOT NULL COMMENT '�������û� ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    UNIQUE KEY uk_ticket_approval_template_step (template_id, step_order),
+    INDEX idx_ticket_approval_template_step_template_id (template_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS ticket_approval_step (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '����ʵ����������',
+    ticket_id BIGINT NOT NULL COMMENT '���� ID',
+    approval_id BIGINT NOT NULL COMMENT '������¼ ID',
+    step_order INT NOT NULL COMMENT '����˳�򣬴� 1 ��ʼ',
+    step_name VARCHAR(128) NOT NULL COMMENT '��������',
+    approver_id BIGINT NOT NULL COMMENT '�������û� ID',
+    step_status VARCHAR(32) NOT NULL COMMENT '����״̬��WAITING/PENDING/APPROVED/REJECTED',
+    decision_comment VARCHAR(500) DEFAULT NULL COMMENT '�������',
+    decided_at DATETIME DEFAULT NULL COMMENT '�������ʱ��',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '����ʱ��',
+    UNIQUE KEY uk_ticket_approval_step (approval_id, step_order),
+    INDEX idx_ticket_approval_step_ticket_id (ticket_id),
+    INDEX idx_ticket_approval_step_status (step_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- �����ʷ���� ticket_approval ���ǵ��������ṹ���벹�����ֶ�
+-- MySQL 8 �ɰ���ִ�У����ֶ��Ѵ���������
+-- ALTER TABLE ticket_approval ADD COLUMN template_id BIGINT DEFAULT NULL COMMENT '����ģ�� ID' AFTER ticket_id;
+-- ALTER TABLE ticket_approval ADD COLUMN current_step_order INT DEFAULT NULL COMMENT '��ǰ��������˳��' AFTER template_id;
+

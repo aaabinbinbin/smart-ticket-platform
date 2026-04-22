@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketApprovalTemplateStepMapper">
+
+    <resultMap id="ticketApprovalTemplateStepResultMap" type="com.smartticket.domain.entity.TicketApprovalTemplateStep">
+        <id property="id" column="id"/>
+        <result property="templateId" column="template_id"/>
+        <result property="stepOrder" column="step_order"/>
+        <result property="stepName" column="step_name"/>
+        <result property="approverId" column="approver_id"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <insert id="insertBatch">
+        INSERT INTO ticket_approval_template_step (template_id, step_order, step_name, approver_id)
+        VALUES
+        <foreach collection="steps" item="step" separator=",">
+            (#{step.templateId}, #{step.stepOrder}, #{step.stepName}, #{step.approverId})
+        </foreach>
+    </insert>
+
+    <delete id="deleteByTemplateId">
+        DELETE FROM ticket_approval_template_step WHERE template_id = #{templateId}
+    </delete>
+
+    <select id="findByTemplateId" resultMap="ticketApprovalTemplateStepResultMap">
+        SELECT id, template_id, step_order, step_name, approver_id, created_at, updated_at
+        FROM ticket_approval_template_step
+        WHERE template_id = #{templateId}
+        ORDER BY step_order ASC, id ASC
+    </select>
+</mapper>

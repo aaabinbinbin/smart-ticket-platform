@@ -3,28 +3,22 @@ package com.smartticket.agent.tool.parameter;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
+import com.smartticket.domain.enums.TicketSummaryViewEnum;
+import com.smartticket.domain.enums.TicketTypeEnum;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
- * 第一版规则参数抽取器。
+ * 第一版规则参数提取器。
  *
- * <p>该抽取器只做确定性、可解释的浅层抽取。没有明确表达的字段保持为空，让 Tool requiredFields
- * 校验和 pending action 负责后续追问，避免用默认值掩盖真实缺参。</p>
+ * <p>只做确定性、可解释的浅层提取，缺失字段交给 Tool 和多轮澄清处理。</p>
  */
 @Component
 public class AgentToolParameterExtractor {
-    /** 从用户消息中抽取纯数字，用作工单 ID 或处理人 ID 的候选值。 */
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
 
-    /**
-     * 从用户消息和当前会话上下文中抽取 Tool 参数。
-     *
-     * <p>当消息没有数字时，会优先使用 activeTicketId 作为工单上下文指针；是否真的允许执行仍由 Tool
-     * requiredFields 和 biz 层权限校验决定。</p>
-     */
     public AgentToolParameters extract(String message, AgentSessionContext context) {
         List<Long> numbers = numbers(message);
         Long contextTicketId = context == null ? null : context.getActiveTicketId();
@@ -35,13 +29,15 @@ public class AgentToolParameterExtractor {
                 .assigneeId(assigneeId)
                 .title(resolveTitle(message))
                 .description(resolveDescription(message))
+                .type(resolveType(message))
                 .category(resolveCategory(message))
                 .priority(resolvePriority(message))
+                .summaryRequested(resolveSummaryRequested(message))
+                .summaryView(resolveSummaryView(message))
                 .numbers(numbers)
                 .build();
     }
 
-    /** 抽取消息中的所有数字。 */
     private List<Long> numbers(String message) {
         Matcher matcher = NUMBER_PATTERN.matcher(message == null ? "" : message);
         return matcher.results()
@@ -49,7 +45,6 @@ public class AgentToolParameterExtractor {
                 .toList();
     }
 
-    /** 尝试抽取工单标题；没有有效内容时返回空，交给缺参追问处理。 */
     private String resolveTitle(String message) {
         String title = message == null ? "" : message.trim();
         title = title.replaceFirst("^(创建|新建|提交|发起|报修|开单)\\s*", "");
@@ -59,7 +54,6 @@ public class AgentToolParameterExtractor {
         return title.length() <= 80 ? title : title.substring(0, 80);
     }
 
-    /** 当前第一版直接把原始消息作为描述；空消息返回空。 */
     private String resolveDescription(String message) {
         if (message == null || message.trim().isEmpty()) {
             return null;
@@ -67,7 +61,27 @@ public class AgentToolParameterExtractor {
         return message.trim();
     }
 
-    /** 根据明确关键词抽取工单分类；无法判断时返回空。 */
+    private TicketTypeEnum resolveType(String message) {
+        String text = message == null ? "" : message;
+        String lower = text.toLowerCase();
+        if (text.contains("权限申请") || text.contains("开权限") || text.contains("申请权限") || lower.contains("access")) {
+            return TicketTypeEnum.ACCESS_REQUEST;
+        }
+        if (text.contains("环境申请") || text.contains("申请环境") || text.contains("开环境") || lower.contains("environment request")) {
+            return TicketTypeEnum.ENVIRONMENT_REQUEST;
+        }
+        if (text.contains("咨询") || text.contains("请教") || text.contains("怎么") || lower.contains("consult")) {
+            return TicketTypeEnum.CONSULTATION;
+        }
+        if (text.contains("变更") || text.contains("发布") || text.contains("回滚") || lower.contains("change")) {
+            return TicketTypeEnum.CHANGE_REQUEST;
+        }
+        if (text.contains("故障") || text.contains("异常") || text.contains("报错") || text.contains("无法") || lower.contains("incident")) {
+            return TicketTypeEnum.INCIDENT;
+        }
+        return null;
+    }
+
     private TicketCategoryEnum resolveCategory(String message) {
         String text = message == null ? "" : message;
         String lower = text.toLowerCase();
@@ -86,7 +100,6 @@ public class AgentToolParameterExtractor {
         return null;
     }
 
-    /** 根据明确关键词抽取优先级；无法判断时返回空。 */
     private TicketPriorityEnum resolvePriority(String message) {
         String text = message == null ? "" : message.toLowerCase();
         if (text.contains("紧急") || text.contains("urgent")) {
@@ -100,6 +113,29 @@ public class AgentToolParameterExtractor {
         }
         if (text.contains("中") || text.contains("medium")) {
             return TicketPriorityEnum.MEDIUM;
+        }
+        return null;
+    }
+
+    private Boolean resolveSummaryRequested(String message) {
+        String text = message == null ? "" : message.toLowerCase();
+        return text.contains("摘要")
+                || text.contains("总结")
+                || text.contains("概览")
+                || text.contains("汇总")
+                || text.contains("风险");
+    }
+
+    private TicketSummaryViewEnum resolveSummaryView(String message) {
+        String text = message == null ? "" : message.toLowerCase();
+        if (text.contains("管理员") || text.contains("管理视角") || text.contains("风险")) {
+            return TicketSummaryViewEnum.ADMIN;
+        }
+        if (text.contains("处理人") || text.contains("工程师") || text.contains("执行人")) {
+            return TicketSummaryViewEnum.ASSIGNEE;
+        }
+        if (text.contains("提单人") || text.contains("申请人") || text.contains("发起人") || text.contains("提交人")) {
+            return TicketSummaryViewEnum.SUBMITTER;
         }
         return null;
     }

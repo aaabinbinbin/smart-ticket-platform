@@ -1,17 +1,21 @@
 package com.smartticket.api.assembler;
 
+import com.smartticket.api.vo.p1.TicketApprovalTemplateStepVO;
+import com.smartticket.api.vo.p1.TicketApprovalTemplateVO;
 import com.smartticket.api.vo.p1.TicketAssignmentPreviewVO;
 import com.smartticket.api.vo.p1.TicketAssignmentRuleVO;
 import com.smartticket.api.vo.p1.TicketAssignmentStatsVO;
 import com.smartticket.api.vo.p1.TicketGroupVO;
-import com.smartticket.api.vo.p1.TicketQueueVO;
 import com.smartticket.api.vo.p1.TicketQueueMemberVO;
+import com.smartticket.api.vo.p1.TicketQueueVO;
 import com.smartticket.api.vo.p1.TicketSlaInstanceVO;
 import com.smartticket.api.vo.p1.TicketSlaPolicyVO;
 import com.smartticket.api.vo.p1.TicketSlaScanResultVO;
 import com.smartticket.biz.dto.TicketAssignmentPreviewDTO;
 import com.smartticket.biz.dto.TicketAssignmentStatsDTO;
 import com.smartticket.biz.dto.TicketSlaScanResultDTO;
+import com.smartticket.domain.entity.TicketApprovalTemplate;
+import com.smartticket.domain.entity.TicketApprovalTemplateStep;
 import com.smartticket.domain.entity.TicketAssignmentRule;
 import com.smartticket.domain.entity.TicketGroup;
 import com.smartticket.domain.entity.TicketQueue;
@@ -26,14 +30,30 @@ public class P1ConfigAssembler {
         if (group == null) {
             return null;
         }
-        return TicketGroupVO.builder().id(group.getId()).groupName(group.getGroupName()).groupCode(group.getGroupCode()).ownerUserId(group.getOwnerUserId()).enabled(Integer.valueOf(1).equals(group.getEnabled())).createdAt(group.getCreatedAt()).updatedAt(group.getUpdatedAt()).build();
+        return TicketGroupVO.builder()
+                .id(group.getId())
+                .groupName(group.getGroupName())
+                .groupCode(group.getGroupCode())
+                .ownerUserId(group.getOwnerUserId())
+                .enabled(Integer.valueOf(1).equals(group.getEnabled()))
+                .createdAt(group.getCreatedAt())
+                .updatedAt(group.getUpdatedAt())
+                .build();
     }
 
     public TicketQueueVO toQueueVO(TicketQueue queue) {
         if (queue == null) {
             return null;
         }
-        return TicketQueueVO.builder().id(queue.getId()).queueName(queue.getQueueName()).queueCode(queue.getQueueCode()).groupId(queue.getGroupId()).enabled(Integer.valueOf(1).equals(queue.getEnabled())).createdAt(queue.getCreatedAt()).updatedAt(queue.getUpdatedAt()).build();
+        return TicketQueueVO.builder()
+                .id(queue.getId())
+                .queueName(queue.getQueueName())
+                .queueCode(queue.getQueueCode())
+                .groupId(queue.getGroupId())
+                .enabled(Integer.valueOf(1).equals(queue.getEnabled()))
+                .createdAt(queue.getCreatedAt())
+                .updatedAt(queue.getUpdatedAt())
+                .build();
     }
 
     public TicketQueueMemberVO toQueueMemberVO(TicketQueueMember member) {
@@ -55,14 +75,33 @@ public class P1ConfigAssembler {
         if (policy == null) {
             return null;
         }
-        return TicketSlaPolicyVO.builder().id(policy.getId()).policyName(policy.getPolicyName()).category(policy.getCategory()).priority(policy.getPriority()).firstResponseMinutes(policy.getFirstResponseMinutes()).resolveMinutes(policy.getResolveMinutes()).enabled(Integer.valueOf(1).equals(policy.getEnabled())).createdAt(policy.getCreatedAt()).updatedAt(policy.getUpdatedAt()).build();
+        return TicketSlaPolicyVO.builder()
+                .id(policy.getId())
+                .policyName(policy.getPolicyName())
+                .category(policy.getCategory())
+                .priority(policy.getPriority())
+                .firstResponseMinutes(policy.getFirstResponseMinutes())
+                .resolveMinutes(policy.getResolveMinutes())
+                .enabled(Integer.valueOf(1).equals(policy.getEnabled()))
+                .createdAt(policy.getCreatedAt())
+                .updatedAt(policy.getUpdatedAt())
+                .build();
     }
 
     public TicketSlaInstanceVO toSlaInstanceVO(TicketSlaInstance instance) {
         if (instance == null) {
             return null;
         }
-        return TicketSlaInstanceVO.builder().id(instance.getId()).ticketId(instance.getTicketId()).policyId(instance.getPolicyId()).firstResponseDeadline(instance.getFirstResponseDeadline()).resolveDeadline(instance.getResolveDeadline()).breached(Integer.valueOf(1).equals(instance.getBreached())).createdAt(instance.getCreatedAt()).updatedAt(instance.getUpdatedAt()).build();
+        return TicketSlaInstanceVO.builder()
+                .id(instance.getId())
+                .ticketId(instance.getTicketId())
+                .policyId(instance.getPolicyId())
+                .firstResponseDeadline(instance.getFirstResponseDeadline())
+                .resolveDeadline(instance.getResolveDeadline())
+                .breached(Integer.valueOf(1).equals(instance.getBreached()))
+                .createdAt(instance.getCreatedAt())
+                .updatedAt(instance.getUpdatedAt())
+                .build();
     }
 
     public TicketSlaScanResultVO toSlaScanResultVO(TicketSlaScanResultDTO result) {
@@ -86,14 +125,35 @@ public class P1ConfigAssembler {
         if (rule == null) {
             return null;
         }
-        return TicketAssignmentRuleVO.builder().id(rule.getId()).ruleName(rule.getRuleName()).category(rule.getCategory()).priority(rule.getPriority()).targetGroupId(rule.getTargetGroupId()).targetQueueId(rule.getTargetQueueId()).targetUserId(rule.getTargetUserId()).weight(rule.getWeight()).enabled(Integer.valueOf(1).equals(rule.getEnabled())).createdAt(rule.getCreatedAt()).updatedAt(rule.getUpdatedAt()).build();
+        return TicketAssignmentRuleVO.builder()
+                .id(rule.getId())
+                .ruleName(rule.getRuleName())
+                .category(rule.getCategory())
+                .priority(rule.getPriority())
+                .targetGroupId(rule.getTargetGroupId())
+                .targetQueueId(rule.getTargetQueueId())
+                .targetUserId(rule.getTargetUserId())
+                .weight(rule.getWeight())
+                .enabled(Integer.valueOf(1).equals(rule.getEnabled()))
+                .createdAt(rule.getCreatedAt())
+                .updatedAt(rule.getUpdatedAt())
+                .build();
     }
 
     public TicketAssignmentPreviewVO toAssignmentPreviewVO(TicketAssignmentPreviewDTO preview) {
         if (preview == null) {
             return null;
         }
-        return TicketAssignmentPreviewVO.builder().ticketId(preview.getTicketId()).matched(preview.isMatched()).ruleId(preview.getRuleId()).ruleName(preview.getRuleName()).targetGroupId(preview.getTargetGroupId()).targetQueueId(preview.getTargetQueueId()).targetUserId(preview.getTargetUserId()).reason(preview.getReason()).build();
+        return TicketAssignmentPreviewVO.builder()
+                .ticketId(preview.getTicketId())
+                .matched(preview.isMatched())
+                .ruleId(preview.getRuleId())
+                .ruleName(preview.getRuleName())
+                .targetGroupId(preview.getTargetGroupId())
+                .targetQueueId(preview.getTargetQueueId())
+                .targetUserId(preview.getTargetUserId())
+                .reason(preview.getReason())
+                .build();
     }
 
     public TicketAssignmentStatsVO toAssignmentStatsVO(TicketAssignmentStatsDTO stats) {
@@ -108,6 +168,37 @@ public class P1ConfigAssembler {
                 .totalAutoAssignCount(stats.getTotalAutoAssignCount())
                 .autoAssignedCount(stats.getAutoAssignedCount())
                 .autoAssignHitRate(stats.getAutoAssignHitRate())
+                .build();
+    }
+
+    public TicketApprovalTemplateVO toApprovalTemplateVO(TicketApprovalTemplate template) {
+        if (template == null) {
+            return null;
+        }
+        return TicketApprovalTemplateVO.builder()
+                .id(template.getId())
+                .templateName(template.getTemplateName())
+                .ticketType(template.getTicketType() == null ? null : template.getTicketType().getCode())
+                .ticketTypeInfo(template.getTicketType() == null ? null : template.getTicketType().getInfo())
+                .description(template.getDescription())
+                .enabled(Integer.valueOf(1).equals(template.getEnabled()))
+                .createdAt(template.getCreatedAt())
+                .updatedAt(template.getUpdatedAt())
+                .steps(template.getSteps() == null ? null : template.getSteps().stream().map(this::toApprovalTemplateStepVO).toList())
+                .build();
+    }
+
+    public TicketApprovalTemplateStepVO toApprovalTemplateStepVO(TicketApprovalTemplateStep step) {
+        if (step == null) {
+            return null;
+        }
+        return TicketApprovalTemplateStepVO.builder()
+                .id(step.getId())
+                .stepOrder(step.getStepOrder())
+                .stepName(step.getStepName())
+                .approverId(step.getApproverId())
+                .createdAt(step.getCreatedAt())
+                .updatedAt(step.getUpdatedAt())
                 .build();
     }
 }

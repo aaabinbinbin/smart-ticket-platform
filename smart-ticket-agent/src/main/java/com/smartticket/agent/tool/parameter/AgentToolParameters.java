@@ -2,6 +2,8 @@ package com.smartticket.agent.tool.parameter;
 
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
+import com.smartticket.domain.enums.TicketSummaryViewEnum;
+import com.smartticket.domain.enums.TicketTypeEnum;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -22,8 +24,11 @@ public class AgentToolParameters {
     private String title;
     private String description;
     private String idempotencyKey;
+    private TicketTypeEnum type;
     private TicketCategoryEnum category;
     private TicketPriorityEnum priority;
+    private Boolean summaryRequested;
+    private TicketSummaryViewEnum summaryView;
     @Builder.Default
     private List<Long> numbers = new ArrayList<>();
 }
