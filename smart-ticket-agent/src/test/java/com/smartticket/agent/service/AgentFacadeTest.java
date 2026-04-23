@@ -7,11 +7,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.smartticket.agent.execution.AgentExecutionGuard;
+import com.smartticket.agent.execution.AgentExecutionDecision;
+import com.smartticket.agent.memory.AgentMemoryService;
 import com.smartticket.agent.model.AgentChatResult;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentPendingAction;
@@ -22,6 +25,7 @@ import com.smartticket.agent.planner.AgentPlanAction;
 import com.smartticket.agent.planner.AgentPlanStage;
 import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.prompt.PromptTemplateService;
+import com.smartticket.agent.skill.AgentSkill;
 import com.smartticket.agent.skill.SkillRegistry;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.core.AgentToolStatus;
@@ -139,6 +143,72 @@ class AgentFacadeTest {
         assertNull(result.getContext().getPendingAction());
     }
 
+    @Test
+    void chatShouldRequireConfirmationBeforeHighRiskTransfer() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = AgentSessionContext.builder().activeTicketId(1001L).build();
+        AgentSkill skill = mock(AgentSkill.class);
+        AgentToolParameters parameters = AgentToolParameters.builder()
+                .ticketId(1001L)
+                .assigneeId(3L)
+                .build();
+        when(fixture.sessionService.load("s-transfer")).thenReturn(context);
+        when(fixture.intentRouter.route("transfer", context)).thenReturn(IntentRoute.builder()
+                .intent(AgentIntent.TRANSFER_TICKET)
+                .confidence(0.90d)
+                .reason("transfer")
+                .build());
+        when(fixture.skillRegistry.requireByIntent(AgentIntent.TRANSFER_TICKET)).thenReturn(skill);
+        when(skill.tool()).thenReturn(fixture.transferTicketTool);
+        when(fixture.parameterExtractor.extract("transfer", context)).thenReturn(parameters);
+        when(fixture.executionGuard.check(any(), eq("transfer"), eq(context), any(), any()))
+                .thenReturn(AgentExecutionDecision.needConfirmation(fixture.transferTicketTool, "risk"));
+
+        AgentChatResult result = fixture.agentFacade.chat(currentUser(), "s-transfer", "transfer");
+
+        assertEquals("TRANSFER_TICKET", result.getIntent());
+        assertNotNull(result.getContext().getPendingAction());
+        assertEquals(AgentIntent.TRANSFER_TICKET, result.getContext().getPendingAction().getPendingIntent());
+        assertEquals(1001L, result.getContext().getPendingAction().getPendingParameters().getTicketId());
+        assertEquals(3L, result.getContext().getPendingAction().getPendingParameters().getAssigneeId());
+        assertEquals(true, result.getContext().getPendingAction().isAwaitingConfirmation());
+        verify(fixture.transferTicketTool, never()).execute(any());
+    }
+
+    @Test
+    void chatShouldExecutePendingHighRiskTransferAfterConfirmation() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = AgentSessionContext.builder()
+                .pendingAction(AgentPendingAction.builder()
+                        .pendingIntent(AgentIntent.TRANSFER_TICKET)
+                        .pendingToolName("transferTicket")
+                        .pendingParameters(AgentToolParameters.builder()
+                                .ticketId(1001L)
+                                .assigneeId(3L)
+                                .build())
+                        .awaitingConfirmation(true)
+                        .confirmationSummary("confirm transfer")
+                        .build())
+                .build();
+        when(fixture.sessionService.load("s-confirm")).thenReturn(context);
+        when(fixture.transferTicketTool.execute(argThat(request ->
+                request.getParameters().getTicketId().equals(1001L)
+                        && request.getParameters().getAssigneeId().equals(3L)
+        ))).thenReturn(AgentToolResult.builder()
+                .status(AgentToolStatus.SUCCESS)
+                .toolName("transferTicket")
+                .reply("transferred")
+                .activeTicketId(1001L)
+                .activeAssigneeId(3L)
+                .build());
+
+        AgentChatResult result = fixture.agentFacade.chat(currentUser(), "s-confirm", "confirm");
+
+        assertEquals("TRANSFER_TICKET", result.getIntent());
+        assertEquals("transferred", result.getReply());
+        assertNull(result.getContext().getPendingAction());
+    }
+
     private TestFixture fixture() {
         ObjectProvider<?> chatClientProvider = mock(ObjectProvider.class);
         IntentRouter intentRouter = mock(IntentRouter.class);
@@ -146,6 +216,7 @@ class AgentFacadeTest {
         AgentExecutionGuard executionGuard = mock(AgentExecutionGuard.class);
         AgentPlanner agentPlanner = mock(AgentPlanner.class);
         SkillRegistry skillRegistry = mock(SkillRegistry.class);
+        AgentMemoryService memoryService = mock(AgentMemoryService.class);
         AgentTraceService traceService = mock(AgentTraceService.class);
         PromptTemplateService promptTemplateService = mock(PromptTemplateService.class);
         AgentToolParameterExtractor parameterExtractor = mock(AgentToolParameterExtractor.class);
@@ -154,6 +225,9 @@ class AgentFacadeTest {
         TransferTicketTool transferTicketTool = mock(TransferTicketTool.class);
         SearchHistoryTool searchHistoryTool = mock(SearchHistoryTool.class);
         when(createTicketTool.name()).thenReturn("createTicket");
+        when(transferTicketTool.name()).thenReturn("transferTicket");
+        when(queryTicketTool.name()).thenReturn("queryTicket");
+        when(searchHistoryTool.name()).thenReturn("searchHistory");
         when(traceService.start(any(), any(), any())).thenReturn(new AgentTraceContext("trace-1", "session", 1L, "message"));
         when(agentPlanner.buildOrLoadPlan(any(), any())).thenReturn(AgentPlan.builder()
                 .goal("create_ticket")
@@ -171,6 +245,7 @@ class AgentFacadeTest {
                 executionGuard,
                 agentPlanner,
                 skillRegistry,
+                memoryService,
                 traceService,
                 promptTemplateService,
                 parameterExtractor,
@@ -186,6 +261,7 @@ class AgentFacadeTest {
                 executionGuard,
                 agentPlanner,
                 skillRegistry,
+                memoryService,
                 traceService,
                 promptTemplateService,
                 parameterExtractor,
@@ -203,6 +279,7 @@ class AgentFacadeTest {
             AgentExecutionGuard executionGuard,
             AgentPlanner agentPlanner,
             SkillRegistry skillRegistry,
+            AgentMemoryService memoryService,
             AgentTraceService traceService,
             PromptTemplateService promptTemplateService,
             AgentToolParameterExtractor parameterExtractor,

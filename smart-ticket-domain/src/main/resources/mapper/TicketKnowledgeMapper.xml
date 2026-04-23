@@ -6,8 +6,14 @@
 
     <insert id="insert" parameterType="com.smartticket.domain.entity.TicketKnowledge"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO ticket_knowledge (ticket_id, content, content_summary, status)
-        VALUES (#{ticketId}, #{content}, #{contentSummary}, #{status})
+        INSERT INTO ticket_knowledge (
+            ticket_id, content, content_summary, symptom_summary, root_cause_summary,
+            resolution_steps, risk_notes, applicable_scope, status
+        )
+        VALUES (
+            #{ticketId}, #{content}, #{contentSummary}, #{symptomSummary}, #{rootCauseSummary},
+            #{resolutionSteps}, #{riskNotes}, #{applicableScope}, #{status}
+        )
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledge">
@@ -33,6 +39,11 @@
         UPDATE ticket_knowledge
         SET content = #{content},
             content_summary = #{contentSummary},
+            symptom_summary = #{symptomSummary},
+            root_cause_summary = #{rootCauseSummary},
+            resolution_steps = #{resolutionSteps},
+            risk_notes = #{riskNotes},
+            applicable_scope = #{applicableScope},
             status = #{status}
         WHERE id = #{id}
     </update>

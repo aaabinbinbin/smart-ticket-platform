@@ -1,6 +1,7 @@
 package com.smartticket.agent.model;
 
 import com.smartticket.agent.planner.AgentPlan;
+import com.smartticket.domain.entity.AgentUserPreferenceMemory;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -36,4 +37,10 @@ public class AgentSessionContext {
     private AgentPendingAction pendingAction;
 
     private AgentPlan planState;
+
+    private AgentWorkingMemory workingMemory;
+
+    private AgentUserPreferenceMemory userPreferenceMemory;
+
+    private AgentTicketDomainMemory ticketDomainMemory;
 }

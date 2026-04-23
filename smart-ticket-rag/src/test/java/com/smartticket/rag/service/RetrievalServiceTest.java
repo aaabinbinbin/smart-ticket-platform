@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.smartticket.domain.mapper.RagFeedbackMapper;
 import com.smartticket.domain.entity.TicketKnowledge;
 import com.smartticket.domain.entity.TicketKnowledgeEmbedding;
 import com.smartticket.infra.ai.VectorStoreConfig.SpringAiVectorStoreHolder;
@@ -15,6 +16,7 @@ import com.smartticket.rag.model.RetrievalResult;
 import com.smartticket.rag.repository.TicketKnowledgeEmbeddingRepository;
 import com.smartticket.rag.repository.TicketKnowledgeReadRepository;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -26,7 +28,7 @@ class RetrievalServiceTest {
         TicketKnowledgeEmbeddingRepository embeddingRepository = mock(TicketKnowledgeEmbeddingRepository.class);
         TicketKnowledgeReadRepository knowledgeRepository = mock(TicketKnowledgeReadRepository.class);
         QueryRewriteService queryRewriteService = new QueryRewriteService();
-        RetrievalRerankService rerankService = new RetrievalRerankService();
+        RetrievalRerankService rerankService = new RetrievalRerankService(feedbackService());
         ObjectProvider<SpringAiVectorStoreHolder> vectorStoreProvider = mock(ObjectProvider.class);
         RetrievalService retrievalService = new RetrievalService(
                 embeddingModelClient,
@@ -74,7 +76,7 @@ class RetrievalServiceTest {
                 embeddingRepository,
                 knowledgeRepository,
                 new QueryRewriteService(),
-                new RetrievalRerankService(),
+                new RetrievalRerankService(feedbackService()),
                 vectorStoreProvider,
                 false
         );
@@ -86,5 +88,11 @@ class RetrievalServiceTest {
 
         assertTrue(result.getRewrittenQuery().contains("测试环境无法登录 登录时报 500"));
         assertFalse(result.getRewrittenQuery().contains("帮我创建一个"));
+    }
+
+    private RagFeedbackService feedbackService() {
+        RagFeedbackMapper mapper = mock(RagFeedbackMapper.class);
+        when(mapper.scoreByKnowledge()).thenReturn(List.of());
+        return new RagFeedbackService(mapper);
     }
 }

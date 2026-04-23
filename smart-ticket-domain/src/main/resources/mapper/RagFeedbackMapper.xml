@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.RagFeedbackMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.RagFeedback"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO rag_feedback (
+            knowledge_id, ticket_id, session_id, query_text, feedback_type, comment, created_by
+        )
+        VALUES (
+            #{knowledgeId}, #{ticketId}, #{sessionId}, #{queryText}, #{feedbackType}, #{comment}, #{createdBy}
+        )
+    </insert>
+
+    <select id="findByKnowledgeId" resultType="com.smartticket.domain.entity.RagFeedback">
+        SELECT *
+        FROM rag_feedback
+        WHERE knowledge_id = #{knowledgeId}
+        ORDER BY created_at DESC
+    </select>
+
+    <select id="countByKnowledge" resultType="map">
+        SELECT knowledge_id AS knowledgeId, COUNT(1) AS total,
+               SUM(CASE WHEN feedback_type = 'HELPFUL' THEN 1 ELSE 0 END) AS helpful,
+               SUM(CASE WHEN feedback_type = 'NOT_HELPFUL' THEN 1 ELSE 0 END) AS notHelpful,
+               SUM(CASE WHEN feedback_type = 'WRONG_REFERENCE' THEN 1 ELSE 0 END) AS wrongReference
+        FROM rag_feedback
+        GROUP BY knowledge_id
+        ORDER BY total DESC
+        LIMIT 20
+    </select>
+
+    <select id="countByFeedbackType" resultType="map">
+        SELECT feedback_type AS feedbackType, COUNT(1) AS total
+        FROM rag_feedback
+        GROUP BY feedback_type
+        ORDER BY total DESC
+    </select>
+
+    <select id="countFailedQueries" resultType="map">
+        SELECT query_text AS queryText, COUNT(1) AS total
+        FROM rag_feedback
+        WHERE feedback_type IN ('NOT_HELPFUL', 'WRONG_REFERENCE')
+        GROUP BY query_text
+        ORDER BY total DESC
+        LIMIT 20
+    </select>
+
+    <select id="scoreByKnowledge" resultType="map">
+        SELECT knowledge_id AS knowledgeId,
+               SUM(CASE
+                   WHEN feedback_type = 'HELPFUL' THEN 1.0
+                   WHEN feedback_type = 'NEUTRAL' THEN 0.0
+                   WHEN feedback_type = 'NOT_HELPFUL' THEN -1.0
+                   WHEN feedback_type = 'WRONG_REFERENCE' THEN -2.0
+                   ELSE 0.0
+               END) AS feedbackScore
+        FROM rag_feedback
+        GROUP BY knowledge_id
+    </select>
+</mapper>

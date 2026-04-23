@@ -4,6 +4,7 @@ import com.smartticket.rag.model.RetrievalHit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
@@ -16,32 +17,57 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class RetrievalRerankService {
+    private static final double FEEDBACK_WEIGHT = 0.05d;
+
+    private final RagFeedbackService ragFeedbackService;
+
+    public RetrievalRerankService(RagFeedbackService ragFeedbackService) {
+        this.ragFeedbackService = ragFeedbackService;
+    }
 
     public List<RetrievalHit> rerank(String queryText, List<RetrievalHit> hits, int topK) {
         if (hits == null || hits.isEmpty()) {
             return List.of();
         }
         Set<String> queryTerms = tokenize(queryText);
+        Map<Long, Double> feedbackScores = ragFeedbackService.feedbackScoreByKnowledge();
         return hits.stream()
-                .map(hit -> scoreHit(queryTerms, hit))
+                .map(hit -> scoreHit(queryTerms, feedbackScores, hit))
                 .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
                 .limit(topK)
                 .toList();
     }
 
-    private RetrievalHit scoreHit(Set<String> queryTerms, RetrievalHit hit) {
+    private RetrievalHit scoreHit(Set<String> queryTerms, Map<Long, Double> feedbackScores, RetrievalHit hit) {
         double baseScore = hit.getScore() == null ? 0.0d : hit.getScore();
         double coverageBoost = overlapRatio(queryTerms, tokenize(hit.getChunkText())) * 0.15d;
         double summaryBoost = overlapRatio(queryTerms, tokenize(hit.getContentSummary())) * 0.10d;
+        double feedbackBoost = feedbackScores.getOrDefault(hit.getKnowledgeId(), 0.0d) * FEEDBACK_WEIGHT;
         return RetrievalHit.builder()
                 .knowledgeId(hit.getKnowledgeId())
                 .ticketId(hit.getTicketId())
                 .embeddingId(hit.getEmbeddingId())
                 .chunkIndex(hit.getChunkIndex())
-                .score(baseScore + coverageBoost + summaryBoost)
+                .chunkType(hit.getChunkType())
+                .sourceField(hit.getSourceField())
+                .score(baseScore + coverageBoost + summaryBoost + feedbackBoost)
                 .contentSummary(hit.getContentSummary())
                 .chunkText(hit.getChunkText())
+                .whyMatched(appendFeedbackReason(hit.getWhyMatched(), feedbackScores.getOrDefault(hit.getKnowledgeId(), 0.0d)))
+                .similarFields(hit.getSimilarFields())
+                .differenceFields(hit.getDifferenceFields())
                 .build();
+    }
+
+    private String appendFeedbackReason(String reason, double feedbackScore) {
+        String base = reason == null ? "" : reason;
+        if (feedbackScore > 0) {
+            return base + " 历史反馈整体偏正向，已轻微提权。";
+        }
+        if (feedbackScore < 0) {
+            return base + " 历史反馈整体偏负向，已降权。";
+        }
+        return base;
     }
 
     private double overlapRatio(Set<String> queryTerms, Set<String> targetTerms) {

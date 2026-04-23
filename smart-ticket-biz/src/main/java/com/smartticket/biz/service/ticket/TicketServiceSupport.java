@@ -209,8 +209,8 @@ public class TicketServiceSupport {
         });
     }
 
-    public void publishTicketClosedAfterCommit(Long ticketId) {
-        TicketClosedEvent event = new TicketClosedEvent(ticketId);
+    public void publishTicketClosedAfterCommit(Long ticketId, Long knowledgeBuildTaskId) {
+        TicketClosedEvent event = new TicketClosedEvent(ticketId, knowledgeBuildTaskId);
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             publishClosedEvent(event);
             return;

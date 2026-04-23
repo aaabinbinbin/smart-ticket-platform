@@ -12,6 +12,7 @@ import com.smartticket.domain.enums.TicketStatusEnum;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -100,6 +101,7 @@ public class TicketKnowledgeService {
         }
 
         List<TicketComment> keyComments = extractKeyComments(comments);
+        Map<String, String> structured = buildStructuredFields(ticket, keyComments);
         String content = buildContent(ticket, keyComments);
         String summary = buildSummary(ticket, keyComments);
 
@@ -109,6 +111,11 @@ public class TicketKnowledgeService {
                     .ticketId(ticketId)
                     .content(content)
                     .contentSummary(summary)
+                    .symptomSummary(structured.get("symptomSummary"))
+                    .rootCauseSummary(structured.get("rootCauseSummary"))
+                    .resolutionSteps(structured.get("resolutionSteps"))
+                    .riskNotes(structured.get("riskNotes"))
+                    .applicableScope(structured.get("applicableScope"))
                     .status("ACTIVE")
                     .build();
             ticketKnowledgeRepository.insert(created);
@@ -117,6 +124,11 @@ public class TicketKnowledgeService {
 
         existing.setContent(content);
         existing.setContentSummary(summary);
+        existing.setSymptomSummary(structured.get("symptomSummary"));
+        existing.setRootCauseSummary(structured.get("rootCauseSummary"));
+        existing.setResolutionSteps(structured.get("resolutionSteps"));
+        existing.setRiskNotes(structured.get("riskNotes"));
+        existing.setApplicableScope(structured.get("applicableScope"));
         existing.setStatus("ACTIVE");
         ticketKnowledgeRepository.update(existing);
         return Optional.of(existing);
@@ -205,6 +217,34 @@ public class TicketKnowledgeService {
     /**
      * 追加一行标准化字段。
      */
+    public Map<String, String> buildStructuredFields(Ticket ticket, List<TicketComment> keyComments) {
+        String symptom = compact(ticket.getTitle(), ticket.getDescription());
+        String rootCause = firstMatchingComment(keyComments, List.of("根因", "原因", "定位", "发现", "root cause"));
+        if (!hasText(rootCause)) {
+            rootCause = hasText(ticket.getSolutionSummary()) ? "见解决摘要中的处理结论。" : "暂未沉淀明确根因。";
+        }
+        String resolution = hasText(ticket.getSolutionSummary())
+                ? ticket.getSolutionSummary()
+                : firstMatchingComment(keyComments, List.of("解决", "修复", "恢复", "处理", "solution"));
+        if (!hasText(resolution)) {
+            resolution = "暂未沉淀明确处理步骤。";
+        }
+        String risk = firstMatchingComment(keyComments, List.of("风险", "注意", "影响", "回滚", "risk"));
+        if (!hasText(risk)) {
+            risk = "复用前需核对系统、环境、账号范围和当前工单事实。";
+        }
+        String scope = "适用于分类=" + enumCode(ticket.getCategory())
+                + "，优先级=" + enumCode(ticket.getPriority())
+                + "，相似标题或现象的已关闭工单。";
+        return Map.of(
+                "symptomSummary", limit(symptom, MAX_SUMMARY_LENGTH),
+                "rootCauseSummary", limit(rootCause, MAX_SUMMARY_LENGTH),
+                "resolutionSteps", resolution,
+                "riskNotes", limit(risk, MAX_SUMMARY_LENGTH),
+                "applicableScope", limit(scope, MAX_SUMMARY_LENGTH)
+        );
+    }
+
     private void appendLine(StringBuilder builder, String label, Object value) {
         builder.append(label).append("：").append(value == null ? "" : value).append("\n");
     }
@@ -220,6 +260,31 @@ public class TicketKnowledgeService {
             return 1;
         }
         return 2;
+    }
+
+    private String compact(String title, String description) {
+        String text = (nullToEmpty(title) + " " + nullToEmpty(description)).trim();
+        return hasText(text) ? text : "暂未沉淀明确问题现象。";
+    }
+
+    private String firstMatchingComment(List<TicketComment> comments, List<String> keywords) {
+        if (comments == null || comments.isEmpty()) {
+            return "";
+        }
+        return comments.stream()
+                .filter(comment -> hasText(comment.getContent()))
+                .filter(comment -> keywords.stream().anyMatch(keyword ->
+                        comment.getContent().toLowerCase().contains(keyword.toLowerCase())))
+                .map(TicketComment::getContent)
+                .findFirst()
+                .orElse("");
+    }
+
+    private String limit(String text, int maxLength) {
+        if (text == null || text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength);
     }
 
     /**

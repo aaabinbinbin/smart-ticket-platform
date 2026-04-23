@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketKnowledgeBuildTaskMapper">
+
+    <resultMap id="taskResultMap" type="com.smartticket.domain.entity.TicketKnowledgeBuildTask">
+        <id property="id" column="id"/>
+        <result property="ticketId" column="ticket_id"/>
+        <result property="taskType" column="task_type"/>
+        <result property="status" column="status"/>
+        <result property="retryCount" column="retry_count"/>
+        <result property="nextRetryAt" column="next_retry_at"/>
+        <result property="lastError" column="last_error"/>
+        <result property="lockedBy" column="locked_by"/>
+        <result property="lockedAt" column="locked_at"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <sql id="taskColumns">
+        id, ticket_id, task_type, status, retry_count, next_retry_at,
+        last_error, locked_by, locked_at, created_at, updated_at
+    </sql>
+
+    <insert id="insertIgnore" parameterType="com.smartticket.domain.entity.TicketKnowledgeBuildTask"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT IGNORE INTO ticket_knowledge_build_task (
+            ticket_id, task_type, status, retry_count, next_retry_at, last_error, locked_by, locked_at
+        )
+        VALUES (
+            #{ticketId}, #{taskType}, #{status}, #{retryCount}, #{nextRetryAt}, #{lastError}, #{lockedBy}, #{lockedAt}
+        )
+    </insert>
+
+    <select id="findById" resultMap="taskResultMap">
+        SELECT <include refid="taskColumns"/>
+        FROM ticket_knowledge_build_task
+        WHERE id = #{id}
+    </select>
+
+    <select id="findByTicketId" resultMap="taskResultMap">
+        SELECT <include refid="taskColumns"/>
+        FROM ticket_knowledge_build_task
+        WHERE ticket_id = #{ticketId}
+    </select>
+
+    <select id="findDispatchable" resultMap="taskResultMap">
+        SELECT <include refid="taskColumns"/>
+        FROM ticket_knowledge_build_task
+        WHERE status IN ('PENDING', 'FAILED')
+          AND (next_retry_at IS NULL OR next_retry_at &lt;= #{now})
+        ORDER BY created_at ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="claim">
+        UPDATE ticket_knowledge_build_task
+        SET status = 'PROCESSING',
+            locked_by = #{lockedBy},
+            locked_at = #{now},
+            updated_at = NOW()
+        WHERE id = #{id}
+          AND status IN ('PENDING', 'FAILED')
+          AND (next_retry_at IS NULL OR next_retry_at &lt;= #{now})
+    </update>
+
+    <update id="markSuccess">
+        UPDATE ticket_knowledge_build_task
+        SET status = 'SUCCESS',
+            last_error = NULL,
+            locked_by = NULL,
+            locked_at = NULL,
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="markFailed">
+        UPDATE ticket_knowledge_build_task
+        SET status = CASE WHEN #{dead} THEN 'DEAD' ELSE 'FAILED' END,
+            retry_count = retry_count + 1,
+            next_retry_at = #{nextRetryAt},
+            last_error = #{lastError},
+            locked_by = NULL,
+            locked_at = NULL,
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+</mapper>

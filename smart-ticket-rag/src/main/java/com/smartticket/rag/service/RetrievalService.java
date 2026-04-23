@@ -206,9 +206,14 @@ public class RetrievalService {
                 .knowledgeId(toLong(metadata.get("knowledgeId")))
                 .ticketId(toLong(metadata.get("ticketId")))
                 .chunkIndex(toInteger(metadata.get("chunkIndex")))
+                .chunkType(asString(metadata.get("chunkType")))
+                .sourceField(asString(metadata.get("sourceField")))
                 .score(document.getScore())
                 .contentSummary(asString(metadata.get("contentSummary")))
                 .chunkText(document.getText())
+                .whyMatched(matchReason(asString(metadata.get("chunkType")), asString(metadata.get("sourceField"))))
+                .similarFields(asString(metadata.get("sourceField")))
+                .differenceFields("需结合当前工单事实核对环境、版本、账号和影响范围。")
                 .build();
     }
 
@@ -225,10 +230,29 @@ public class RetrievalService {
                 .ticketId(knowledge.getTicketId())
                 .embeddingId(embedding.getId())
                 .chunkIndex(embedding.getChunkIndex())
+                .chunkType(embedding.getChunkType())
+                .sourceField(embedding.getSourceField())
                 .score(score)
                 .contentSummary(knowledge.getContentSummary())
                 .chunkText(embedding.getChunkText())
+                .whyMatched(matchReason(embedding.getChunkType(), embedding.getSourceField()))
+                .similarFields(embedding.getSourceField())
+                .differenceFields("需结合当前工单事实核对环境、版本、账号和影响范围。")
                 .build();
+    }
+
+    private String matchReason(String chunkType, String sourceField) {
+        if (!hasText(chunkType)) {
+            return "命中历史工单全文片段。";
+        }
+        return switch (chunkType) {
+            case "SYMPTOM" -> "命中问题现象摘要，适合判断当前问题是否相似。";
+            case "ROOT_CAUSE" -> "命中根因摘要，可作为排查方向参考。";
+            case "RESOLUTION" -> "命中处理步骤摘要，可复用为解决方案参考。";
+            case "RISK_NOTE" -> "命中风险注意事项，执行前需要重点核对。";
+            case "APPLICABLE_SCOPE" -> "命中适用范围，需确认当前工单是否满足这些条件。";
+            default -> "命中历史工单全文片段，来源字段：" + (sourceField == null ? "content" : sourceField) + "。";
+        };
     }
 
     /** 解析第一版 JSON 数组向量文本。 */

@@ -13,6 +13,17 @@ spring:
       password: 123456
       database: 1
       timeout: 3s
+  rabbitmq:
+    host: 192.168.100.128
+    port: 5672
+    username: admin
+    password: admin
+    listener:
+      simple:
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          max-attempts: 3
   ai:
     model:
       chat: none
@@ -43,6 +54,13 @@ mybatis:
     map-underscore-to-camel-case: true
 
 smart-ticket:
+  knowledge:
+    rabbit:
+      enabled: true
+    task:
+      max-retries: 5
+      relay-batch-size: 20
+      relay-fixed-delay-ms: 30000
   ai:
     chat:
       enabled: false

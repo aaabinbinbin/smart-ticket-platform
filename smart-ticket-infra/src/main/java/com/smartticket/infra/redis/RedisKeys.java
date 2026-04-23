@@ -24,4 +24,8 @@ public final class RedisKeys {
     public static String agentSession(String sessionId) {
         return "agent:session:" + sessionId;
     }
+
+    public static String agentTicketDomainMemory(Long ticketId) {
+        return "agent:memory:ticket:" + ticketId;
+    }
 }

@@ -24,6 +24,11 @@ public class TicketKnowledge {
     private String content;
     /** 知识摘要，便于检索结果展示。 */
     private String contentSummary;
+    private String symptomSummary;
+    private String rootCauseSummary;
+    private String resolutionSteps;
+    private String riskNotes;
+    private String applicableScope;
     /** 知识状态，例如 ACTIVE。 */
     private String status;
     /** 创建时间。 */

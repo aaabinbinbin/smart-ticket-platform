@@ -45,6 +45,9 @@ public class EmbeddingService {
     /** 是否启用 Spring AI VectorStore。 */
     private final boolean vectorStoreEnabled;
 
+    private record KnowledgeChunk(String type, String sourceField, String text) {
+    }
+
     public EmbeddingService(
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
@@ -71,18 +74,20 @@ public class EmbeddingService {
             return List.of();
         }
         embeddingRepository.deleteByKnowledgeId(knowledge.getId());
-        List<String> chunks = splitText(knowledge.getContent());
+        List<KnowledgeChunk> chunks = buildKnowledgeChunks(knowledge);
         log.info("embedding build started: knowledgeId={}, vectorStoreEnabled={}, chunks={}",
                 knowledge.getId(), vectorStoreEnabled, chunks.size());
         List<TicketKnowledgeEmbedding> saved = new ArrayList<>(chunks.size());
         List<Document> vectorDocuments = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
-            String chunk = chunks.get(i);
-            List<Double> vector = embedWithRetry(knowledge.getId(), i, chunk);
+            KnowledgeChunk chunk = chunks.get(i);
+            List<Double> vector = embedWithRetry(knowledge.getId(), i, chunk.text());
             TicketKnowledgeEmbedding embedding = TicketKnowledgeEmbedding.builder()
                     .knowledgeId(knowledge.getId())
                     .chunkIndex(i)
-                    .chunkText(chunk)
+                    .chunkType(chunk.type())
+                    .sourceField(chunk.sourceField())
+                    .chunkText(chunk.text())
                     .embeddingVector(toJsonArray(vector))
                     .build();
             embeddingRepository.insert(embedding);
@@ -115,6 +120,26 @@ public class EmbeddingService {
             start = Math.max(end - CHUNK_OVERLAP, start + 1);
         }
         return chunks;
+    }
+
+    private List<KnowledgeChunk> buildKnowledgeChunks(TicketKnowledge knowledge) {
+        List<KnowledgeChunk> chunks = new ArrayList<>();
+        addStructuredChunk(chunks, "SYMPTOM", "symptomSummary", knowledge.getSymptomSummary());
+        addStructuredChunk(chunks, "ROOT_CAUSE", "rootCauseSummary", knowledge.getRootCauseSummary());
+        addStructuredChunk(chunks, "RESOLUTION", "resolutionSteps", knowledge.getResolutionSteps());
+        addStructuredChunk(chunks, "RISK_NOTE", "riskNotes", knowledge.getRiskNotes());
+        addStructuredChunk(chunks, "APPLICABLE_SCOPE", "applicableScope", knowledge.getApplicableScope());
+        List<String> fullTextChunks = splitText(knowledge.getContent());
+        for (String fullTextChunk : fullTextChunks) {
+            chunks.add(new KnowledgeChunk("FULL_TEXT", "content", fullTextChunk));
+        }
+        return chunks;
+    }
+
+    private void addStructuredChunk(List<KnowledgeChunk> chunks, String type, String sourceField, String text) {
+        if (hasText(text)) {
+            chunks.add(new KnowledgeChunk(type, sourceField, text.trim()));
+        }
     }
 
     /**
@@ -159,15 +184,17 @@ public class EmbeddingService {
     }
 
     /** 将一段知识文本转换为 Spring AI Document，并附加业务元数据。 */
-    private Document toVectorDocument(TicketKnowledge knowledge, String chunk, int chunkIndex) {
+    private Document toVectorDocument(TicketKnowledge knowledge, KnowledgeChunk chunk, int chunkIndex) {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("knowledgeId", knowledge.getId());
         metadata.put("ticketId", knowledge.getTicketId());
         metadata.put("chunkIndex", chunkIndex);
+        metadata.put("chunkType", chunk.type());
+        metadata.put("sourceField", chunk.sourceField());
         metadata.put("contentSummary", knowledge.getContentSummary());
         return Document.builder()
                 .id(vectorDocumentId(knowledge.getId(), chunkIndex))
-                .text(chunk)
+                .text(chunk.text())
                 .metadata(metadata)
                 .build();
     }

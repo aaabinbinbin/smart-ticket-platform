@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.AgentUserPreferenceMemoryMapper">
+
+    <resultMap id="agentUserPreferenceMemoryResultMap" type="com.smartticket.domain.entity.AgentUserPreferenceMemory">
+        <id property="userId" column="user_id"/>
+        <result property="commonTicketType" column="common_ticket_type"/>
+        <result property="commonCategory" column="common_category"/>
+        <result property="commonPriority" column="common_priority"/>
+        <result property="commonTerms" column="common_terms"/>
+        <result property="responseStyle" column="response_style"/>
+        <result property="createdAt" column="created_at"/>
+        <result property="updatedAt" column="updated_at"/>
+    </resultMap>
+
+    <select id="findByUserId" resultMap="agentUserPreferenceMemoryResultMap">
+        SELECT user_id, common_ticket_type, common_category, common_priority,
+               common_terms, response_style, created_at, updated_at
+        FROM agent_user_preference_memory
+        WHERE user_id = #{userId}
+    </select>
+
+    <insert id="upsert" parameterType="com.smartticket.domain.entity.AgentUserPreferenceMemory">
+        INSERT INTO agent_user_preference_memory (
+            user_id, common_ticket_type, common_category, common_priority,
+            common_terms, response_style, created_at, updated_at
+        )
+        VALUES (
+            #{userId}, #{commonTicketType}, #{commonCategory}, #{commonPriority},
+            #{commonTerms}, #{responseStyle}, NOW(), NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            common_ticket_type = VALUES(common_ticket_type),
+            common_category = VALUES(common_category),
+            common_priority = VALUES(common_priority),
+            common_terms = VALUES(common_terms),
+            response_style = VALUES(response_style),
+            updated_at = NOW()
+    </insert>
+</mapper>

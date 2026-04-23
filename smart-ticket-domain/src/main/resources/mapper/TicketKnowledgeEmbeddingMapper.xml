@@ -6,8 +6,8 @@
 
     <insert id="insert" parameterType="com.smartticket.domain.entity.TicketKnowledgeEmbedding"
             useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO ticket_knowledge_embedding (knowledge_id, chunk_index, chunk_text, embedding_vector)
-        VALUES (#{knowledgeId}, #{chunkIndex}, #{chunkText}, #{embeddingVector})
+        INSERT INTO ticket_knowledge_embedding (knowledge_id, chunk_index, chunk_type, source_field, chunk_text, embedding_vector)
+        VALUES (#{knowledgeId}, #{chunkIndex}, #{chunkType}, #{sourceField}, #{chunkText}, #{embeddingVector})
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">

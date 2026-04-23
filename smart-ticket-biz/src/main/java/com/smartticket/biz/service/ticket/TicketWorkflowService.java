@@ -3,6 +3,7 @@ package com.smartticket.biz.service.ticket;
 import com.smartticket.biz.dto.ticket.TicketUpdateStatusCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.repository.ticket.TicketRepository;
+import com.smartticket.biz.service.knowledge.TicketKnowledgeBuildTaskService;
 import com.smartticket.biz.service.approval.TicketApprovalService;
 import com.smartticket.biz.service.assignment.TicketGroupService;
 import com.smartticket.biz.service.assignment.TicketQueueMemberService;
@@ -10,6 +11,7 @@ import com.smartticket.biz.service.sla.TicketSlaService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.domain.entity.Ticket;
+import com.smartticket.domain.entity.TicketKnowledgeBuildTask;
 import com.smartticket.domain.entity.TicketGroup;
 import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
@@ -29,6 +31,7 @@ public class TicketWorkflowService {
     private final TicketGroupService ticketGroupService;
     private final TicketQueueMemberService ticketQueueMemberService;
     private final TicketApprovalService ticketApprovalService;
+    private final TicketKnowledgeBuildTaskService knowledgeBuildTaskService;
 
     public TicketWorkflowService(
             TicketServiceSupport support,
@@ -37,7 +40,8 @@ public class TicketWorkflowService {
             TicketSlaService ticketSlaService,
             TicketGroupService ticketGroupService,
             TicketQueueMemberService ticketQueueMemberService,
-            TicketApprovalService ticketApprovalService
+            TicketApprovalService ticketApprovalService,
+            TicketKnowledgeBuildTaskService knowledgeBuildTaskService
     ) {
         this.support = support;
         this.ticketRepository = ticketRepository;
@@ -46,6 +50,7 @@ public class TicketWorkflowService {
         this.ticketGroupService = ticketGroupService;
         this.ticketQueueMemberService = ticketQueueMemberService;
         this.ticketApprovalService = ticketApprovalService;
+        this.knowledgeBuildTaskService = knowledgeBuildTaskService;
     }
 
     @Transactional
@@ -122,7 +127,8 @@ public class TicketWorkflowService {
                 OperationTypeEnum.CLOSE,
                 "关闭工单"
         );
-        support.publishTicketClosedAfterCommit(ticketId);
+        TicketKnowledgeBuildTask task = knowledgeBuildTaskService.createPending(ticketId);
+        support.publishTicketClosedAfterCommit(ticketId, task == null ? null : task.getId());
         return after;
     }
 

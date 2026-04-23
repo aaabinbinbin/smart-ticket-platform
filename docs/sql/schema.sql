@@ -132,6 +132,11 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge (
     ticket_id BIGINT NOT NULL COMMENT '工单 ID',
     content TEXT NOT NULL COMMENT '知识正文',
     content_summary VARCHAR(1000) DEFAULT NULL COMMENT '知识摘要',
+    symptom_summary VARCHAR(1000) DEFAULT NULL COMMENT '问题现象摘要',
+    root_cause_summary VARCHAR(1000) DEFAULT NULL COMMENT '根因摘要',
+    resolution_steps TEXT DEFAULT NULL COMMENT '处理步骤摘要',
+    risk_notes VARCHAR(1000) DEFAULT NULL COMMENT '风险与注意事项',
+    applicable_scope VARCHAR(1000) DEFAULT NULL COMMENT '适用范围',
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -145,6 +150,7 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge_candidate (
     quality_score INT NOT NULL DEFAULT 0 COMMENT '质量分',
     decision VARCHAR(32) NOT NULL COMMENT '准入决策',
     reason VARCHAR(1000) DEFAULT NULL COMMENT '决策原因',
+    review_comment VARCHAR(1000) DEFAULT NULL COMMENT '人工审核说明',
     sensitive_risk VARCHAR(32) NOT NULL DEFAULT 'NONE' COMMENT '敏感信息风险',
     reviewed_at DATETIME DEFAULT NULL COMMENT '人工复核时间',
     reviewed_by BIGINT DEFAULT NULL COMMENT '人工复核人',
@@ -155,14 +161,48 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge_candidate (
     INDEX idx_ticket_knowledge_candidate_score (quality_score)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS ticket_knowledge_build_task (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识构建任务主键',
+    ticket_id BIGINT NOT NULL COMMENT '来源工单 ID',
+    task_type VARCHAR(64) NOT NULL DEFAULT 'CLOSED_TICKET' COMMENT '任务类型',
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING' COMMENT '任务状态：PENDING/PROCESSING/SUCCESS/FAILED/DEAD',
+    retry_count INT NOT NULL DEFAULT 0 COMMENT '重试次数',
+    next_retry_at DATETIME DEFAULT NULL COMMENT '下次重试时间',
+    last_error VARCHAR(1000) DEFAULT NULL COMMENT '最近失败原因',
+    locked_by VARCHAR(128) DEFAULT NULL COMMENT '处理节点',
+    locked_at DATETIME DEFAULT NULL COMMENT '锁定时间',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_knowledge_build_task_ticket_id (ticket_id),
+    INDEX idx_ticket_knowledge_build_task_status_retry (status, next_retry_at),
+    INDEX idx_ticket_knowledge_build_task_updated_at (updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识切片向量主键',
     knowledge_id BIGINT NOT NULL COMMENT '知识 ID',
     chunk_index INT NOT NULL COMMENT '切片序号',
+    chunk_type VARCHAR(64) NOT NULL DEFAULT 'FULL_TEXT' COMMENT '切片类型',
+    source_field VARCHAR(64) NOT NULL DEFAULT 'content' COMMENT '来源字段',
     chunk_text TEXT NOT NULL COMMENT '切片文本',
     embedding_vector TEXT DEFAULT NULL COMMENT '向量内容，JSON 字符串形式',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_ticket_knowledge_embedding_knowledge_id (knowledge_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS rag_feedback (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'RAG 反馈主键',
+    knowledge_id BIGINT NOT NULL COMMENT '反馈关联知识 ID',
+    ticket_id BIGINT DEFAULT NULL COMMENT '关联工单 ID',
+    session_id VARCHAR(128) DEFAULT NULL COMMENT '会话 ID',
+    query_text VARCHAR(1000) DEFAULT NULL COMMENT '原始查询文本',
+    feedback_type VARCHAR(32) NOT NULL COMMENT '反馈类型：HELPFUL/NEUTRAL/NOT_HELPFUL/WRONG_REFERENCE',
+    comment VARCHAR(1000) DEFAULT NULL COMMENT '反馈说明',
+    created_by BIGINT NOT NULL COMMENT '反馈用户 ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_rag_feedback_knowledge_id (knowledge_id),
+    INDEX idx_rag_feedback_type (feedback_type, created_at),
+    INDEX idx_rag_feedback_query (query_text(255))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================
@@ -299,6 +339,18 @@ CREATE TABLE IF NOT EXISTS agent_trace_record (
     INDEX idx_agent_trace_session_id (session_id, created_at),
     INDEX idx_agent_trace_user_id (user_id, created_at),
     INDEX idx_agent_trace_failure_type (failure_type, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_user_preference_memory (
+    user_id BIGINT PRIMARY KEY COMMENT '用户 ID',
+    common_ticket_type VARCHAR(64) DEFAULT NULL COMMENT '常用工单类型',
+    common_category VARCHAR(64) DEFAULT NULL COMMENT '常用工单分类',
+    common_priority VARCHAR(64) DEFAULT NULL COMMENT '常用优先级',
+    common_terms VARCHAR(1000) DEFAULT NULL COMMENT '常用术语摘要，不保存敏感原文',
+    response_style VARCHAR(64) DEFAULT NULL COMMENT '偏好回复风格',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_agent_user_preference_memory_updated_at (updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================

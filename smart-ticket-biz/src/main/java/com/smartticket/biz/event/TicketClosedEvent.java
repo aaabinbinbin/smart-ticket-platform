@@ -7,5 +7,8 @@ package com.smartticket.biz.event;
  *
  * @param ticketId 已关闭工单 ID
  */
-public record TicketClosedEvent(Long ticketId) {
+public record TicketClosedEvent(Long ticketId, Long knowledgeBuildTaskId) {
+    public TicketClosedEvent(Long ticketId) {
+        this(ticketId, null);
+    }
 }

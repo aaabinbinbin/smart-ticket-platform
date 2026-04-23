@@ -22,6 +22,8 @@ public class TicketKnowledgeEmbedding {
     private Long knowledgeId;
     /** 切片序号。 */
     private Integer chunkIndex;
+    private String chunkType;
+    private String sourceField;
     /** 切片文本内容。 */
     private String chunkText;
     /** 切片对应的向量 JSON 文本，第一版用于证明向量化入库链路已打通。 */
