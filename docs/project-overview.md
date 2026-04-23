@@ -1,104 +1,105 @@
 # 项目概览
 
-## 1. 项目简介
+智能工单平台是一个面向简历和面试展示的 Java 后端项目。它不是简单 CRUD，而是把工单业务、权限控制、Agent 编排、RAG 知识库和异步可靠任务放在同一个可运行工程中。
 
-智能工单平台是一个基于 `Java 17`、`Spring Boot 3`、`Spring Security`、`MyBatis`、`Spring AI` 的模块化单体后端项目。
+## 项目定位
 
-项目目标：
+- 展示 Java 后端工程能力：模块化拆分、认证鉴权、事务、异步任务、测试。
+- 展示复杂业务建模能力：工单流转、SLA、自动分派、审批、操作日志。
+- 展示 Agent 工程化能力：受控执行、Tool Calling、Planner、Skill、Memory、Trace。
+- 展示 RAG 工程化能力：知识准入、检索重排、反馈闭环、人工审核、可靠入库。
 
-- 展示复杂业务后端能力
-- 展示 Agent 接入和 Tool Calling 能力
-- 展示 RAG 检索与工程化兜底链路
+当前阶段：高完成度 MVP。
 
-当前项目定位为：
+## 已实现能力
 
-- 简历和面试展示型项目
-- 高完成度 MVP
-- 非生产级完整平台
+### 工单业务
 
-## 2. 当前已实现能力
-
-### 工单主流程
-
-- 创建工单
-- 工单详情与分页查询
+- 工单创建、详情、分页查询
 - 分配、认领、转派
-- 状态流转与关闭
+- 状态流转、关闭
 - 评论与操作日志
+- SLA 扫描与升级
+- 自动分派与队列成员
+- 审批流
+- 多视角摘要
 
-### 认证与权限
+### 认证权限
 
 - JWT 登录
 - RBAC 角色控制
-- Agent 接口登录校验
+- 当前用户解析
+- Agent / RAG 管理接口鉴权
 
-### Agent 能力
+### Agent
 
-- `POST /api/agent/chat`
 - 意图路由
-- Tool Calling
-- 会话上下文
-- 创建工单缺参澄清
-- 待创建草稿续写
+- Planner 执行计划
+- SkillRegistry 能力注册
+- ExecutionGuard 执行前校验
+- Tool 调用与确定性 fallback
+- 高风险操作二次确认
+- 短期上下文与三层记忆
+- Trace 持久化和指标接口
 
-### RAG 能力
+### RAG
 
 - 知识构建
+- 结构化切片
 - Embedding
 - query rewrite
 - 轻量 rerank
 - MySQL fallback
-- PGvector 主路径开关
+- pgvector 可选路径
+- RAG 反馈
+- 知识候选人工审核
+- 工单关闭后异步可靠入知识库
 
-### 业务增强能力
+## 核心链路
 
-- SLA 定时扫描与升级
-- 自动分派
-- 队列与队列成员
-- 多类型工单
-- 审批流
-- 多视角摘要
-
-## 3. 模块结构
+### Agent 主链
 
 ```text
-smart-ticket-platform
-|- smart-ticket-app
-|- smart-ticket-common
-|- smart-ticket-domain
-|- smart-ticket-infra
-|- smart-ticket-auth
-|- smart-ticket-biz
-|- smart-ticket-rag
-|- smart-ticket-agent
-`- smart-ticket-api
+load session
+-> hydrate memory
+-> route intent
+-> build/load plan
+-> select skill
+-> guard
+-> execute tool or Spring AI tool calling
+-> fallback if needed
+-> update context and memory
+-> write trace
+-> return reply + plan + traceId
 ```
 
-- `smart-ticket-app`：应用启动与配置装配
-- `smart-ticket-common`：统一响应、异常、通用工具
-- `smart-ticket-domain`：实体、枚举、Mapper 定义
-- `smart-ticket-infra`：Redis、Spring AI、向量存储等基础设施适配
-- `smart-ticket-auth`：JWT、认证过滤器、Spring Security 配置
-- `smart-ticket-biz`：工单、SLA、自动分派、审批、摘要等业务能力
-- `smart-ticket-rag`：知识构建、Embedding、检索、重排
-- `smart-ticket-agent`：意图路由、会话上下文、Tool 编排
-- `smart-ticket-api`：Controller、DTO/VO、接口协议
+### 工单关闭入知识库
 
-## 4. 当前边界
+```text
+close ticket transaction
+-> create ticket_knowledge_build_task
+-> after commit publish event
+-> RabbitMQ publish
+-> RabbitMQ consume
+-> build knowledge candidate or formal knowledge
+-> update task status
+-> scheduled relay retries unfinished task
+```
 
-以下内容可以直接作为已实现能力介绍：
+### 知识候选审核
 
-- 工单主流程
-- JWT + RBAC
-- Agent 查询 / 创建 / 转派 / 历史检索链路
-- RAG 的 rewrite / rerank / fallback
-- SLA 扫描、升级、审计
-- 自动分派、审批流、多视角摘要
+```text
+knowledge admission uncertain
+-> create candidate
+-> admin review
+-> approve: create build task and force build
+-> reject: record reviewer and comment
+```
 
-以下内容建议明确说明为第一版或待补强：
+## 当前边界
 
-- 自动化测试覆盖仍在继续补齐
-- SLA 真实通知通道仍为预留位
-- PGvector 主链路需要真实环境演示
-- Agent 端到端集成验证仍可继续增强
-- 摘要策略仍是第一版
+- 项目是 MVP，部分能力用于展示工程设计，不等同生产级平台。
+- Spring AI 和向量库默认关闭，可以通过配置打开。
+- pgvector 需要外部 PostgreSQL 环境。
+- RabbitMQ 用于工单关闭后的知识构建消息链路。
+- 前端页面不是当前重点，后端 API 和工程结构是主要展示面。

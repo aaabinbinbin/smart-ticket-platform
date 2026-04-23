@@ -1,43 +1,63 @@
 # 快速启动
 
-## 1. 环境要求
+## 环境要求
 
 - JDK 17
 - Maven 3.9+
 - MySQL 8.x
 - Redis
+- RabbitMQ
 - 可选：PostgreSQL + pgvector
 
-## 2. 初始化数据库
+## 初始化数据库
 
-先创建数据库：
+创建数据库：
 
 ```sql
 CREATE DATABASE smart_ticket_platform DEFAULT CHARACTER SET utf8mb4;
 ```
 
-然后执行：
+执行初始化脚本：
 
 ```bash
-mysql -h127.0.0.1 -uroot -p123456 < docs/sql/schema.sql
-mysql -h127.0.0.1 -uroot -p123456 < docs/sql/seed.sql
+mysql -h127.0.0.1 -uroot -p123456 smart_ticket_platform < docs/sql/schema.sql
+mysql -h127.0.0.1 -uroot -p123456 smart_ticket_platform < docs/sql/seed.sql
 ```
 
-## 3. 检查本地配置
+## 默认本地配置
 
-应用配置文件：
+配置文件：
 
-- [application.yml](/D:/aaaAgent/smart-ticket-platform/smart-ticket-app/src/main/resources/application.yml)
+- `smart-ticket-app/src/main/resources/application.yml`
 
 当前默认依赖：
 
 - MySQL：`127.0.0.1:3306`
-- Redis：`192.168.100.128:6379`
-- 可选 PGvector：`192.168.100.128:5432`
+- Redis：`127.0.0.1:6379`
+- RabbitMQ AMQP：`192.168.100.128:5672`
+- RabbitMQ 管理后台：`192.168.100.128:15672`
+- pgvector：`192.168.100.128:5432`
 
-如果你的本地资源地址不同，请先修改 `application.yml`。
+RabbitMQ 当前账号：
 
-## 4. 启动项目
+```text
+admin / admin
+```
+
+pgvector 当前配置：
+
+```yaml
+smart-ticket:
+  ai:
+    pgvector:
+      url: jdbc:postgresql://192.168.100.128:5432/smart_ticket_vector
+      username: postgres
+      password: 123456
+```
+
+注意：`15672` 是 RabbitMQ 管理后台端口，Java 应用连接 RabbitMQ 使用 `5672`。
+
+## 启动项目
 
 直接启动：
 
@@ -45,14 +65,14 @@ mysql -h127.0.0.1 -uroot -p123456 < docs/sql/seed.sql
 mvn -pl smart-ticket-app -am spring-boot:run
 ```
 
-或者先打包再启动：
+或先打包再启动：
 
 ```bash
-mvn "-Dmaven.test.skip=true" package
+mvn -DskipTests package
 java -jar smart-ticket-app/target/smart-ticket-app-0.0.1-SNAPSHOT.jar
 ```
 
-## 5. 测试与打包
+## 运行测试
 
 执行全部测试：
 
@@ -60,20 +80,23 @@ java -jar smart-ticket-app/target/smart-ticket-app-0.0.1-SNAPSHOT.jar
 mvn test
 ```
 
-只验证主代码打包：
+只验证 Agent 和 API 相关模块：
 
 ```bash
-mvn "-Dmaven.test.skip=true" package
+mvn test -pl smart-ticket-api -am
 ```
 
-## 6. 演示账号
+## 演示账号
 
 - `user1 / 123456`：普通用户
 - `staff1 / 123456`：处理人员
 - `admin1 / 123456`：管理员
 
-## 7. 常用入口
+## 常用接口
 
-- API 说明：[ticket-api.md](/D:/aaaAgent/smart-ticket-platform/docs/ticket-api.md)
-- 演示脚本：[demo-playbook.md](/D:/aaaAgent/smart-ticket-platform/docs/demo-playbook.md)
-- 项目概览：[project-overview.md](/D:/aaaAgent/smart-ticket-platform/docs/project-overview.md)
+- Agent 对话：`POST /api/agent/chat`
+- Agent trace 查询：`GET /api/agent/traces/by-session`
+- Agent 最近指标：`GET /api/agent/traces/metrics/recent-by-user`
+- 知识候选列表：`GET /api/agent/knowledge-candidates`
+- 知识候选通过：`POST /api/agent/knowledge-candidates/{candidateId}/approve`
+- 知识候选拒绝：`POST /api/agent/knowledge-candidates/{candidateId}/reject`
