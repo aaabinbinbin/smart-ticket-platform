@@ -17,6 +17,7 @@ public class TicketKnowledgeCandidate {
     private Integer qualityScore;
     private String decision;
     private String reason;
+    private String reviewComment;
     private String sensitiveRisk;
     private LocalDateTime reviewedAt;
     private Long reviewedBy;

@@ -7,10 +7,10 @@
     <insert id="insert" parameterType="com.smartticket.domain.entity.TicketKnowledgeCandidate"
             useGeneratedKeys="true" keyProperty="id">
         INSERT INTO ticket_knowledge_candidate (
-            ticket_id, status, quality_score, decision, reason, sensitive_risk, reviewed_at, reviewed_by
+            ticket_id, status, quality_score, decision, reason, review_comment, sensitive_risk, reviewed_at, reviewed_by
         )
         VALUES (
-            #{ticketId}, #{status}, #{qualityScore}, #{decision}, #{reason}, #{sensitiveRisk}, #{reviewedAt}, #{reviewedBy}
+            #{ticketId}, #{status}, #{qualityScore}, #{decision}, #{reason}, #{reviewComment}, #{sensitiveRisk}, #{reviewedAt}, #{reviewedBy}
         )
     </insert>
 
@@ -20,11 +20,18 @@
             quality_score = #{qualityScore},
             decision = #{decision},
             reason = #{reason},
+            review_comment = #{reviewComment},
             sensitive_risk = #{sensitiveRisk},
             reviewed_at = #{reviewedAt},
             reviewed_by = #{reviewedBy}
         WHERE id = #{id}
     </update>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeCandidate">
+        SELECT *
+        FROM ticket_knowledge_candidate
+        WHERE id = #{id}
+    </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketKnowledgeCandidate">
         SELECT *

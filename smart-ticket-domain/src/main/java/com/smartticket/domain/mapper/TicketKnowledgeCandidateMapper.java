@@ -11,6 +11,8 @@ public interface TicketKnowledgeCandidateMapper {
 
     int update(TicketKnowledgeCandidate candidate);
 
+    TicketKnowledgeCandidate findById(@Param("id") Long id);
+
     TicketKnowledgeCandidate findByTicketId(@Param("ticketId") Long ticketId);
 
     List<TicketKnowledgeCandidate> findByStatus(@Param("status") String status, @Param("limit") int limit);

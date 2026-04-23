@@ -28,6 +28,10 @@ public class TicketKnowledgeCandidateRepository {
         return mapper.findByTicketId(ticketId);
     }
 
+    public TicketKnowledgeCandidate findById(Long id) {
+        return mapper.findById(id);
+    }
+
     public List<TicketKnowledgeCandidate> findByStatus(String status, int limit) {
         return mapper.findByStatus(status, limit);
     }
