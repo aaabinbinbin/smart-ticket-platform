@@ -69,7 +69,9 @@ smart-ticket:
     vector-store:
       enabled: false
     pgvector:
-      url: jdbc:postgresql://127.0.0.1:5432/smart_ticket_vector
+      url: jdbc:postgresql://192.168.100.128:5432/smart_ticket_vector
+      username: postgres
+      password: 123456
   jwt:
     secret: smart-ticket-platform-local-jwt-secret-change-me-please-20260417
     expiration-minutes: 120
