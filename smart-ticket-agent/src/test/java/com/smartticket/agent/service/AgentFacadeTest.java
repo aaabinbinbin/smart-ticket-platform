@@ -62,6 +62,8 @@ class AgentFacadeTest {
         assertEquals("QUERY_TICKET", result.getIntent());
         assertEquals("我暂时无法判断你的目标。请明确说明你是想查询工单、创建工单、转派工单，还是检索历史案例。", result.getReply());
         assertNull(result.getResult());
+        assertNotNull(result.getPlan());
+        assertEquals("trace-1", result.getTraceId());
         verifyNoInteractions(
                 fixture.executionGuard,
                 fixture.parameterExtractor,
@@ -172,6 +174,7 @@ class AgentFacadeTest {
         assertEquals(1001L, result.getContext().getPendingAction().getPendingParameters().getTicketId());
         assertEquals(3L, result.getContext().getPendingAction().getPendingParameters().getAssigneeId());
         assertEquals(true, result.getContext().getPendingAction().isAwaitingConfirmation());
+        verify(fixture.agentPlanner).markNeedConfirmation(any(), eq("risk"));
         verify(fixture.transferTicketTool, never()).execute(any());
     }
 
@@ -228,6 +231,22 @@ class AgentFacadeTest {
         when(transferTicketTool.name()).thenReturn("transferTicket");
         when(queryTicketTool.name()).thenReturn("queryTicket");
         when(searchHistoryTool.name()).thenReturn("searchHistory");
+        AgentSkill createSkill = mock(AgentSkill.class);
+        AgentSkill querySkill = mock(AgentSkill.class);
+        AgentSkill transferSkill = mock(AgentSkill.class);
+        AgentSkill searchSkill = mock(AgentSkill.class);
+        when(createSkill.tool()).thenReturn(createTicketTool);
+        when(querySkill.tool()).thenReturn(queryTicketTool);
+        when(transferSkill.tool()).thenReturn(transferTicketTool);
+        when(searchSkill.tool()).thenReturn(searchHistoryTool);
+        when(skillRegistry.requireByIntent(AgentIntent.CREATE_TICKET)).thenReturn(createSkill);
+        when(skillRegistry.requireByIntent(AgentIntent.QUERY_TICKET)).thenReturn(querySkill);
+        when(skillRegistry.requireByIntent(AgentIntent.TRANSFER_TICKET)).thenReturn(transferSkill);
+        when(skillRegistry.requireByIntent(AgentIntent.SEARCH_HISTORY)).thenReturn(searchSkill);
+        when(skillRegistry.requireByToolName("createTicket")).thenReturn(createSkill);
+        when(skillRegistry.requireByToolName("queryTicket")).thenReturn(querySkill);
+        when(skillRegistry.requireByToolName("transferTicket")).thenReturn(transferSkill);
+        when(skillRegistry.requireByToolName("searchHistory")).thenReturn(searchSkill);
         when(traceService.start(any(), any(), any())).thenReturn(new AgentTraceContext("trace-1", "session", 1L, "message"));
         when(agentPlanner.buildOrLoadPlan(any(), any())).thenReturn(AgentPlan.builder()
                 .goal("create_ticket")
@@ -248,11 +267,7 @@ class AgentFacadeTest {
                 memoryService,
                 traceService,
                 promptTemplateService,
-                parameterExtractor,
-                queryTicketTool,
-                createTicketTool,
-                transferTicketTool,
-                searchHistoryTool
+                parameterExtractor
         );
         return new TestFixture(
                 agentFacade,

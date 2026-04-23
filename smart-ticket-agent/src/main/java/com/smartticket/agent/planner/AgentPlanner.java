@@ -73,6 +73,17 @@ public class AgentPlanner {
         plan.setUpdatedAt(LocalDateTime.now());
     }
 
+    public void markNeedConfirmation(AgentPlan plan, String summary) {
+        if (plan == null) {
+            return;
+        }
+        complete(plan, AgentPlanStage.WAIT_USER, AgentPlanAction.CONFIRM_HIGH_RISK, plan.getNextSkillCode(), summary);
+        plan.setCurrentStage(AgentPlanStage.WAIT_USER);
+        plan.setNextAction(AgentPlanAction.CONFIRM_HIGH_RISK);
+        plan.setWaitingForUser(true);
+        plan.setUpdatedAt(LocalDateTime.now());
+    }
+
     public void afterTool(AgentPlan plan, AgentToolResult result) {
         if (plan == null || result == null) {
             return;

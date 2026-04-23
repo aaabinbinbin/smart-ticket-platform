@@ -28,6 +28,17 @@ public class SkillRegistry {
                 .orElseThrow(() -> new IllegalStateException("No agent skill found for intent: " + intent));
     }
 
+    public Optional<AgentSkill> findByToolName(String toolName) {
+        return skills.stream()
+                .filter(skill -> skill.tool() != null && skill.tool().name().equals(toolName))
+                .findFirst();
+    }
+
+    public AgentSkill requireByToolName(String toolName) {
+        return findByToolName(toolName)
+                .orElseThrow(() -> new IllegalStateException("No agent skill found for tool: " + toolName));
+    }
+
     public List<AgentSkill> findAvailable(AgentIntent intent, List<String> permissions, ToolRiskLevel maxRiskLevel) {
         return skills.stream()
                 .filter(skill -> intent == null || skill.supports(intent))

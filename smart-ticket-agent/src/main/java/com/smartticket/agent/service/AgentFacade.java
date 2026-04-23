@@ -24,10 +24,6 @@ import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.agent.tool.support.SpringAiToolCallState;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
-import com.smartticket.agent.tool.ticket.CreateTicketTool;
-import com.smartticket.agent.tool.ticket.QueryTicketTool;
-import com.smartticket.agent.tool.ticket.SearchHistoryTool;
-import com.smartticket.agent.tool.ticket.TransferTicketTool;
 import com.smartticket.agent.trace.AgentTraceContext;
 import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
@@ -62,10 +58,6 @@ public class AgentFacade {
     private final AgentTraceService traceService;
     private final PromptTemplateService promptTemplateService;
     private final AgentToolParameterExtractor parameterExtractor;
-    private final QueryTicketTool queryTicketTool;
-    private final CreateTicketTool createTicketTool;
-    private final TransferTicketTool transferTicketTool;
-    private final SearchHistoryTool searchHistoryTool;
 
     public AgentFacade(
             ObjectProvider<ChatClient> chatClientProvider,
@@ -78,11 +70,7 @@ public class AgentFacade {
             AgentMemoryService memoryService,
             AgentTraceService traceService,
             PromptTemplateService promptTemplateService,
-            AgentToolParameterExtractor parameterExtractor,
-            QueryTicketTool queryTicketTool,
-            CreateTicketTool createTicketTool,
-            TransferTicketTool transferTicketTool,
-            SearchHistoryTool searchHistoryTool
+            AgentToolParameterExtractor parameterExtractor
     ) {
         this.chatClientProvider = chatClientProvider;
         this.chatEnabled = chatEnabled;
@@ -95,10 +83,6 @@ public class AgentFacade {
         this.traceService = traceService;
         this.promptTemplateService = promptTemplateService;
         this.parameterExtractor = parameterExtractor;
-        this.queryTicketTool = queryTicketTool;
-        this.createTicketTool = createTicketTool;
-        this.transferTicketTool = transferTicketTool;
-        this.searchHistoryTool = searchHistoryTool;
     }
 
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
@@ -265,11 +249,14 @@ public class AgentFacade {
                     .confirmationSummary(toolResult.getReply())
                     .lastToolResult(toolResult)
                     .build());
+            agentPlanner.markNeedConfirmation(plan, decision.getReason());
         } else {
             toolResult = decision.toToolResult(tool.name());
         }
         syncCreatePendingAction(context, route, parameters, message, toolResult);
-        agentPlanner.afterTool(plan, toolResult);
+        if (decision.getStatus() != AgentExecutionDecisionStatus.NEED_CONFIRMATION) {
+            agentPlanner.afterTool(plan, toolResult);
+        }
         updateSessionAfterTool(currentUser, sessionId, context, route, message, parameters, toolResult);
         traceService.step(trace, "fallback", "skill-call", toolResult.getToolName(), toolResult.getStatus().name(), "finished");
         traceService.finish(trace, route, plan, parameters, toolResult, toolResult.getReply(), false, true);
@@ -358,7 +345,7 @@ public class AgentFacade {
             AgentToolResult toolResult = AgentToolResult.builder()
                     .invoked(false)
                     .status(AgentToolStatus.FAILED)
-                    .toolName(createTicketTool.name())
+                    .toolName(toolForIntent(AgentIntent.CREATE_TICKET).name())
                     .reply("\u5df2\u53d6\u6d88\u672c\u6b21\u5de5\u5355\u521b\u5efa\u3002\u4f60\u53ef\u4ee5\u968f\u65f6\u91cd\u65b0\u53d1\u8d77\u65b0\u7684\u521b\u5efa\u8bf7\u6c42\u3002")
                     .build();
             updateSessionAfterTool(currentUser, sessionId, context, route, message, null, toolResult);
@@ -367,6 +354,7 @@ public class AgentFacade {
             return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
         }
 
+        AgentTool createTool = toolForIntent(AgentIntent.CREATE_TICKET);
         AgentPendingAction pendingAction = context.getPendingAction();
         AgentToolParameters mergedParameters = mergeCreateDraftParameters(
                 pendingAction.getPendingParameters(),
@@ -374,7 +362,7 @@ public class AgentFacade {
                 message,
                 pendingAction.getAwaitingFields()
         );
-        AgentToolResult toolResult = createTicketTool.execute(AgentToolRequest.builder()
+        AgentToolResult toolResult = createTool.execute(AgentToolRequest.builder()
                 .currentUser(currentUser)
                 .message(message)
                 .context(context)
@@ -462,7 +450,7 @@ public class AgentFacade {
         AgentToolParameters draft = parameters == null ? AgentToolParameters.builder().build() : copyParameters(parameters);
         context.setPendingAction(AgentPendingAction.builder()
                 .pendingIntent(AgentIntent.CREATE_TICKET)
-                .pendingToolName(createTicketTool.name())
+                .pendingToolName(toolForIntent(AgentIntent.CREATE_TICKET).name())
                 .pendingParameters(draft)
                 .awaitingFields(missingFields)
                 .lastToolResult(toolResult)
@@ -631,37 +619,15 @@ public class AgentFacade {
     }
 
     private Object springAiToolFor(AgentIntent intent) {
-        return switch (intent) {
-            case CREATE_TICKET -> createTicketTool;
-            case TRANSFER_TICKET -> transferTicketTool;
-            case SEARCH_HISTORY -> searchHistoryTool;
-            case QUERY_TICKET -> queryTicketTool;
-        };
+        return toolForIntent(intent);
     }
 
-    private AgentTool agentToolFor(AgentIntent intent) {
-        return switch (intent) {
-            case CREATE_TICKET -> createTicketTool;
-            case TRANSFER_TICKET -> transferTicketTool;
-            case SEARCH_HISTORY -> searchHistoryTool;
-            case QUERY_TICKET -> queryTicketTool;
-        };
+    private AgentTool toolForIntent(AgentIntent intent) {
+        return skillRegistry.requireByIntent(intent).tool();
     }
 
     private AgentTool toolForName(String toolName) {
-        if (transferTicketTool.name().equals(toolName)) {
-            return transferTicketTool;
-        }
-        if (createTicketTool.name().equals(toolName)) {
-            return createTicketTool;
-        }
-        if (queryTicketTool.name().equals(toolName)) {
-            return queryTicketTool;
-        }
-        if (searchHistoryTool.name().equals(toolName)) {
-            return searchHistoryTool;
-        }
-        throw new IllegalStateException("Unknown pending tool: " + toolName);
+        return skillRegistry.requireByToolName(toolName).tool();
     }
 
     private AgentChatResult toChatResult(
