@@ -14,6 +14,7 @@ import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -59,7 +60,7 @@ public class SpringAiToolSupport {
      */
     private final AgentSessionService sessionService;
 
-    public SpringAiToolSupport(AgentExecutionGuard executionGuard, AgentSessionService sessionService) {
+    public SpringAiToolSupport(@Lazy AgentExecutionGuard executionGuard, AgentSessionService sessionService) {
         this.executionGuard = executionGuard;
         this.sessionService = sessionService;
     }

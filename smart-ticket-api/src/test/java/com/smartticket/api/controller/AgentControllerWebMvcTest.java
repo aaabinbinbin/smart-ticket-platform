@@ -13,7 +13,10 @@ import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.service.AgentFacade;
 import com.smartticket.api.advice.ApiExceptionHandler;
+import com.smartticket.api.controller.agent.AgentController;
+import com.smartticket.api.support.CurrentUserResolver;
 import com.smartticket.auth.model.AuthUser;
+import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.domain.entity.SysUser;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -22,8 +25,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -47,8 +48,12 @@ class AgentControllerWebMvcTest {
     @MockBean
     private AgentFacade agentFacade;
 
+    @MockBean
+    private CurrentUserResolver currentUserResolver;
+
     @Test
     void chatShouldHandleQueryTicketIntent() throws Exception {
+        mockCurrentUser();
         mockIntent(AgentIntent.QUERY_TICKET, "已查询工单详情。", 1001L);
 
         mockMvc.perform(post("/api/agent/chat")
@@ -64,6 +69,7 @@ class AgentControllerWebMvcTest {
 
     @Test
     void chatShouldHandleCreateTicketIntent() throws Exception {
+        mockCurrentUser();
         mockIntent(AgentIntent.CREATE_TICKET, "已创建工单。", 2001L);
 
         mockMvc.perform(post("/api/agent/chat")
@@ -76,6 +82,7 @@ class AgentControllerWebMvcTest {
 
     @Test
     void chatShouldHandleTransferTicketIntentWithInheritedTicketContext() throws Exception {
+        mockCurrentUser();
         mockIntent(AgentIntent.TRANSFER_TICKET, "已转派工单。", 3001L);
 
         mockMvc.perform(post("/api/agent/chat")
@@ -89,6 +96,7 @@ class AgentControllerWebMvcTest {
 
     @Test
     void chatShouldHandleSearchHistoryIntent() throws Exception {
+        mockCurrentUser();
         mockIntent(AgentIntent.SEARCH_HISTORY, "已检索到相似历史经验。", null);
 
         mockMvc.perform(post("/api/agent/chat")
@@ -101,6 +109,7 @@ class AgentControllerWebMvcTest {
 
     @Test
     void chatShouldRejectInvalidInput() throws Exception {
+        mockCurrentUser();
         mockMvc.perform(post("/api/agent/chat")
                         .with(authentication(auth()))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -131,6 +140,14 @@ class AgentControllerWebMvcTest {
                         .build())
                 .context(AgentSessionContext.builder().activeTicketId(activeTicketId).build())
                 .springAiChatReady(false)
+                .build());
+    }
+
+    private void mockCurrentUser() {
+        when(currentUserResolver.resolve(any())).thenReturn(CurrentUser.builder()
+                .userId(1L)
+                .username("user1")
+                .roles(List.of("USER"))
                 .build());
     }
 

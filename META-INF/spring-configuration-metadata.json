@@ -1,0 +1,69 @@
+{
+  "groups": [
+    {
+      "name": "spring.ai.vectorstore.pgvector",
+      "type": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    }
+  ],
+  "properties": [
+    {
+      "name": "spring.ai.vectorstore.pgvector.dimensions",
+      "type": "java.lang.Integer",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.distance-type",
+      "type": "org.springframework.ai.vectorstore.pgvector.PgVectorStore$PgDistanceType",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties",
+      "defaultValue": "cosine-distance"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.id-type",
+      "type": "org.springframework.ai.vectorstore.pgvector.PgVectorStore$PgIdType",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties",
+      "defaultValue": "uuid"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.index-type",
+      "type": "org.springframework.ai.vectorstore.pgvector.PgVectorStore$PgIndexType",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties",
+      "defaultValue": "hnsw"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.initialize-schema",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.max-document-batch-size",
+      "type": "java.lang.Integer",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.remove-existing-vector-store-table",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties",
+      "defaultValue": false
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.schema-name",
+      "type": "java.lang.String",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.schema-validation",
+      "type": "java.lang.Boolean",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    },
+    {
+      "name": "spring.ai.vectorstore.pgvector.table-name",
+      "type": "java.lang.String",
+      "sourceType": "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreProperties"
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}

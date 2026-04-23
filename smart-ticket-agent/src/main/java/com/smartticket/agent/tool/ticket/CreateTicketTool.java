@@ -12,8 +12,8 @@ import com.smartticket.agent.tool.parameter.AgentToolRequestValidator;
 import com.smartticket.agent.tool.parameter.AgentToolValidationResult;
 import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
-import com.smartticket.biz.dto.TicketCreateCommandDTO;
-import com.smartticket.biz.service.TicketCommandService;
+import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
+import com.smartticket.biz.service.ticket.TicketCommandService;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
@@ -25,6 +25,7 @@ import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -47,7 +48,7 @@ public class CreateTicketTool implements AgentTool {
             TicketCommandService ticketCommandService,
             AgentToolRequestValidator validator,
             RetrievalService retrievalService,
-            SpringAiToolSupport springAiToolSupport,
+            @Lazy SpringAiToolSupport springAiToolSupport,
             @Value("${smart-ticket.agent.create.deflection-threshold:0.72}") double deflectionThreshold
     ) {
         this.ticketCommandService = ticketCommandService;

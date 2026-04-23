@@ -4,12 +4,10 @@ import com.smartticket.biz.dto.assignment.TicketQueueMemberCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.repository.assignment.TicketQueueMemberRepository;
 import com.smartticket.biz.repository.assignment.TicketQueueRepository;
-import com.smartticket.biz.repository.ticket.TicketRepository;
 import com.smartticket.biz.service.ticket.TicketPermissionService;
+import com.smartticket.biz.service.ticket.TicketUserDirectoryService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
-import com.smartticket.domain.entity.SysRole;
-import com.smartticket.domain.entity.SysUser;
 import com.smartticket.domain.entity.TicketQueue;
 import com.smartticket.domain.entity.TicketQueueMember;
 import java.util.List;
@@ -20,26 +18,26 @@ import org.springframework.transaction.annotation.Transactional;
 public class TicketQueueMemberService {
     private final TicketQueueMemberRepository ticketQueueMemberRepository;
     private final TicketQueueRepository ticketQueueRepository;
-    private final TicketRepository ticketRepository;
     private final TicketPermissionService permissionService;
+    private final TicketUserDirectoryService ticketUserDirectoryService;
 
     public TicketQueueMemberService(
             TicketQueueMemberRepository ticketQueueMemberRepository,
             TicketQueueRepository ticketQueueRepository,
-            TicketRepository ticketRepository,
-            TicketPermissionService permissionService
+            TicketPermissionService permissionService,
+            TicketUserDirectoryService ticketUserDirectoryService
     ) {
         this.ticketQueueMemberRepository = ticketQueueMemberRepository;
         this.ticketQueueRepository = ticketQueueRepository;
-        this.ticketRepository = ticketRepository;
         this.permissionService = permissionService;
+        this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
     @Transactional
     public TicketQueueMember create(CurrentUser operator, Long queueId, TicketQueueMemberCommandDTO command) {
         permissionService.requireAdmin(operator);
         requireEnabledQueue(queueId);
-        requireStaffUser(command.getUserId());
+        ticketUserDirectoryService.requireStaffUser(command.getUserId());
         TicketQueueMember existing = ticketQueueMemberRepository.findByQueueIdAndUserId(queueId, command.getUserId());
         if (existing != null) {
             ticketQueueMemberRepository.updateEnabled(existing.getId(), toEnabled(command.getEnabled()));
@@ -103,20 +101,6 @@ public class TicketQueueMemberService {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "目标队列已停用");
         }
         return queue;
-    }
-
-    private void requireStaffUser(Long userId) {
-        SysUser user = ticketRepository.findUserById(userId);
-        if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
-            throw new BusinessException(BusinessErrorCode.ASSIGNEE_NOT_FOUND);
-        }
-        boolean isStaff = ticketRepository.findRolesByUserId(userId)
-                .stream()
-                .map(SysRole::getRoleCode)
-                .anyMatch("STAFF"::equals);
-        if (!isStaff) {
-            throw new BusinessException(BusinessErrorCode.ASSIGNEE_NOT_STAFF);
-        }
     }
 
     private Integer toEnabled(Boolean enabled) {

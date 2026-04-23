@@ -9,11 +9,8 @@ import com.smartticket.biz.repository.ticket.TicketOperationLogRepository;
 import com.smartticket.biz.repository.ticket.TicketRepository;
 import com.smartticket.biz.service.assignment.TicketGroupService;
 import com.smartticket.biz.service.assignment.TicketQueueService;
-import com.smartticket.biz.service.sla.TicketSlaService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
-import com.smartticket.domain.entity.SysRole;
-import com.smartticket.domain.entity.SysUser;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketApproval;
 import com.smartticket.domain.entity.TicketComment;
@@ -24,12 +21,17 @@ import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+/**
+ * 收敛 ticket 子域里仍然通用的基础支持逻辑。
+ * 这里只保留跨多个服务都会用到的校验、详情装配、日志记录和事务后置动作。
+ */
 @Component
 public class TicketServiceSupport {
     private static final DateTimeFormatter TICKET_NO_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
@@ -39,9 +41,8 @@ public class TicketServiceSupport {
     private final TicketOperationLogRepository operationLogRepository;
     private final TicketApprovalRepository ticketApprovalRepository;
     private final TicketPermissionService permissionService;
-    private final TicketDetailCacheService ticketDetailCacheService;
+    private final TicketUserDirectoryService ticketUserDirectoryService;
     private final TicketIdempotencyService ticketIdempotencyService;
-    private final TicketSlaService ticketSlaService;
     private final TicketGroupService ticketGroupService;
     private final TicketQueueService ticketQueueService;
     private final ApplicationEventPublisher eventPublisher;
@@ -52,9 +53,8 @@ public class TicketServiceSupport {
             TicketOperationLogRepository operationLogRepository,
             TicketApprovalRepository ticketApprovalRepository,
             TicketPermissionService permissionService,
-            TicketDetailCacheService ticketDetailCacheService,
+            TicketUserDirectoryService ticketUserDirectoryService,
             TicketIdempotencyService ticketIdempotencyService,
-            TicketSlaService ticketSlaService,
             TicketGroupService ticketGroupService,
             TicketQueueService ticketQueueService,
             ApplicationEventPublisher eventPublisher
@@ -64,20 +64,11 @@ public class TicketServiceSupport {
         this.operationLogRepository = operationLogRepository;
         this.ticketApprovalRepository = ticketApprovalRepository;
         this.permissionService = permissionService;
-        this.ticketDetailCacheService = ticketDetailCacheService;
+        this.ticketUserDirectoryService = ticketUserDirectoryService;
         this.ticketIdempotencyService = ticketIdempotencyService;
-        this.ticketSlaService = ticketSlaService;
         this.ticketGroupService = ticketGroupService;
         this.ticketQueueService = ticketQueueService;
         this.eventPublisher = eventPublisher;
-    }
-
-    public TicketRepository ticketRepository() {
-        return ticketRepository;
-    }
-
-    public TicketCommentRepository ticketCommentRepository() {
-        return ticketCommentRepository;
     }
 
     public TicketPermissionService permissionService() {
@@ -86,22 +77,6 @@ public class TicketServiceSupport {
 
     public TicketApprovalRepository ticketApprovalRepository() {
         return ticketApprovalRepository;
-    }
-
-    public TicketDetailCacheService ticketDetailCacheService() {
-        return ticketDetailCacheService;
-    }
-
-    public TicketIdempotencyService ticketIdempotencyService() {
-        return ticketIdempotencyService;
-    }
-
-    public TicketSlaService ticketSlaService() {
-        return ticketSlaService;
-    }
-
-    public TicketGroupService ticketGroupService() {
-        return ticketGroupService;
     }
 
     public TicketQueueService ticketQueueService() {
@@ -141,12 +116,11 @@ public class TicketServiceSupport {
     }
 
     public TicketDetailDTO buildDetail(Long ticketId, Ticket ticket) {
-        TicketApproval approval = ticketApprovalRepository.findByTicketId(ticketId);
         return TicketDetailDTO.builder()
                 .ticket(ticket)
-                .approval(approval)
-                .comments(ticketCommentRepository.findByTicketId(ticketId))
-                .operationLogs(operationLogRepository.findByTicketId(ticketId))
+                .approval(loadApproval(ticketId))
+                .comments(loadComments(ticketId))
+                .operationLogs(loadOperationLogs(ticketId))
                 .build();
     }
 
@@ -174,31 +148,11 @@ public class TicketServiceSupport {
     }
 
     public void requireStaffUser(Long userId) {
-        SysUser user = ticketRepository.findUserById(userId);
-        if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
-            throw new BusinessException(BusinessErrorCode.ASSIGNEE_NOT_FOUND);
-        }
-        boolean isStaff = ticketRepository.findRolesByUserId(userId)
-                .stream()
-                .map(SysRole::getRoleCode)
-                .anyMatch("STAFF"::equals);
-        if (!isStaff) {
-            throw new BusinessException(BusinessErrorCode.ASSIGNEE_NOT_STAFF);
-        }
+        ticketUserDirectoryService.requireStaffUser(userId);
     }
 
     public void requireApproverUser(Long userId) {
-        SysUser user = ticketRepository.findUserById(userId);
-        if (user == null || !Integer.valueOf(1).equals(user.getStatus())) {
-            throw new BusinessException(BusinessErrorCode.ASSIGNEE_NOT_FOUND);
-        }
-        boolean allowed = ticketRepository.findRolesByUserId(userId)
-                .stream()
-                .map(SysRole::getRoleCode)
-                .anyMatch(roleCode -> "STAFF".equals(roleCode) || "ADMIN".equals(roleCode));
-        if (!allowed) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批人必须具备 STAFF 或 ADMIN 角色");
-        }
+        ticketUserDirectoryService.requireApproverUser(userId);
     }
 
     public void validateQueueBinding(Long groupId, Long queueId) {
@@ -238,19 +192,19 @@ public class TicketServiceSupport {
 
     public void saveIdempotencyResultAfterCommit(Long userId, String idempotencyKey, Long ticketId) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            ticketIdempotencyService.saveCreatedTicketId(userId, idempotencyKey, ticketId);
-            ticketIdempotencyService.releaseCreateLock(userId, idempotencyKey);
+            saveIdempotencyResult(userId, idempotencyKey, ticketId);
+            releaseIdempotencyLock(userId, idempotencyKey);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                ticketIdempotencyService.saveCreatedTicketId(userId, idempotencyKey, ticketId);
+                saveIdempotencyResult(userId, idempotencyKey, ticketId);
             }
 
             @Override
             public void afterCompletion(int status) {
-                ticketIdempotencyService.releaseCreateLock(userId, idempotencyKey);
+                releaseIdempotencyLock(userId, idempotencyKey);
             }
         });
     }
@@ -258,13 +212,13 @@ public class TicketServiceSupport {
     public void publishTicketClosedAfterCommit(Long ticketId) {
         TicketClosedEvent event = new TicketClosedEvent(ticketId);
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            eventPublisher.publishEvent(event);
+            publishClosedEvent(event);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                eventPublisher.publishEvent(event);
+                publishClosedEvent(event);
             }
         });
     }
@@ -283,5 +237,28 @@ public class TicketServiceSupport {
     public String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }
-}
 
+    private TicketApproval loadApproval(Long ticketId) {
+        return ticketApprovalRepository.findByTicketId(ticketId);
+    }
+
+    private List<TicketComment> loadComments(Long ticketId) {
+        return ticketCommentRepository.findByTicketId(ticketId);
+    }
+
+    private List<TicketOperationLog> loadOperationLogs(Long ticketId) {
+        return operationLogRepository.findByTicketId(ticketId);
+    }
+
+    private void saveIdempotencyResult(Long userId, String idempotencyKey, Long ticketId) {
+        ticketIdempotencyService.saveCreatedTicketId(userId, idempotencyKey, ticketId);
+    }
+
+    private void releaseIdempotencyLock(Long userId, String idempotencyKey) {
+        ticketIdempotencyService.releaseCreateLock(userId, idempotencyKey);
+    }
+
+    private void publishClosedEvent(TicketClosedEvent event) {
+        eventPublisher.publishEvent(event);
+    }
+}

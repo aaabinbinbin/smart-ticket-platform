@@ -18,6 +18,7 @@ import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -40,7 +41,7 @@ public class SearchHistoryTool implements AgentTool {
      */
     private final SpringAiToolSupport springAiToolSupport;
 
-    public SearchHistoryTool(RetrievalService retrievalService, SpringAiToolSupport springAiToolSupport) {
+    public SearchHistoryTool(RetrievalService retrievalService, @Lazy SpringAiToolSupport springAiToolSupport) {
         this.retrievalService = retrievalService;
         this.springAiToolSupport = springAiToolSupport;
     }

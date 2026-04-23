@@ -2,6 +2,8 @@ package com.smartticket.biz.service.ticket;
 
 import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.biz.repository.ticket.TicketRepository;
+import com.smartticket.biz.service.sla.TicketSlaService;
 import com.smartticket.biz.service.type.TicketTypeProfileService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
@@ -14,35 +16,48 @@ import com.smartticket.domain.enums.TicketTypeEnum;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 负责创建工单及创建阶段的前置校验。
+ * 这里不处理后续流转，只关心入库前的默认值、幂等控制和类型约束。
+ */
 @Service
 public class TicketCommandService {
     private final TicketServiceSupport support;
+    private final TicketRepository ticketRepository;
+    private final TicketIdempotencyService ticketIdempotencyService;
+    private final TicketSlaService ticketSlaService;
     private final TicketTypeProfileService ticketTypeProfileService;
 
-    public TicketCommandService(TicketServiceSupport support, TicketTypeProfileService ticketTypeProfileService) {
+    public TicketCommandService(
+            TicketServiceSupport support,
+            TicketRepository ticketRepository,
+            TicketIdempotencyService ticketIdempotencyService,
+            TicketSlaService ticketSlaService,
+            TicketTypeProfileService ticketTypeProfileService
+    ) {
         this.support = support;
+        this.ticketRepository = ticketRepository;
+        this.ticketIdempotencyService = ticketIdempotencyService;
+        this.ticketSlaService = ticketSlaService;
         this.ticketTypeProfileService = ticketTypeProfileService;
     }
 
     @Transactional
     public Ticket createTicket(CurrentUser operator, TicketCreateCommandDTO command) {
-        if (support.ticketIdempotencyService().enabled(command.getIdempotencyKey())) {
+        String idempotencyKey = normalizeIdempotencyKey(command);
+        if (ticketIdempotencyService.enabled(idempotencyKey)) {
             return createTicketWithIdempotency(operator, command);
         }
         return doCreateTicket(operator, command);
     }
 
     private Ticket createTicketWithIdempotency(CurrentUser operator, TicketCreateCommandDTO command) {
-        String idempotencyKey = support.ticketIdempotencyService().normalize(command.getIdempotencyKey());
-        support.validateIdempotencyKey(idempotencyKey);
-        command.setIdempotencyKey(idempotencyKey);
-        Long existingTicketId = support.ticketIdempotencyService().getCreatedTicketId(operator.getUserId(), idempotencyKey);
+        Long existingTicketId = findExistingTicketId(operator, command);
         if (existingTicketId != null) {
-            Ticket ticket = support.requireTicket(existingTicketId);
-            ticketTypeProfileService.attachProfile(ticket);
-            return ticket;
+            return loadExistingCreatedTicket(existingTicketId);
         }
-        if (!support.ticketIdempotencyService().acquireCreateLock(operator.getUserId(), idempotencyKey)) {
+        String idempotencyKey = command.getIdempotencyKey();
+        if (!ticketIdempotencyService.acquireCreateLock(operator.getUserId(), idempotencyKey)) {
             throw new BusinessException(BusinessErrorCode.IDEMPOTENT_REQUEST_PROCESSING);
         }
         try {
@@ -50,7 +65,7 @@ public class TicketCommandService {
             support.saveIdempotencyResultAfterCommit(operator.getUserId(), idempotencyKey, ticket.getId());
             return ticket;
         } catch (RuntimeException ex) {
-            support.ticketIdempotencyService().releaseCreateLock(operator.getUserId(), idempotencyKey);
+            ticketIdempotencyService.releaseCreateLock(operator.getUserId(), idempotencyKey);
             throw ex;
         }
     }
@@ -59,28 +74,46 @@ public class TicketCommandService {
         TicketTypeEnum type = command.getType() == null ? TicketTypeEnum.INCIDENT : command.getType();
         validateByType(type, command);
         ticketTypeProfileService.validate(type, command.getTypeProfile());
-        TicketCategoryEnum category = command.getCategory() == null ? defaultCategory(type) : command.getCategory();
-        TicketPriorityEnum priority = command.getPriority() == null ? defaultPriority(type) : command.getPriority();
+        Ticket ticket = buildTicket(operator, command, type);
+        ticketRepository.insert(ticket);
+        ticketTypeProfileService.saveOrUpdate(ticket.getId(), type, command.getTypeProfile());
+        support.writeLog(ticket.getId(), operator.getUserId(), OperationTypeEnum.CREATE, "创建工单", null, support.snapshot(ticket));
+        Ticket created = support.requireTicket(ticket.getId());
+        ticketTypeProfileService.attachProfile(created);
+        ticketSlaService.createOrRefreshInstance(created);
+        return created;
+    }
 
-        Ticket ticket = Ticket.builder()
+    private String normalizeIdempotencyKey(TicketCreateCommandDTO command) {
+        String idempotencyKey = ticketIdempotencyService.normalize(command.getIdempotencyKey());
+        command.setIdempotencyKey(idempotencyKey);
+        return idempotencyKey;
+    }
+
+    private Long findExistingTicketId(CurrentUser operator, TicketCreateCommandDTO command) {
+        support.validateIdempotencyKey(command.getIdempotencyKey());
+        return ticketIdempotencyService.getCreatedTicketId(operator.getUserId(), command.getIdempotencyKey());
+    }
+
+    private Ticket loadExistingCreatedTicket(Long ticketId) {
+        Ticket ticket = support.requireTicket(ticketId);
+        ticketTypeProfileService.attachProfile(ticket);
+        return ticket;
+    }
+
+    private Ticket buildTicket(CurrentUser operator, TicketCreateCommandDTO command, TicketTypeEnum type) {
+        return Ticket.builder()
                 .ticketNo(support.generateTicketNo())
                 .title(command.getTitle())
                 .description(command.getDescription())
                 .type(type)
-                .category(category)
-                .priority(priority)
+                .category(resolveCategory(command, type))
+                .priority(resolvePriority(command, type))
                 .status(TicketStatusEnum.PENDING_ASSIGN)
                 .creatorId(operator.getUserId())
                 .source("MANUAL")
                 .idempotencyKey(command.getIdempotencyKey())
                 .build();
-        support.ticketRepository().insert(ticket);
-        ticketTypeProfileService.saveOrUpdate(ticket.getId(), type, command.getTypeProfile());
-        support.writeLog(ticket.getId(), operator.getUserId(), OperationTypeEnum.CREATE, "��������", null, support.snapshot(ticket));
-        Ticket created = support.requireTicket(ticket.getId());
-        ticketTypeProfileService.attachProfile(created);
-        support.ticketSlaService().createOrRefreshInstance(created);
-        return created;
     }
 
     private void validateByType(TicketTypeEnum type, TicketCreateCommandDTO command) {
@@ -90,9 +123,9 @@ public class TicketCommandService {
             return;
         }
         switch (type) {
-            case ACCESS_REQUEST -> requireAnyKeyword(text, "Ȩ��������Ҫ˵���˺š���ɫ����Դ��Χ", "�˺�", "Ȩ��", "��ɫ", "��Դ", "����", "access", "role");
-            case ENVIRONMENT_REQUEST -> requireAnyKeyword(text, "����������Ҫ˵��Ŀ�껷���������������", "����", "����", "����", "����", "����", "���ݿ�", "env");
-            case CHANGE_REQUEST -> requireAnyKeyword(text, "���������Ҫ˵���������ʱ�䴰�ڻ�Ӱ�췶Χ", "���", "����", "����", "Ӱ��", "�ع�", "change", "deploy");
+            case ACCESS_REQUEST -> requireAnyKeyword(text, "权限申请需要说明账号、角色或资源范围", "账号", "权限", "角色", "资源", "访问", "access", "role");
+            case ENVIRONMENT_REQUEST -> requireAnyKeyword(text, "环境申请需要说明项目、环境或用途信息", "环境", "测试", "生产", "项目", "用途", "容器", "env");
+            case CHANGE_REQUEST -> requireAnyKeyword(text, "变更申请需要说明发布内容、时间窗口或影响范围", "发布", "变更", "上线", "影响", "窗口", "change", "deploy");
             default -> {
             }
         }
@@ -106,6 +139,14 @@ public class TicketCommandService {
             }
         }
         throw new BusinessException(BusinessErrorCode.INVALID_TICKET_TYPE_REQUIREMENT, message);
+    }
+
+    private TicketCategoryEnum resolveCategory(TicketCreateCommandDTO command, TicketTypeEnum type) {
+        return command.getCategory() == null ? defaultCategory(type) : command.getCategory();
+    }
+
+    private TicketPriorityEnum resolvePriority(TicketCreateCommandDTO command, TicketTypeEnum type) {
+        return command.getPriority() == null ? defaultPriority(type) : command.getPriority();
     }
 
     private TicketCategoryEnum defaultCategory(TicketTypeEnum type) {
@@ -124,4 +165,3 @@ public class TicketCommandService {
         };
     }
 }
-

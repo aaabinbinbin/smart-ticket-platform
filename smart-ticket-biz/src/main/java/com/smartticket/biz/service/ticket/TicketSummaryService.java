@@ -22,6 +22,10 @@ import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Service;
 
+/**
+ * 根据工单详情生成不同视角的摘要结果。
+ * 当前支持提单人、处理人和管理员三个视角，分别关注进度、执行信息和风险。
+ */
 @Service
 public class TicketSummaryService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -101,50 +105,90 @@ public class TicketSummaryService {
 
     private TicketSummaryDTO buildAdminSummary(TicketDetailDTO detail) {
         Ticket ticket = detail.getTicket();
+        RiskSummary riskSummary = evaluateRisk(detail);
+        return TicketSummaryDTO.builder()
+                .view(TicketSummaryViewEnum.ADMIN)
+                .title("管理员风险摘要")
+                .summary("工单 " + ticket.getTicketNo() + " 的当前风险等级为" + riskLevelInfo(riskSummary.score())
+                        + "，需关注分配、审批和处理推进节奏。")
+                .highlights(riskSummary.highlights())
+                .riskLevel(riskLevelCode(riskSummary.score()))
+                .generatedAt(LocalDateTime.now())
+                .build();
+    }
+
+    private RiskSummary evaluateRisk(TicketDetailDTO detail) {
+        Ticket ticket = detail.getTicket();
         List<String> risks = new ArrayList<>();
         int riskScore = 0;
-        if (ticket.getPriority() != null && "URGENT".equals(ticket.getPriority().getCode())) {
-            risks.add("工单优先级为紧急");
-            riskScore += 2;
-        } else if (ticket.getPriority() != null && "HIGH".equals(ticket.getPriority().getCode())) {
-            risks.add("工单优先级较高");
-            riskScore += 1;
+
+        riskScore += appendPriorityRisk(risks, ticket);
+        riskScore += appendStatusRisk(risks, ticket);
+        riskScore += appendApprovalRisk(risks, detail.getApproval());
+        riskScore += appendTransferRisk(risks, detail);
+        riskScore += appendStaleRisk(risks, ticket);
+
+        if (risks.isEmpty()) {
+            risks.add("当前未发现明显升级风险");
         }
+        return new RiskSummary(riskScore, risks);
+    }
+
+    private int appendPriorityRisk(List<String> risks, Ticket ticket) {
+        if (ticket.getPriority() == null) {
+            return 0;
+        }
+        if ("URGENT".equals(ticket.getPriority().getCode())) {
+            risks.add("工单优先级为紧急");
+            return 2;
+        }
+        if ("HIGH".equals(ticket.getPriority().getCode())) {
+            risks.add("工单优先级较高");
+            return 1;
+        }
+        return 0;
+    }
+
+    private int appendStatusRisk(List<String> risks, Ticket ticket) {
         if (ticket.getStatus() == TicketStatusEnum.PENDING_ASSIGN) {
             risks.add("工单仍处于待分配状态");
-            riskScore += 2;
+            return 2;
         }
-        if (detail.getApproval() != null && detail.getApproval().getApprovalStatus() == TicketApprovalStatusEnum.PENDING) {
+        return 0;
+    }
+
+    private int appendApprovalRisk(List<String> risks, TicketApproval approval) {
+        if (approval == null || approval.getApprovalStatus() == null) {
+            return 0;
+        }
+        if (approval.getApprovalStatus() == TicketApprovalStatusEnum.PENDING) {
             risks.add("审批仍未完成");
-            riskScore += 2;
+            return 2;
         }
-        if (detail.getApproval() != null && detail.getApproval().getApprovalStatus() == TicketApprovalStatusEnum.REJECTED) {
+        if (approval.getApprovalStatus() == TicketApprovalStatusEnum.REJECTED) {
             risks.add("审批已驳回，需要重新评估");
-            riskScore += 2;
+            return 2;
         }
+        return 0;
+    }
+
+    private int appendTransferRisk(List<String> risks, TicketDetailDTO detail) {
         long transferCount = operationLogs(detail).stream()
                 .filter(log -> log.getOperationType() == OperationTypeEnum.TRANSFER)
                 .count();
         if (transferCount >= 2) {
             risks.add("转派次数较多，可能存在归属不清");
-            riskScore += 1;
+            return 1;
         }
+        return 0;
+    }
+
+    private int appendStaleRisk(List<String> risks, Ticket ticket) {
         if (isStale(ticket.getUpdatedAt())) {
             risks.add("最近 24 小时未见更新");
-            riskScore += 1;
+            return 1;
         }
-        if (risks.isEmpty()) {
-            risks.add("当前未发现明显升级风险");
-        }
-        return TicketSummaryDTO.builder()
-                .view(TicketSummaryViewEnum.ADMIN)
-                .title("管理员风险摘要")
-                .summary("工单 " + ticket.getTicketNo() + " 的当前风险等级为" + riskLevelInfo(riskScore)
-                        + "，需关注分配、审批和处理推进节奏。")
-                .highlights(risks)
-                .riskLevel(riskLevelCode(riskScore))
-                .generatedAt(LocalDateTime.now())
-                .build();
+        return 0;
     }
 
     private void appendApprovalHighlight(List<String> highlights, TicketApproval approval) {
@@ -168,20 +212,28 @@ public class TicketSummaryService {
     }
 
     private void appendRecentWorkHighlights(List<String> highlights, TicketDetailDTO detail) {
-        TicketComment latestComment = comments(detail).stream()
-                .filter(comment -> comment.getCreatedAt() != null)
-                .max(Comparator.comparing(TicketComment::getCreatedAt))
-                .orElse(null);
-        TicketOperationLog latestLog = operationLogs(detail).stream()
-                .filter(log -> log.getCreatedAt() != null)
-                .max(Comparator.comparing(TicketOperationLog::getCreatedAt))
-                .orElse(null);
+        TicketComment latestComment = latestComment(detail);
+        TicketOperationLog latestLog = latestLog(detail);
         if (latestComment != null) {
             highlights.add("最新评论：" + summarizeText(latestComment.getContent(), 48));
         }
         if (latestLog != null) {
             highlights.add("最近操作：" + latestLog.getOperationType().getInfo() + "（" + formatTime(latestLog.getCreatedAt()) + "）");
         }
+    }
+
+    private TicketComment latestComment(TicketDetailDTO detail) {
+        return comments(detail).stream()
+                .filter(comment -> comment.getCreatedAt() != null)
+                .max(Comparator.comparing(TicketComment::getCreatedAt))
+                .orElse(null);
+    }
+
+    private TicketOperationLog latestLog(TicketDetailDTO detail) {
+        return operationLogs(detail).stream()
+                .filter(log -> log.getCreatedAt() != null)
+                .max(Comparator.comparing(TicketOperationLog::getCreatedAt))
+                .orElse(null);
     }
 
     private String nextStepForSubmitter(Ticket ticket, TicketApproval approval) {
@@ -304,5 +356,7 @@ public class TicketSummaryService {
 
     private record ActivityItem(LocalDateTime time, String content) {
     }
-}
 
+    private record RiskSummary(int score, List<String> highlights) {
+    }
+}

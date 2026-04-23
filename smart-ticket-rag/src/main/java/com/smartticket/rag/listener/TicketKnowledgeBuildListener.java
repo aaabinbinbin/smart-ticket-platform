@@ -1,7 +1,7 @@
 package com.smartticket.rag.listener;
 
 import com.smartticket.biz.event.TicketClosedEvent;
-import com.smartticket.biz.service.TicketKnowledgeService;
+import com.smartticket.biz.service.knowledge.TicketKnowledgeService;
 import com.smartticket.domain.entity.TicketKnowledge;
 import com.smartticket.rag.service.EmbeddingService;
 import java.util.Optional;

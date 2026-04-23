@@ -1,10 +1,10 @@
-# 当前 API 范围说明
+# API 说明
 
-本文档只描述当前仓库已经落地并可对外展示的接口范围。
+本文档描述当前仓库已经落地、可对外演示的接口范围，重点覆盖认证、工单主流程、SLA、审批、自动分派、通知和 Agent 能力。
 
 ## 1. 认证要求
 
-所有工单接口和 Agent 接口都要求登录：
+除登录接口外，其余业务接口都要求携带：
 
 ```http
 Authorization: Bearer <accessToken>
@@ -20,7 +20,22 @@ Authorization: Bearer <accessToken>
 }
 ```
 
-## 2. 工单主流程接口
+## 2. 认证接口
+
+```http
+POST /api/auth/login
+```
+
+请求体：
+
+```json
+{
+  "username": "user1",
+  "password": "123456"
+}
+```
+
+## 3. 工单主流程接口
 
 ```http
 POST /api/tickets
@@ -36,7 +51,7 @@ POST /api/tickets/{ticketId}/comments
 PUT /api/tickets/{ticketId}/close
 ```
 
-### 创建工单字段
+创建工单主要字段：
 
 - `title`：标题，必填
 - `description`：问题描述，必填
@@ -46,27 +61,27 @@ PUT /api/tickets/{ticketId}/close
 - `priority`：优先级，可选，支持 `LOW`、`MEDIUM`、`HIGH`、`URGENT`
 - `idempotencyKey`：幂等键，可选
 
-### 列表筛选字段
+列表筛选字段：
 
 - `status`
 - `type`
 - `category`
 - `priority`
 
-### 工单状态流转
+当前工单状态流转：
 
 ```text
 PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED
 ```
 
-## 3. 多类型工单说明
+## 4. 多类型工单说明
 
 - 未传 `type` 时默认按 `INCIDENT` 处理
 - 未传 `category` 时按 `type` 兜底默认分类
 - 未传 `priority` 时按 `type` 兜底默认优先级
-- `typeProfile` 当前支持按类型校验
+- `typeProfile` 按工单类型做结构化字段校验
 
-当前已支持的类型资料校验：
+当前已支持的类型扩展字段：
 
 - `INCIDENT`：`symptom`、`impactScope`
 - `ACCESS_REQUEST`：`accountId`、`targetResource`、`requestedRole`、`justification`
@@ -74,7 +89,7 @@ PENDING_ASSIGN -> PROCESSING -> RESOLVED -> CLOSED
 - `CONSULTATION`：`questionTopic`、`expectedOutcome`
 - `CHANGE_REQUEST`：`changeTarget`、`changeWindow`、`rollbackPlan`、`impactScope`
 
-## 4. 审批接口
+## 5. 审批接口
 
 ```http
 GET /api/tickets/{ticketId}/approval
@@ -83,15 +98,15 @@ POST /api/tickets/{ticketId}/approval/approve
 POST /api/tickets/{ticketId}/approval/reject
 ```
 
-### 当前审批规则
+当前审批规则：
 
-- `ACCESS_REQUEST` 与 `CHANGE_REQUEST` 当前需要审批
+- `ACCESS_REQUEST` 和 `CHANGE_REQUEST` 当前需要审批
 - 提单人或管理员可以提交审批
-- 支持模板审批与手动指定审批人
+- 支持审批模板和手动指定审批人
 - 审批人必须具备 `STAFF` 或 `ADMIN` 角色
 - 审批未通过前，不允许继续分配、认领、转派、更新状态和关闭
 
-## 5. 摘要接口
+## 6. 摘要接口
 
 ```http
 GET /api/tickets/{ticketId}/summary?view=SUBMITTER
@@ -99,15 +114,13 @@ GET /api/tickets/{ticketId}/summary?view=ASSIGNEE
 GET /api/tickets/{ticketId}/summary?view=ADMIN
 ```
 
-### 当前支持的摘要视角
+支持的摘要视角：
 
 - `SUBMITTER`：提单人进展摘要
 - `ASSIGNEE`：处理人问题与最近动作摘要
 - `ADMIN`：管理员风险摘要
 
-如果未显式传 `view`，服务会根据当前用户角色和工单关系自动选择默认视角。
-
-## 6. P1/P2 配置接口
+## 7. SLA 与自动分派配置接口
 
 ### 工单组
 
@@ -172,7 +185,34 @@ GET /api/ticket-approval-templates/{templateId}
 GET /api/ticket-approval-templates?pageNo=1&pageSize=10
 ```
 
-## 7. Agent API
+## 8. 站内通知接口
+
+当前通知能力主要用于 SLA 违约闭环。SLA 扫描发现违约后，会给工单创建人和当前处理人写入站内通知。
+
+```http
+GET /api/notifications?pageNo=1&pageSize=10&unreadOnly=true
+PATCH /api/notifications/{notificationId}/read
+```
+
+通知列表返回字段示例：
+
+```json
+{
+  "id": 501,
+  "ticketId": 1001,
+  "receiverUserId": 1,
+  "channel": "IN_APP",
+  "notificationType": "SLA_BREACH",
+  "title": "工单 INC202604230001 首次响应超时",
+  "content": "工单【登录失败】发生 SLA 违约。违约类型：首次响应超时。系统已执行升级处理。",
+  "read": false,
+  "readAt": null,
+  "createdAt": "2026-04-23T14:30:00",
+  "updatedAt": "2026-04-23T14:30:00"
+}
+```
+
+## 9. Agent 接口
 
 ```http
 POST /api/agent/chat
@@ -185,13 +225,13 @@ Content-Type: application/json
 - `CREATE_TICKET`
 - `TRANSFER_TICKET`
 - `SEARCH_HISTORY`
-- 创建工单缺参澄清与 `pendingAction` 草稿延续
-- 低置信度澄清分支
-- 摘要型查询问法，通过 `QUERY_TICKET` 链路返回工单摘要
+- 创建工单缺参澄清与 `pendingAction` 草稿续写
+- 低置信度意图澄清
+- 摘要型问法通过 `QUERY_TICKET` 链路返回工单摘要
 
-## 8. 与 PGvector 相关的说明
+## 10. RAG / PGvector 说明
 
-- 当前代码已提供 `PGvector` 主检索路径配置
-- 当 `SMART_TICKET_AI_VECTOR_STORE_ENABLED=true` 且 PGvector 可用时，历史检索优先走向量主路径
-- 当主路径不可用时，`RetrievalService` 会退回 `MYSQL_FALLBACK`
-- 详细演示步骤见 [docs/demo-playbook.md](/D:/aaaAgent/smart-ticket-platform/docs/demo-playbook.md)
+- 当前默认可稳定运行的是 MySQL fallback 检索链路
+- 代码中已保留 PGvector 主链接入方向，但默认启动不会启用 PGvector 自动装配
+- 历史检索实际路径可通过日志观察 `MYSQL_FALLBACK` 或后续扩展的向量主链
+- 演示顺序可参考 [demo-playbook.md](/D:/aaaAgent/smart-ticket-platform/docs/demo-playbook.md)

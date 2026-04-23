@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.TicketNotificationMapper">
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.TicketNotification"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_notification (
+            ticket_id, receiver_user_id, channel, notification_type, title, content, read_status, read_at
+        )
+        VALUES (
+            #{ticketId}, #{receiverUserId}, #{channel}, #{notificationType}, #{title}, #{content}, #{readStatus}, #{readAt}
+        )
+    </insert>
+
+    <select id="findById" resultType="com.smartticket.domain.entity.TicketNotification">
+        SELECT *
+        FROM ticket_notification
+        WHERE id = #{id}
+    </select>
+
+    <select id="pageByReceiverUserId" resultType="com.smartticket.domain.entity.TicketNotification">
+        SELECT *
+        FROM ticket_notification
+        WHERE receiver_user_id = #{receiverUserId}
+          <if test="unreadOnly != null and unreadOnly">
+              AND read_status = 0
+          </if>
+        ORDER BY created_at DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countByReceiverUserId" resultType="long">
+        SELECT COUNT(1)
+        FROM ticket_notification
+        WHERE receiver_user_id = #{receiverUserId}
+          <if test="unreadOnly != null and unreadOnly">
+              AND read_status = 0
+          </if>
+    </select>
+
+    <update id="markRead">
+        UPDATE ticket_notification
+        SET read_status = 1,
+            read_at = #{readAt}
+        WHERE id = #{id}
+          AND receiver_user_id = #{receiverUserId}
+          AND read_status = 0
+    </update>
+</mapper>

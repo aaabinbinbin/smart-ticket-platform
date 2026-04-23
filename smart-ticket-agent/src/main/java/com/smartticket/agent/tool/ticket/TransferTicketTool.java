@@ -12,12 +12,13 @@ import com.smartticket.agent.tool.parameter.AgentToolRequestValidator;
 import com.smartticket.agent.tool.parameter.AgentToolValidationResult;
 import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
-import com.smartticket.biz.service.TicketWorkflowService;
+import com.smartticket.biz.service.ticket.TicketWorkflowService;
 import com.smartticket.domain.entity.Ticket;
 import java.util.List;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 /**
@@ -48,7 +49,7 @@ public class TransferTicketTool implements AgentTool {
     public TransferTicketTool(
             TicketWorkflowService ticketWorkflowService,
             AgentToolRequestValidator validator,
-            SpringAiToolSupport springAiToolSupport
+            @Lazy SpringAiToolSupport springAiToolSupport
     ) {
         this.ticketWorkflowService = ticketWorkflowService;
         this.validator = validator;

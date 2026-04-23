@@ -13,30 +13,30 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "������������")
+@Schema(description = "创建工单请求")
 public class CreateTicketRequestDTO {
-    @NotBlank(message = "�������ⲻ��Ϊ��")
-    @Size(max = 200, message = "�������ⲻ�ܳ��� 200 ���ַ�")
-    @Schema(description = "��������", example = "���Ի����޷���¼")
+    @NotBlank(message = "工单标题不能为空")
+    @Size(max = 200, message = "工单标题不能超过 200 个字符")
+    @Schema(description = "工单标题", example = "测试环境无法登录")
     private String title;
 
-    @NotBlank(message = "������������Ϊ��")
-    @Schema(description = "��������", example = "���Ի�����¼ʱ�� 500��Ӱ���з��Բ�")
+    @NotBlank(message = "工单描述不能为空")
+    @Schema(description = "工单描述", example = "测试环境登录时报 500，影响研发自测")
     private String description;
 
-    @Schema(description = "�������� code", example = "INCIDENT")
+    @Schema(description = "工单类型 code", example = "INCIDENT")
     private String type;
 
-    @Schema(description = "�����������ύ����չ����")
+    @Schema(description = "工单类型扩展字段，用于提交差异化信息")
     private Map<String, Object> typeProfile;
 
-    @Schema(description = "�������� code������ʱ�����������Զ��ƶ�", example = "SYSTEM")
+    @Schema(description = "工单分类 code，缺省时可由系统自动推断", example = "SYSTEM")
     private String category;
 
-    @Schema(description = "�������ȼ� code������ʱ����������ʹ��Ĭ��ֵ", example = "HIGH")
+    @Schema(description = "工单优先级 code，缺省时系统可使用默认值", example = "HIGH")
     private String priority;
 
-    @Size(max = 128, message = "�ݵȼ����ܳ��� 128 ���ַ�")
-    @Schema(description = "�����ݵȼ�", example = "create-ticket-001")
+    @Size(max = 128, message = "幂等键不能超过 128 个字符")
+    @Schema(description = "请求幂等键", example = "create-ticket-001")
     private String idempotencyKey;
 }

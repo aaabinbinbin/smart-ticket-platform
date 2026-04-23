@@ -1,8 +1,11 @@
 package com.smartticket.biz.service.approval;
 
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.biz.repository.approval.TicketApprovalRepository;
 import com.smartticket.biz.repository.approval.TicketApprovalStepRepository;
+import com.smartticket.biz.service.ticket.TicketDetailCacheService;
 import com.smartticket.biz.service.ticket.TicketServiceSupport;
+import com.smartticket.biz.service.ticket.TicketUserDirectoryService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.domain.entity.Ticket;
@@ -18,20 +21,38 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单审批用例服务。
+ *
+ * <p>这里负责审批提交、通过、驳回等流程编排。
+ * 模板管理、步骤装配、审批人校验分别由独立组件处理，避免本类继续膨胀。</p>
+ */
 @Service
 public class TicketApprovalService {
     private final TicketServiceSupport support;
-    private final TicketApprovalTemplateService ticketApprovalTemplateService;
+    private final TicketApprovalRepository ticketApprovalRepository;
     private final TicketApprovalStepRepository ticketApprovalStepRepository;
+    private final TicketApprovalTemplateService ticketApprovalTemplateService;
+    private final TicketApprovalStepFactory ticketApprovalStepFactory;
+    private final TicketUserDirectoryService ticketUserDirectoryService;
+    private final TicketDetailCacheService ticketDetailCacheService;
 
     public TicketApprovalService(
             TicketServiceSupport support,
+            TicketApprovalRepository ticketApprovalRepository,
+            TicketApprovalStepRepository ticketApprovalStepRepository,
             TicketApprovalTemplateService ticketApprovalTemplateService,
-            TicketApprovalStepRepository ticketApprovalStepRepository
+            TicketApprovalStepFactory ticketApprovalStepFactory,
+            TicketUserDirectoryService ticketUserDirectoryService,
+            TicketDetailCacheService ticketDetailCacheService
     ) {
         this.support = support;
-        this.ticketApprovalTemplateService = ticketApprovalTemplateService;
+        this.ticketApprovalRepository = ticketApprovalRepository;
         this.ticketApprovalStepRepository = ticketApprovalStepRepository;
+        this.ticketApprovalTemplateService = ticketApprovalTemplateService;
+        this.ticketApprovalStepFactory = ticketApprovalStepFactory;
+        this.ticketUserDirectoryService = ticketUserDirectoryService;
+        this.ticketDetailCacheService = ticketDetailCacheService;
     }
 
     public TicketApproval getApproval(CurrentUser operator, Long ticketId) {
@@ -39,7 +60,7 @@ public class TicketApprovalService {
         if (!requiresApproval(ticket)) {
             return null;
         }
-        return enrichApproval(support.ticketApprovalRepository().findByTicketId(ticketId));
+        return enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
     }
 
     @Transactional
@@ -47,12 +68,12 @@ public class TicketApprovalService {
         Ticket ticket = support.requireTicket(ticketId);
         requireApprovalTicket(ticket);
         if (!operator.isAdmin() && !operator.getUserId().equals(ticket.getCreatorId())) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "ֻ���ᵥ�˻����Ա�����ύ����");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "Only admin or creator can submit approval");
         }
 
         TicketApprovalTemplate template = resolveTemplate(ticket.getType(), templateId, approverId);
-        List<TicketApprovalStep> steps = buildApprovalSteps(ticketId, template, approverId);
-        TicketApproval existing = support.ticketApprovalRepository().findByTicketId(ticketId);
+        List<TicketApprovalStep> steps = ticketApprovalStepFactory.build(ticketId, template, approverId);
+        TicketApproval existing = ticketApprovalRepository.findByTicketId(ticketId);
         LocalDateTime now = LocalDateTime.now();
         Long firstApproverId = steps.get(0).getApproverId();
 
@@ -67,15 +88,15 @@ public class TicketApprovalService {
                     .submitComment(submitComment)
                     .submittedAt(now)
                     .build();
-            support.ticketApprovalRepository().insert(approval);
-            assignApprovalId(steps, approval.getId());
+            ticketApprovalRepository.insert(approval);
+            ticketApprovalStepFactory.assignApprovalId(steps, approval.getId());
             ticketApprovalStepRepository.insertBatch(steps);
         } else if (existing.getApprovalStatus() == TicketApprovalStatusEnum.APPROVED) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "�ù���������ͨ���������ظ��ύ");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval already passed");
         } else if (existing.getApprovalStatus() == TicketApprovalStatusEnum.PENDING) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "�ù������д�������¼");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval is already pending");
         } else {
-            support.requireUpdated(support.ticketApprovalRepository().updateForResubmit(
+            support.requireUpdated(ticketApprovalRepository.updateForResubmit(
                     ticketId,
                     template == null ? null : template.getId(),
                     1,
@@ -86,14 +107,14 @@ public class TicketApprovalService {
                     now
             ));
             ticketApprovalStepRepository.deleteByTicketId(ticketId);
-            TicketApproval approval = support.ticketApprovalRepository().findByTicketId(ticketId);
-            assignApprovalId(steps, approval.getId());
+            TicketApproval approval = ticketApprovalRepository.findByTicketId(ticketId);
+            ticketApprovalStepFactory.assignApprovalId(steps, approval.getId());
             ticketApprovalStepRepository.insertBatch(steps);
         }
 
-        TicketApproval after = enrichApproval(support.ticketApprovalRepository().findByTicketId(ticketId));
-        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.SUBMIT_APPROVAL, "�ύ��������", approvalSnapshot(existing), approvalSnapshot(after));
-        support.ticketDetailCacheService().evict(ticketId);
+        TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
+        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.SUBMIT_APPROVAL, "Submit approval", approvalSnapshot(existing), approvalSnapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -111,32 +132,32 @@ public class TicketApprovalService {
         if (!requiresApproval(ticket)) {
             return;
         }
-        TicketApproval approval = support.ticketApprovalRepository().findByTicketId(ticket.getId());
+        TicketApproval approval = ticketApprovalRepository.findByTicketId(ticket.getId());
         if (approval == null) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "�ù�����Ҫ���ύ����");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "Approval submission is required");
         }
         if (approval.getApprovalStatus() != TicketApprovalStatusEnum.APPROVED) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "�ù���������δͨ��");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "Approval has not passed yet");
         }
     }
 
     private TicketApproval decide(CurrentUser operator, Long ticketId, boolean approved, String decisionComment) {
         Ticket ticket = support.requireTicket(ticketId);
         requireApprovalTicket(ticket);
-        TicketApproval before = support.ticketApprovalRepository().findByTicketId(ticketId);
+        TicketApproval before = ticketApprovalRepository.findByTicketId(ticketId);
         if (before == null) {
             throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_NOT_FOUND);
         }
         if (before.getApprovalStatus() != TicketApprovalStatusEnum.PENDING) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "��ǰ������¼���Ǵ�����״̬");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval is not in pending state");
         }
 
         TicketApprovalStep currentStep = ticketApprovalStepRepository.findCurrentPendingByTicketId(ticketId);
         if (currentStep == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "��ǰ�����ڴ�������������");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Current approval step is missing");
         }
         if (!operator.isAdmin() && !operator.getUserId().equals(currentStep.getApproverId())) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "ֻ�е�ǰ���������˻����Ա����ִ������");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "Only current approver can make the decision");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -149,7 +170,7 @@ public class TicketApprovalService {
         ));
 
         if (!approved) {
-            support.requireUpdated(support.ticketApprovalRepository().updateDecision(
+            support.requireUpdated(ticketApprovalRepository.updateDecision(
                     ticketId,
                     TicketApprovalStatusEnum.PENDING,
                     TicketApprovalStatusEnum.REJECTED,
@@ -158,9 +179,9 @@ public class TicketApprovalService {
                     decisionComment,
                     now
             ));
-            TicketApproval after = enrichApproval(support.ticketApprovalRepository().findByTicketId(ticketId));
-            support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.REJECT, "��������", approvalSnapshot(before), approvalSnapshot(after));
-            support.ticketDetailCacheService().evict(ticketId);
+            TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
+            support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.REJECT, "Reject approval", approvalSnapshot(before), approvalSnapshot(after));
+            ticketDetailCacheService.evict(ticketId);
             return after;
         }
 
@@ -171,7 +192,7 @@ public class TicketApprovalService {
                     TicketApprovalStepStatusEnum.WAITING,
                     TicketApprovalStepStatusEnum.PENDING
             ));
-            support.requireUpdated(support.ticketApprovalRepository().updateDecision(
+            support.requireUpdated(ticketApprovalRepository.updateDecision(
                     ticketId,
                     TicketApprovalStatusEnum.PENDING,
                     TicketApprovalStatusEnum.PENDING,
@@ -181,7 +202,7 @@ public class TicketApprovalService {
                     null
             ));
         } else {
-            support.requireUpdated(support.ticketApprovalRepository().updateDecision(
+            support.requireUpdated(ticketApprovalRepository.updateDecision(
                     ticketId,
                     TicketApprovalStatusEnum.PENDING,
                     TicketApprovalStatusEnum.APPROVED,
@@ -192,9 +213,9 @@ public class TicketApprovalService {
             ));
         }
 
-        TicketApproval after = enrichApproval(support.ticketApprovalRepository().findByTicketId(ticketId));
-        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.APPROVE, "����ͨ��", approvalSnapshot(before), approvalSnapshot(after));
-        support.ticketDetailCacheService().evict(ticketId);
+        TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
+        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.APPROVE, "Approve approval", approvalSnapshot(before), approvalSnapshot(after));
+        ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
@@ -202,10 +223,10 @@ public class TicketApprovalService {
         if (templateId != null) {
             TicketApprovalTemplate template = ticketApprovalTemplateService.get(templateId);
             if (!Integer.valueOf(1).equals(template.getEnabled())) {
-                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "����ģ����ͣ��");
+                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval template is disabled");
             }
             if (template.getTicketType() != ticketType) {
-                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "����ģ���빤�����Ͳ�ƥ��");
+                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval template does not match ticket type");
             }
             return template;
         }
@@ -214,42 +235,15 @@ public class TicketApprovalService {
             return autoTemplate;
         }
         if (approverId == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "��ǰ����δ��������ģ�壬��δָ��������");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "No enabled template found and no approver specified");
         }
-        support.requireApproverUser(approverId);
+        ticketUserDirectoryService.requireApproverUser(approverId);
         return null;
-    }
-
-    private List<TicketApprovalStep> buildApprovalSteps(Long ticketId, TicketApprovalTemplate template, Long approverId) {
-        if (template == null) {
-            return List.of(TicketApprovalStep.builder()
-                    .ticketId(ticketId)
-                    .stepOrder(1)
-                    .stepName("�˹�����")
-                    .approverId(approverId)
-                    .stepStatus(TicketApprovalStepStatusEnum.PENDING)
-                    .build());
-        }
-        return template.getSteps().stream()
-                .map(step -> TicketApprovalStep.builder()
-                        .ticketId(ticketId)
-                        .stepOrder(step.getStepOrder())
-                        .stepName(step.getStepName())
-                        .approverId(step.getApproverId())
-                        .stepStatus(step.getStepOrder() == 1 ? TicketApprovalStepStatusEnum.PENDING : TicketApprovalStepStatusEnum.WAITING)
-                        .build())
-                .toList();
-    }
-
-    private void assignApprovalId(List<TicketApprovalStep> steps, Long approvalId) {
-        for (TicketApprovalStep step : steps) {
-            step.setApprovalId(approvalId);
-        }
     }
 
     private void requireApprovalTicket(Ticket ticket) {
         if (!requiresApproval(ticket)) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "��ǰ�������Ͳ���Ҫ����");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Current ticket type does not require approval");
         }
     }
 
@@ -282,4 +276,3 @@ public class TicketApprovalService {
                 + ", decisionComment=" + approval.getDecisionComment();
     }
 }
-

@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "������Ӧ����")
+@Schema(description = "工单响应对象")
 public class TicketVO {
     private Long id;
     private String ticketNo;

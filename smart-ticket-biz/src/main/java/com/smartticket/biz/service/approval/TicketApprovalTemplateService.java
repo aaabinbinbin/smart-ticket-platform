@@ -6,7 +6,7 @@ import com.smartticket.biz.dto.approval.TicketApprovalTemplateStepCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.repository.approval.TicketApprovalTemplateRepository;
 import com.smartticket.biz.service.ticket.TicketPermissionService;
-import com.smartticket.biz.service.ticket.TicketServiceSupport;
+import com.smartticket.biz.service.ticket.TicketUserDirectoryService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.PageResult;
@@ -17,32 +17,31 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 负责审批模板管理。
+ * 这里聚焦模板自身的合法性校验和步骤装配，不承载具体审批执行逻辑。
+ */
 @Service
 public class TicketApprovalTemplateService {
     private final TicketApprovalTemplateRepository repository;
     private final TicketPermissionService permissionService;
-    private final TicketServiceSupport support;
+    private final TicketUserDirectoryService ticketUserDirectoryService;
 
     public TicketApprovalTemplateService(
             TicketApprovalTemplateRepository repository,
             TicketPermissionService permissionService,
-            TicketServiceSupport support
+            TicketUserDirectoryService ticketUserDirectoryService
     ) {
         this.repository = repository;
         this.permissionService = permissionService;
-        this.support = support;
+        this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
     @Transactional
     public TicketApprovalTemplate create(CurrentUser operator, TicketApprovalTemplateCommandDTO command) {
         permissionService.requireAdmin(operator);
         validateCommand(command);
-        TicketApprovalTemplate template = TicketApprovalTemplate.builder()
-                .templateName(command.getTemplateName().trim())
-                .ticketType(command.getTicketType())
-                .description(command.getDescription())
-                .enabled(command.getEnabled() == null || command.getEnabled() ? 1 : 0)
-                .build();
+        TicketApprovalTemplate template = applyTemplateFields(TicketApprovalTemplate.builder().build(), command);
         repository.insert(template);
         repository.replaceSteps(template.getId(), buildSteps(template.getId(), command.getSteps()));
         return repository.findById(template.getId());
@@ -53,10 +52,7 @@ public class TicketApprovalTemplateService {
         permissionService.requireAdmin(operator);
         TicketApprovalTemplate existing = requireById(templateId);
         validateCommand(command);
-        existing.setTemplateName(command.getTemplateName().trim());
-        existing.setTicketType(command.getTicketType());
-        existing.setDescription(command.getDescription());
-        existing.setEnabled(command.getEnabled() == null || command.getEnabled() ? 1 : 0);
+        applyTemplateFields(existing, command);
         repository.update(existing);
         repository.replaceSteps(templateId, buildSteps(templateId, command.getSteps()));
         return repository.findById(templateId);
@@ -66,7 +62,7 @@ public class TicketApprovalTemplateService {
     public TicketApprovalTemplate updateEnabled(CurrentUser operator, Long templateId, boolean enabled) {
         permissionService.requireAdmin(operator);
         requireById(templateId);
-        repository.updateEnabled(templateId, enabled ? 1 : 0);
+        repository.updateEnabled(templateId, toEnabled(enabled));
         return repository.findById(templateId);
     }
 
@@ -83,7 +79,7 @@ public class TicketApprovalTemplateService {
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
         int offset = (pageNo - 1) * pageSize;
         String ticketType = query.getTicketType() == null ? null : query.getTicketType().getCode();
-        Integer enabled = query.getEnabled() == null ? null : (query.getEnabled() ? 1 : 0);
+        Integer enabled = query.getEnabled() == null ? null : toEnabled(query.getEnabled());
         List<TicketApprovalTemplate> records = repository.page(ticketType, enabled, offset, pageSize);
         long total = repository.count(ticketType, enabled);
         return PageResult.<TicketApprovalTemplate>builder()
@@ -109,22 +105,19 @@ public class TicketApprovalTemplateService {
         if (command.getSteps() == null || command.getSteps().isEmpty()) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批模板至少需要一个步骤");
         }
-        List<TicketApprovalTemplateStepCommandDTO> sorted = command.getSteps().stream()
-                .sorted(Comparator.comparing(TicketApprovalTemplateStepCommandDTO::getStepOrder))
-                .toList();
+        List<TicketApprovalTemplateStepCommandDTO> sorted = sortSteps(command.getSteps());
         int expected = 1;
         for (TicketApprovalTemplateStepCommandDTO step : sorted) {
             if (step.getStepOrder() == null || step.getStepOrder() != expected) {
                 throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批步骤顺序必须从 1 开始连续递增");
             }
-            support.requireApproverUser(step.getApproverId());
+            ticketUserDirectoryService.requireApproverUser(step.getApproverId());
             expected++;
         }
     }
 
     private List<TicketApprovalTemplateStep> buildSteps(Long templateId, List<TicketApprovalTemplateStepCommandDTO> steps) {
-        return steps.stream()
-                .sorted(Comparator.comparing(TicketApprovalTemplateStepCommandDTO::getStepOrder))
+        return sortSteps(steps).stream()
                 .map(step -> TicketApprovalTemplateStep.builder()
                         .templateId(templateId)
                         .stepOrder(step.getStepOrder())
@@ -133,5 +126,25 @@ public class TicketApprovalTemplateService {
                         .build())
                 .toList();
     }
-}
 
+    private TicketApprovalTemplate applyTemplateFields(
+            TicketApprovalTemplate template,
+            TicketApprovalTemplateCommandDTO command
+    ) {
+        template.setTemplateName(command.getTemplateName().trim());
+        template.setTicketType(command.getTicketType());
+        template.setDescription(command.getDescription());
+        template.setEnabled(toEnabled(command.getEnabled()));
+        return template;
+    }
+
+    private List<TicketApprovalTemplateStepCommandDTO> sortSteps(List<TicketApprovalTemplateStepCommandDTO> steps) {
+        return steps.stream()
+                .sorted(Comparator.comparing(TicketApprovalTemplateStepCommandDTO::getStepOrder))
+                .toList();
+    }
+
+    private int toEnabled(Boolean enabled) {
+        return enabled == null || enabled ? 1 : 0;
+    }
+}
