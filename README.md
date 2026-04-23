@@ -4,13 +4,11 @@
 
 ## 项目定位
 
-- 面向简历和面试展示的智能工单平台后端
 - 重点展示复杂业务后端、Agent 接入、RAG 工程化三条能力线
 - 当前阶段是高完成度 MVP，不是生产级完整平台
 
 ## 当前状态
 
-更新时间：`2026-04-23`
 
 - 工单主流程已打通：创建、分页查询、详情、分配、认领、转派、状态流转、评论、关闭、操作日志
 - 认证与权限已打通：JWT 登录、RBAC、Agent 接口鉴权校验
@@ -65,7 +63,7 @@ smart-ticket-platform
 - `smart-ticket-agent`：意图路由、会话上下文、Tool 编排
 - `smart-ticket-api`：Controller、DTO/VO、接口协议
 
-## 面试可讲亮点
+## 可看点
 
 - 模块化单体拆分：`common/domain/infra/auth/biz/rag/agent/api/app`
 - 工单领域建模：主流程、审批、SLA、队列、自动分派、操作审计
