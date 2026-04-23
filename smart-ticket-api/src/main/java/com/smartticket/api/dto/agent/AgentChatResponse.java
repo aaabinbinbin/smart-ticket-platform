@@ -2,6 +2,7 @@ package com.smartticket.api.dto.agent;
 
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.planner.AgentPlan;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -52,4 +53,8 @@ public class AgentChatResponse {
      * 当前请求处理时 Spring AI ChatClient 是否可用。
      */
     private boolean springAiChatReady;
+
+    private AgentPlan plan;
+
+    private String traceId;
 }

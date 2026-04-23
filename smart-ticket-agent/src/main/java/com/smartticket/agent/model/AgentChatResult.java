@@ -1,5 +1,6 @@
 package com.smartticket.agent.model;
 
+import com.smartticket.agent.planner.AgentPlan;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -50,4 +51,8 @@ public class AgentChatResult {
      * 当前请求处理时 Spring AI ChatClient 是否可用。
      */
     private boolean springAiChatReady;
+
+    private AgentPlan plan;
+
+    private String traceId;
 }

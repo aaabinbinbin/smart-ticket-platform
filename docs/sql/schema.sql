@@ -138,6 +138,23 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge (
     UNIQUE KEY uk_ticket_knowledge_ticket_id (ticket_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS ticket_knowledge_candidate (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识候选主键',
+    ticket_id BIGINT NOT NULL COMMENT '来源工单 ID',
+    status VARCHAR(32) NOT NULL COMMENT '候选状态：AUTO_APPROVED/AUTO_REJECTED/MANUAL_REVIEW',
+    quality_score INT NOT NULL DEFAULT 0 COMMENT '质量分',
+    decision VARCHAR(32) NOT NULL COMMENT '准入决策',
+    reason VARCHAR(1000) DEFAULT NULL COMMENT '决策原因',
+    sensitive_risk VARCHAR(32) NOT NULL DEFAULT 'NONE' COMMENT '敏感信息风险',
+    reviewed_at DATETIME DEFAULT NULL COMMENT '人工复核时间',
+    reviewed_by BIGINT DEFAULT NULL COMMENT '人工复核人',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_ticket_knowledge_candidate_ticket_id (ticket_id),
+    INDEX idx_ticket_knowledge_candidate_status (status, updated_at),
+    INDEX idx_ticket_knowledge_candidate_score (quality_score)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS ticket_knowledge_embedding (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '知识切片向量主键',
     knowledge_id BIGINT NOT NULL COMMENT '知识 ID',
@@ -254,6 +271,34 @@ CREATE TABLE IF NOT EXISTS ticket_notification (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_ticket_notification_receiver (receiver_user_id, read_status, created_at),
     INDEX idx_ticket_notification_ticket_id (ticket_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =========================
+-- Agent 执行 Trace
+-- =========================
+
+CREATE TABLE IF NOT EXISTS agent_trace_record (
+    trace_id VARCHAR(64) PRIMARY KEY COMMENT 'Trace ID',
+    session_id VARCHAR(128) NOT NULL COMMENT '会话 ID',
+    user_id BIGINT NOT NULL COMMENT '用户 ID',
+    raw_input TEXT DEFAULT NULL COMMENT '用户原始输入',
+    intent VARCHAR(64) DEFAULT NULL COMMENT '识别到的意图',
+    confidence DOUBLE DEFAULT NULL COMMENT '意图置信度',
+    plan_stage VARCHAR(64) DEFAULT NULL COMMENT '当前计划阶段',
+    triggered_skill VARCHAR(128) DEFAULT NULL COMMENT '触发的 Skill',
+    parameter_summary TEXT DEFAULT NULL COMMENT '参数抽取摘要',
+    prompt_version VARCHAR(128) DEFAULT NULL COMMENT '使用的 Prompt 版本',
+    spring_ai_used TINYINT NOT NULL DEFAULT 0 COMMENT '是否使用 Spring AI',
+    fallback_used TINYINT NOT NULL DEFAULT 0 COMMENT '是否使用确定性 fallback',
+    final_reply TEXT DEFAULT NULL COMMENT '最终回复',
+    elapsed_millis BIGINT NOT NULL DEFAULT 0 COMMENT '执行耗时，毫秒',
+    status VARCHAR(64) DEFAULT NULL COMMENT '执行状态',
+    failure_type VARCHAR(64) DEFAULT NULL COMMENT '失败类型',
+    step_json JSON DEFAULT NULL COMMENT '步骤级 Trace',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_agent_trace_session_id (session_id, created_at),
+    INDEX idx_agent_trace_user_id (user_id, created_at),
+    INDEX idx_agent_trace_failure_type (failure_type, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =========================

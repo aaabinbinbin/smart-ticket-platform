@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.AgentTraceRecordMapper">
+
+    <resultMap id="agentTraceRecordResultMap" type="com.smartticket.domain.entity.AgentTraceRecord">
+        <id property="traceId" column="trace_id"/>
+        <result property="sessionId" column="session_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="rawInput" column="raw_input"/>
+        <result property="intent" column="intent"/>
+        <result property="confidence" column="confidence"/>
+        <result property="planStage" column="plan_stage"/>
+        <result property="triggeredSkill" column="triggered_skill"/>
+        <result property="parameterSummary" column="parameter_summary"/>
+        <result property="promptVersion" column="prompt_version"/>
+        <result property="springAiUsed" column="spring_ai_used"/>
+        <result property="fallbackUsed" column="fallback_used"/>
+        <result property="finalReply" column="final_reply"/>
+        <result property="elapsedMillis" column="elapsed_millis"/>
+        <result property="status" column="status"/>
+        <result property="failureType" column="failure_type"/>
+        <result property="stepJson" column="step_json"/>
+        <result property="createdAt" column="created_at"/>
+    </resultMap>
+
+    <sql id="agentTraceColumns">
+        trace_id, session_id, user_id, raw_input, intent, confidence, plan_stage,
+        triggered_skill, parameter_summary, prompt_version, spring_ai_used, fallback_used,
+        final_reply, elapsed_millis, status, failure_type, step_json, created_at
+    </sql>
+
+    <insert id="insert" parameterType="com.smartticket.domain.entity.AgentTraceRecord">
+        INSERT INTO agent_trace_record (
+            trace_id, session_id, user_id, raw_input, intent, confidence, plan_stage,
+            triggered_skill, parameter_summary, prompt_version, spring_ai_used, fallback_used,
+            final_reply, elapsed_millis, status, failure_type, step_json, created_at
+        )
+        VALUES (
+            #{traceId}, #{sessionId}, #{userId}, #{rawInput}, #{intent}, #{confidence}, #{planStage},
+            #{triggeredSkill}, #{parameterSummary}, #{promptVersion}, #{springAiUsed}, #{fallbackUsed},
+            #{finalReply}, #{elapsedMillis}, #{status}, #{failureType}, #{stepJson}, #{createdAt}
+        )
+    </insert>
+
+    <select id="findBySessionId" resultMap="agentTraceRecordResultMap">
+        SELECT <include refid="agentTraceColumns"/>
+        FROM agent_trace_record
+        WHERE session_id = #{sessionId}
+        ORDER BY created_at ASC
+    </select>
+
+    <select id="findRecentByUserId" resultMap="agentTraceRecordResultMap">
+        SELECT <include refid="agentTraceColumns"/>
+        FROM agent_trace_record
+        WHERE user_id = #{userId}
+        ORDER BY created_at DESC
+        LIMIT #{limit}
+    </select>
+
+    <select id="findByFailureType" resultMap="agentTraceRecordResultMap">
+        SELECT <include refid="agentTraceColumns"/>
+        FROM agent_trace_record
+        WHERE 1 = 1
+        <if test="failureType != null and failureType != ''">
+            AND failure_type = #{failureType}
+        </if>
+        ORDER BY created_at DESC
+    </select>
+</mapper>

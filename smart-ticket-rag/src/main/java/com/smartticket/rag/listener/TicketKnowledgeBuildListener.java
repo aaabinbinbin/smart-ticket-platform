@@ -4,6 +4,8 @@ import com.smartticket.biz.event.TicketClosedEvent;
 import com.smartticket.biz.service.knowledge.TicketKnowledgeService;
 import com.smartticket.domain.entity.TicketKnowledge;
 import com.smartticket.rag.service.EmbeddingService;
+import com.smartticket.rag.service.KnowledgeAdmissionResult;
+import com.smartticket.rag.service.KnowledgeAdmissionService;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,13 +28,16 @@ public class TicketKnowledgeBuildListener {
 
     /** 知识切片和向量化服务，位于 rag 模块。 */
     private final EmbeddingService embeddingService;
+    private final KnowledgeAdmissionService knowledgeAdmissionService;
 
     public TicketKnowledgeBuildListener(
             TicketKnowledgeService ticketKnowledgeService,
-            EmbeddingService embeddingService
+            EmbeddingService embeddingService,
+            KnowledgeAdmissionService knowledgeAdmissionService
     ) {
         this.ticketKnowledgeService = ticketKnowledgeService;
         this.embeddingService = embeddingService;
+        this.knowledgeAdmissionService = knowledgeAdmissionService;
     }
 
     /**
@@ -45,7 +50,14 @@ public class TicketKnowledgeBuildListener {
     public void onTicketClosed(TicketClosedEvent event) {
         Long ticketId = event.ticketId();
         try {
-            log.info("ticket knowledge async build started: ticketId={}", ticketId);
+            log.info("ticket knowledge admission started: ticketId={}", ticketId);
+            KnowledgeAdmissionResult admission = knowledgeAdmissionService.evaluate(ticketId);
+            if (!admission.autoApproved()) {
+                log.info("ticket knowledge admission stopped: ticketId={}, decision={}, score={}, reason={}",
+                        ticketId, admission.getDecision(), admission.getQualityScore(), admission.getReason());
+                return;
+            }
+            log.info("ticket knowledge async build started: ticketId={}, admissionScore={}", ticketId, admission.getQualityScore());
             Optional<TicketKnowledge> knowledge = ticketKnowledgeService.buildKnowledge(ticketId);
             if (knowledge.isEmpty()) {
                 log.info("ticket knowledge skipped: ticketId={} not eligible", ticketId);

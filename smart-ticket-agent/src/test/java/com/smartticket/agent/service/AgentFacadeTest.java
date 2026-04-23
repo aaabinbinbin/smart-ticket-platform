@@ -17,8 +17,15 @@ import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentPendingAction;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.planner.AgentPlan;
+import com.smartticket.agent.planner.AgentPlanAction;
+import com.smartticket.agent.planner.AgentPlanStage;
+import com.smartticket.agent.planner.AgentPlanner;
+import com.smartticket.agent.prompt.PromptTemplateService;
+import com.smartticket.agent.skill.SkillRegistry;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.core.AgentToolStatus;
+import com.smartticket.agent.tool.core.ToolRiskLevel;
 import com.smartticket.agent.tool.parameter.AgentToolParameterField;
 import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
@@ -26,6 +33,8 @@ import com.smartticket.agent.tool.ticket.CreateTicketTool;
 import com.smartticket.agent.tool.ticket.QueryTicketTool;
 import com.smartticket.agent.tool.ticket.SearchHistoryTool;
 import com.smartticket.agent.tool.ticket.TransferTicketTool;
+import com.smartticket.agent.trace.AgentTraceContext;
+import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -135,18 +144,35 @@ class AgentFacadeTest {
         IntentRouter intentRouter = mock(IntentRouter.class);
         AgentSessionService sessionService = mock(AgentSessionService.class);
         AgentExecutionGuard executionGuard = mock(AgentExecutionGuard.class);
+        AgentPlanner agentPlanner = mock(AgentPlanner.class);
+        SkillRegistry skillRegistry = mock(SkillRegistry.class);
+        AgentTraceService traceService = mock(AgentTraceService.class);
+        PromptTemplateService promptTemplateService = mock(PromptTemplateService.class);
         AgentToolParameterExtractor parameterExtractor = mock(AgentToolParameterExtractor.class);
         QueryTicketTool queryTicketTool = mock(QueryTicketTool.class);
         CreateTicketTool createTicketTool = mock(CreateTicketTool.class);
         TransferTicketTool transferTicketTool = mock(TransferTicketTool.class);
         SearchHistoryTool searchHistoryTool = mock(SearchHistoryTool.class);
         when(createTicketTool.name()).thenReturn("createTicket");
+        when(traceService.start(any(), any(), any())).thenReturn(new AgentTraceContext("trace-1", "session", 1L, "message"));
+        when(agentPlanner.buildOrLoadPlan(any(), any())).thenReturn(AgentPlan.builder()
+                .goal("create_ticket")
+                .intent(AgentIntent.CREATE_TICKET)
+                .currentStage(AgentPlanStage.EXECUTE_SKILL)
+                .nextAction(AgentPlanAction.EXECUTE_TOOL)
+                .nextSkillCode("create-ticket")
+                .riskLevel(ToolRiskLevel.LOW_RISK_WRITE)
+                .build());
         AgentFacade agentFacade = new AgentFacade(
                 (ObjectProvider) chatClientProvider,
                 false,
                 intentRouter,
                 sessionService,
                 executionGuard,
+                agentPlanner,
+                skillRegistry,
+                traceService,
+                promptTemplateService,
                 parameterExtractor,
                 queryTicketTool,
                 createTicketTool,
@@ -158,6 +184,10 @@ class AgentFacadeTest {
                 intentRouter,
                 sessionService,
                 executionGuard,
+                agentPlanner,
+                skillRegistry,
+                traceService,
+                promptTemplateService,
                 parameterExtractor,
                 queryTicketTool,
                 createTicketTool,
@@ -171,6 +201,10 @@ class AgentFacadeTest {
             IntentRouter intentRouter,
             AgentSessionService sessionService,
             AgentExecutionGuard executionGuard,
+            AgentPlanner agentPlanner,
+            SkillRegistry skillRegistry,
+            AgentTraceService traceService,
+            PromptTemplateService promptTemplateService,
             AgentToolParameterExtractor parameterExtractor,
             QueryTicketTool queryTicketTool,
             CreateTicketTool createTicketTool,

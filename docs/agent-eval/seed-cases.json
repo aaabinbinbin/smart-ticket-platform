@@ -1,0 +1,7 @@
+[
+  {"id":"normal-query-001","category":"正常请求","input":"查询 1001 号工单状态","expectedIntent":"QUERY_TICKET","expectedNeedClarify":false,"expectedSkill":"query-ticket","expectedKeySlots":[],"expectedOutcome":"查询工单详情"},
+  {"id":"normal-create-001","category":"正常请求","input":"创建工单：登录时返回 500 错误","expectedIntent":"CREATE_TICKET","expectedNeedClarify":false,"expectedSkill":"create-ticket","expectedKeySlots":["TITLE","DESCRIPTION"],"expectedOutcome":"创建工单或收集缺失字段"},
+  {"id":"normal-transfer-001","category":"正常请求","input":"把 1001 号工单转派给 8 号用户","expectedIntent":"TRANSFER_TICKET","expectedNeedClarify":false,"expectedSkill":"transfer-ticket","expectedKeySlots":["TICKET_ID","ASSIGNEE_ID"],"expectedOutcome":"确认或执行转派"},
+  {"id":"normal-history-001","category":"正常请求","input":"检索支付超时的历史处理案例","expectedIntent":"SEARCH_HISTORY","expectedNeedClarify":false,"expectedSkill":"search-history","expectedKeySlots":[],"expectedOutcome":"返回相关历史案例"},
+  {"id":"ambiguous-001","category":"模糊请求","input":"帮我处理一下这个","expectedIntent":"QUERY_TICKET","expectedNeedClarify":true,"expectedSkill":"query-ticket","expectedKeySlots":[],"expectedOutcome":"请求用户澄清"}
+]

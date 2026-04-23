@@ -1,5 +1,6 @@
 package com.smartticket.agent.model;
 
+import com.smartticket.agent.planner.AgentPlan;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -33,4 +34,6 @@ public class AgentSessionContext {
 
     /** 当前等待用户补充或确认的动作；为空表示下一轮走正常单 Agent 编排流程。 */
     private AgentPendingAction pendingAction;
+
+    private AgentPlan planState;
 }

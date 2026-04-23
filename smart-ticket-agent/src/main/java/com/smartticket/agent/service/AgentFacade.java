@@ -8,6 +8,11 @@ import com.smartticket.agent.model.AgentPendingAction;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.orchestration.ToolCallPlan;
+import com.smartticket.agent.planner.AgentPlan;
+import com.smartticket.agent.planner.AgentPlanner;
+import com.smartticket.agent.prompt.PromptTemplateService;
+import com.smartticket.agent.skill.AgentSkill;
+import com.smartticket.agent.skill.SkillRegistry;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolRequest;
 import com.smartticket.agent.tool.core.AgentToolResult;
@@ -21,6 +26,8 @@ import com.smartticket.agent.tool.ticket.CreateTicketTool;
 import com.smartticket.agent.tool.ticket.QueryTicketTool;
 import com.smartticket.agent.tool.ticket.SearchHistoryTool;
 import com.smartticket.agent.tool.ticket.TransferTicketTool;
+import com.smartticket.agent.trace.AgentTraceContext;
+import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,6 +55,10 @@ public class AgentFacade {
     private final IntentRouter intentRouter;
     private final AgentSessionService sessionService;
     private final AgentExecutionGuard executionGuard;
+    private final AgentPlanner agentPlanner;
+    private final SkillRegistry skillRegistry;
+    private final AgentTraceService traceService;
+    private final PromptTemplateService promptTemplateService;
     private final AgentToolParameterExtractor parameterExtractor;
     private final QueryTicketTool queryTicketTool;
     private final CreateTicketTool createTicketTool;
@@ -60,6 +71,10 @@ public class AgentFacade {
             IntentRouter intentRouter,
             AgentSessionService sessionService,
             AgentExecutionGuard executionGuard,
+            AgentPlanner agentPlanner,
+            SkillRegistry skillRegistry,
+            AgentTraceService traceService,
+            PromptTemplateService promptTemplateService,
             AgentToolParameterExtractor parameterExtractor,
             QueryTicketTool queryTicketTool,
             CreateTicketTool createTicketTool,
@@ -71,6 +86,10 @@ public class AgentFacade {
         this.intentRouter = intentRouter;
         this.sessionService = sessionService;
         this.executionGuard = executionGuard;
+        this.agentPlanner = agentPlanner;
+        this.skillRegistry = skillRegistry;
+        this.traceService = traceService;
+        this.promptTemplateService = promptTemplateService;
         this.parameterExtractor = parameterExtractor;
         this.queryTicketTool = queryTicketTool;
         this.createTicketTool = createTicketTool;
@@ -80,26 +99,32 @@ public class AgentFacade {
 
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
+        AgentTraceContext trace = traceService.start(currentUser, sessionId, message);
         AgentSessionContext context = sessionService.load(sessionId);
         if (hasPendingCreateDraft(context)) {
-            return continuePendingCreate(currentUser, sessionId, message, context, springAiReady);
+            return continuePendingCreate(currentUser, sessionId, message, context, springAiReady, trace);
         }
 
+        traceService.step(trace, "route", "before", null, "START", message);
         IntentRoute route = intentRouter.route(message, context);
+        traceService.step(trace, "route", "after", null, route.getIntent().name(), String.valueOf(route.getConfidence()));
+        AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
+        context.setPlanState(plan);
+        traceService.step(trace, "planner", "decision", plan.getNextSkillCode(), plan.getNextAction().name(), plan.getCurrentStage().name());
         log.info("agent facade chat: sessionId={}, userId={}, intent={}, springAiChatReady={}",
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
 
         if (route.getConfidence() < 0.50d) {
-            return clarifyLowConfidenceIntent(sessionId, message, context, route, springAiReady);
+            return clarifyLowConfidenceIntent(sessionId, message, context, route, plan, springAiReady, trace);
         }
 
         if (springAiReady) {
-            Optional<AgentChatResult> springAiResult = trySpringAiToolCalling(currentUser, sessionId, message, context, route);
+            Optional<AgentChatResult> springAiResult = trySpringAiToolCalling(currentUser, sessionId, message, context, route, plan, trace);
             if (springAiResult.isPresent()) {
                 return springAiResult.get();
             }
         }
-        return executeDeterministicFallback(currentUser, sessionId, message, context, route, springAiReady);
+        return executeDeterministicFallback(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
     }
 
     private AgentChatResult clarifyLowConfidenceIntent(
@@ -107,15 +132,20 @@ public class AgentFacade {
             String message,
             AgentSessionContext context,
             IntentRoute route,
-            boolean springAiReady
+            AgentPlan plan,
+            boolean springAiReady,
+            AgentTraceContext trace
     ) {
+        agentPlanner.markClarify(plan, route.getReason());
         AgentToolResult toolResult = AgentToolResult.builder()
                 .invoked(false)
                 .toolName("clarifyIntent")
                 .reply("我暂时无法判断你的目标。请明确说明你是想查询工单、创建工单、转派工单，还是检索历史案例。")
                 .build();
+        traceService.step(trace, "clarify", "reply", null, "NEED_USER", route.getReason());
         sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+        traceService.finish(trace, route, plan, null, toolResult, toolResult.getReply(), false, false);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
     private Optional<AgentChatResult> trySpringAiToolCalling(
@@ -123,7 +153,9 @@ public class AgentFacade {
             String sessionId,
             String message,
             AgentSessionContext context,
-            IntentRoute route
+            IntentRoute route,
+            AgentPlan plan,
+            AgentTraceContext trace
     ) {
         ChatClient chatClient = chatClientProvider.getIfAvailable();
         if (chatClient == null) {
@@ -139,6 +171,11 @@ public class AgentFacade {
         toolContext.put(SpringAiToolSupport.STATE_KEY, state);
 
         try {
+            agentPlanner.beforeExecute(plan);
+            traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "START", route.getIntent().name());
+            String promptCode = promptCodeFor(route.getIntent());
+            trace.setPromptVersion(promptCode + ":" + promptTemplateService.version(promptCode));
+            traceService.step(trace, "prompt", "load", promptCode, trace.getPromptVersion(), "system prompt");
             String content = chatClient.prompt()
                     .system(systemPrompt(route.getIntent()))
                     .user(userPrompt(message, route))
@@ -149,20 +186,28 @@ public class AgentFacade {
             AgentToolResult toolResult = state.getResult();
             if (toolResult == null) {
                 log.info("spring ai tool calling produced no tool result, use deterministic fallback: sessionId={}", sessionId);
+                traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "NO_TOOL_RESULT", null);
                 return Optional.empty();
             }
             syncCreatePendingAction(context, route, null, message, toolResult);
+            agentPlanner.afterTool(plan, toolResult);
             sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
+            traceService.step(trace, "spring-ai", "tool-call", toolResult.getToolName(), toolResult.getStatus().name(), "success");
+            String finalReply = hasText(content) ? content : toolResult.getReply();
+            traceService.finish(trace, route, plan, null, toolResult, finalReply, true, false);
             return Optional.of(toChatResult(
                     sessionId,
                     route,
                     context,
                     toolResult,
-                    hasText(content) ? content : toolResult.getReply(),
-                    true
+                    finalReply,
+                    true,
+                    plan,
+                    trace
             ));
         } catch (RuntimeException ex) {
             log.warn("spring ai tool calling failed, use deterministic fallback: sessionId={}, reason={}", sessionId, ex.getMessage());
+            traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "FAILED", ex.getMessage());
             return Optional.empty();
         }
     }
@@ -173,12 +218,15 @@ public class AgentFacade {
             String message,
             AgentSessionContext context,
             IntentRoute route,
-            boolean springAiReady
+            AgentPlan plan,
+            boolean springAiReady,
+            AgentTraceContext trace
     ) {
-        AgentTool tool = agentToolFor(route.getIntent());
+        AgentSkill skill = skillRegistry.requireByIntent(route.getIntent());
+        AgentTool tool = skill.tool();
         AgentToolParameters parameters = parameterExtractor.extract(message, context);
         sessionService.resolveReferences(message, context, parameters);
-        ToolCallPlan plan = ToolCallPlan.builder()
+        ToolCallPlan toolCallPlan = ToolCallPlan.builder()
                 .intent(route.getIntent())
                 .toolName(tool.name())
                 .parameters(parameters)
@@ -186,7 +234,9 @@ public class AgentFacade {
                 .reason("Spring AI ChatClient unavailable or no tool call")
                 .build();
 
-        AgentExecutionDecision decision = executionGuard.check(currentUser, message, context, route, plan);
+        agentPlanner.beforeExecute(plan);
+        traceService.step(trace, "fallback", "skill-call", skill.skillCode(), "START", parameters.toString());
+        AgentExecutionDecision decision = executionGuard.check(currentUser, message, context, route, toolCallPlan);
         AgentToolResult toolResult;
         if (decision.isAllowed()) {
             toolResult = decision.getTool().execute(AgentToolRequest.builder()
@@ -200,8 +250,11 @@ public class AgentFacade {
             toolResult = decision.toToolResult(tool.name());
         }
         syncCreatePendingAction(context, route, parameters, message, toolResult);
+        agentPlanner.afterTool(plan, toolResult);
         sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+        traceService.step(trace, "fallback", "skill-call", toolResult.getToolName(), toolResult.getStatus().name(), "finished");
+        traceService.finish(trace, route, plan, parameters, toolResult, toolResult.getReply(), false, true);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
     private AgentChatResult continuePendingCreate(
@@ -209,13 +262,17 @@ public class AgentFacade {
             String sessionId,
             String message,
             AgentSessionContext context,
-            boolean springAiReady
+            boolean springAiReady,
+            AgentTraceContext trace
     ) {
         IntentRoute route = IntentRoute.builder()
                 .intent(AgentIntent.CREATE_TICKET)
                 .confidence(0.99d)
                 .reason("继续补全待创建工单草稿")
                 .build();
+        AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
+        context.setPlanState(plan);
+        traceService.step(trace, "planner", "pending-create", plan.getNextSkillCode(), plan.getNextAction().name(), plan.getCurrentStage().name());
         if (isCancelMessage(message)) {
             context.setPendingAction(null);
             AgentToolResult toolResult = AgentToolResult.builder()
@@ -225,7 +282,9 @@ public class AgentFacade {
                     .reply("已取消本次工单创建。你可以随时重新发起新的创建请求。")
                     .build();
             sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-            return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+            agentPlanner.afterTool(plan, toolResult);
+            traceService.finish(trace, route, plan, null, toolResult, toolResult.getReply(), false, false);
+            return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
         }
 
         AgentPendingAction pendingAction = context.getPendingAction();
@@ -243,8 +302,10 @@ public class AgentFacade {
                 .parameters(mergedParameters)
                 .build());
         syncCreatePendingAction(context, route, mergedParameters, message, toolResult);
+        agentPlanner.afterTool(plan, toolResult);
         sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
-        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady);
+        traceService.finish(trace, route, plan, mergedParameters, toolResult, toolResult.getReply(), false, false);
+        return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
     private boolean hasPendingCreateDraft(AgentSessionContext context) {
@@ -450,7 +511,9 @@ public class AgentFacade {
             AgentSessionContext context,
             AgentToolResult toolResult,
             String reply,
-            boolean springAiReady
+            boolean springAiReady,
+            AgentPlan plan,
+            AgentTraceContext trace
     ) {
         return AgentChatResult.builder()
                 .sessionId(sessionId)
@@ -460,15 +523,26 @@ public class AgentFacade {
                 .context(context)
                 .result(toolResult.getData())
                 .springAiChatReady(springAiReady)
+                .plan(plan)
+                .traceId(trace == null ? null : trace.getTraceId())
                 .build();
     }
 
     private String systemPrompt(AgentIntent intent) {
-        return switch (intent) {
+        String fallback = switch (intent) {
             case QUERY_TICKET -> "你是工单查询助手。本轮只允许调用 queryTicket，用于查询当前工单事实，不得检索历史知识库。";
             case CREATE_TICKET -> "你是工单创建助手。本轮只允许调用 createTicket。创建动作必须通过工具完成，不能编造创建结果。";
             case TRANSFER_TICKET -> "你是工单转派助手。本轮只允许调用 transferTicket。转派是高风险写操作，必须遵守工具返回的确认或失败信息。";
             case SEARCH_HISTORY -> "你是历史经验检索助手。本轮只允许调用 searchHistory。检索结果只作参考，不代表当前工单事实。";
+        };
+        return promptTemplateService.content(promptCodeFor(intent), fallback);
+    }
+
+    private String promptCodeFor(AgentIntent intent) {
+        return switch (intent) {
+            case CREATE_TICKET -> "create-ticket-completion";
+            case SEARCH_HISTORY -> "history-summary";
+            default -> "result-explanation";
         };
     }
 

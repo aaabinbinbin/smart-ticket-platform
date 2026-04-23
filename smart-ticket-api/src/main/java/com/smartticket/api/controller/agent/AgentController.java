@@ -50,6 +50,8 @@ public class AgentController {
                 .context(result.getContext())
                 .result(result.getResult())
                 .springAiChatReady(result.isSpringAiChatReady())
+                .plan(result.getPlan())
+                .traceId(result.getTraceId())
                 .build();
     }
 }
