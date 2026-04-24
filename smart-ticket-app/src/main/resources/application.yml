@@ -40,7 +40,7 @@ spring:
           model: multimodal-embedding-v1
     vectorstore:
       pgvector:
-        initialize-schema: false
+        initialize-schema: true
         schema-name: public
         table-name: vector_store
         index-type: HNSW
@@ -63,11 +63,11 @@ smart-ticket:
       relay-fixed-delay-ms: 30000
   ai:
     chat:
-      enabled: false
+      enabled: true
     embedding:
-      enabled: false
+      enabled: true
     vector-store:
-      enabled: false
+      enabled: true
     pgvector:
       url: jdbc:postgresql://192.168.100.128:5432/smart_ticket_vector
       username: postgres

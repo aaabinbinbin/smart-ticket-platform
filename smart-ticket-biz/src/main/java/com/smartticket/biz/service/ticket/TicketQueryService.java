@@ -75,7 +75,7 @@ public class TicketQueryService {
     /**
      * 分页查询工单。
      */
-    public PageResult<Ticket> page工单(CurrentUser operator, TicketPageQueryDTO query) {
+    public PageResult<Ticket> pageTickets(CurrentUser operator, TicketPageQueryDTO query) {
         PageQuery pageQuery = buildPageQuery(query);
         List<Ticket> records = loadPageRecords(operator, pageQuery);
         long total = countPageRecords(operator, pageQuery);

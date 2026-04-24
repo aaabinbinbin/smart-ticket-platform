@@ -195,7 +195,7 @@ public class TicketController {
      */
     @GetMapping
     @Operation(summary = "分页查询工单")
-    public ApiResponse<PageResult<TicketVO>> page工单(
+    public ApiResponse<PageResult<TicketVO>> pageTickets(
             Authentication authentication,
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -206,7 +206,7 @@ public class TicketController {
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "priority", required = false) String priority
     ) {
-        PageResult<Ticket> page = ticketService.page工单(currentUserResolver.resolve(authentication), TicketPageQueryDTO.builder()
+        PageResult<Ticket> page = ticketService.pageTickets(currentUserResolver.resolve(authentication), TicketPageQueryDTO.builder()
                 .pageNo(pageNo)
                 .pageSize(pageSize)
                 .status(ticketRequestParser.parseStatus(status))

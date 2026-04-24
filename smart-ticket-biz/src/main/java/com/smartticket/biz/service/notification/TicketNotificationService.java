@@ -17,15 +17,15 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class TicketNotificationService {
-    // 编号
+    // 默认页码
     private static final int DEFAULT_PAGE_NO = 1;
-    // SIZE
+    // 默认分页大小
     private static final int DEFAULT_PAGE_SIZE = 10;
-    // SIZE
+    // 分页大小上限
     private static final int MAX_PAGE_SIZE = 100;
-    // 应用
+    // 站内通知渠道
     private static final String CHANNEL_IN_APP = "IN_APP";
-    // BREACH
+    // SLA 超时通知类型
     private static final String TYPE_SLA_BREACH = "SLA_BREACH";
 
     // 工单通知仓储
@@ -39,7 +39,7 @@ public class TicketNotificationService {
     }
 
     /**
-     * 创建SLABreach通知。
+     * 创建 SLA 超时通知。
      */
     @Transactional
     public TicketNotification createSlaBreachNotification(Long ticketId, Long receiverUserId, String title, String content) {
@@ -59,7 +59,7 @@ public class TicketNotificationService {
     /**
      * 分页查询我的通知中心。
      */
-    public PageResult<TicketNotification> pageMy通知中心(CurrentUser currentUser, TicketNotificationPageQueryDTO query) {
+    public PageResult<TicketNotification> pageMyNotifications(CurrentUser currentUser, TicketNotificationPageQueryDTO query) {
         int pageNo = query == null || query.getPageNo() == null ? DEFAULT_PAGE_NO : Math.max(query.getPageNo(), 1);
         int pageSize = query == null || query.getPageSize() == null
                 ? DEFAULT_PAGE_SIZE
@@ -82,7 +82,7 @@ public class TicketNotificationService {
     }
 
     /**
-     * 读取数据。
+     * 标记通知为已读。
      */
     @Transactional
     public TicketNotification markRead(CurrentUser currentUser, Long notificationId) {
@@ -95,7 +95,7 @@ public class TicketNotificationService {
     }
 
     /**
-     * 校验Owned通知。
+     * 校验通知是否属于当前用户。
      */
     private TicketNotification requireOwnedNotification(CurrentUser currentUser, Long notificationId) {
         TicketNotification notification = ticketNotificationRepository.findById(notificationId);

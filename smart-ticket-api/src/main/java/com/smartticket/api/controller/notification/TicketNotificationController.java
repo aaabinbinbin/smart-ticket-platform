@@ -45,7 +45,7 @@ public class TicketNotificationController {
     }
 
     /**
-     * 分页查询。
+     * 分页查询我的通知。
      */
     @GetMapping
     @Operation(summary = "分页查询我的通知")
@@ -58,7 +58,7 @@ public class TicketNotificationController {
             @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
             @RequestParam(value = "unreadOnly", required = false) Boolean unreadOnly
     ) {
-        PageResult<TicketNotification> page = ticketNotificationService.pageMy通知中心(
+        PageResult<TicketNotification> page = ticketNotificationService.pageMyNotifications(
                 currentUserResolver.resolve(authentication),
                 TicketNotificationPageQueryDTO.builder()
                         .pageNo(pageNo)
@@ -75,7 +75,7 @@ public class TicketNotificationController {
     }
 
     /**
-     * 读取数据。
+     * 标记通知已读。
      */
     @PatchMapping("/{notificationId}/read")
     @Operation(summary = "标记通知已读")
@@ -90,7 +90,7 @@ public class TicketNotificationController {
     }
 
     /**
-     * 转换为VO。
+     * 转换为通知视图对象。
      */
     private TicketNotificationVO toVO(TicketNotification notification) {
         if (notification == null) {

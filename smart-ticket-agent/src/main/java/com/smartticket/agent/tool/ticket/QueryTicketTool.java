@@ -117,7 +117,7 @@ public class QueryTicketTool implements AgentTool {
      * 查询可见工单分页。
      */
     private AgentToolResult queryVisibleTicketPage(AgentToolRequest request) {
-        PageResult<Ticket> page = ticketQueryService.page工单(
+        PageResult<Ticket> page = ticketQueryService.pageTickets(
                 request.getCurrentUser(),
                 TicketPageQueryDTO.builder()
                         .pageNo(DEFAULT_PAGE_NO)

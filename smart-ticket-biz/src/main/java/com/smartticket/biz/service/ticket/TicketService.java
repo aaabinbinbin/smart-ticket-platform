@@ -78,8 +78,8 @@ public class TicketService {
     /**
      * 分页查询工单。
      */
-    public PageResult<Ticket> page工单(CurrentUser operator, TicketPageQueryDTO query) {
-        return ticketQueryService.page工单(operator, query);
+    public PageResult<Ticket> pageTickets(CurrentUser operator, TicketPageQueryDTO query) {
+        return ticketQueryService.pageTickets(operator, query);
     }
 
     /**
