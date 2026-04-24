@@ -13,6 +13,7 @@ import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.biz.model.CurrentUser;
+import java.util.List;
 import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.context.annotation.Lazy;
@@ -50,6 +51,11 @@ public class SpringAiToolSupport {
      * toolContext 中保存本轮 Tool 执行状态的 key。
      */
     public static final String STATE_KEY = "toolCallState";
+
+    /**
+     * toolContext 中保存当前轮允许暴露工具名白名单的 key。
+     */
+    public static final String ALLOWED_TOOL_NAMES_KEY = "allowedToolNames";
 
     /**
      * 智能体执行边界守卫。
@@ -95,6 +101,25 @@ public class SpringAiToolSupport {
         AgentSessionContext sessionContext = get(toolContext, SESSION_CONTEXT_KEY, AgentSessionContext.class);
         String message = get(toolContext, MESSAGE_KEY, String.class);
         IntentRoute route = routeOrDefault(toolContext, intent);
+        if (!isAllowedTool(toolContext, tool)) {
+            AgentToolResult result = AgentToolResults.failed(
+                    tool.name(),
+                    "当前执行策略未授权该工具，请改用本轮允许的工具。",
+                    null
+            );
+            capture(toolContext, tool.name(), result);
+            return result;
+        }
+        // 查询类 ReAct 只能使用只读工具，避免模型在只读推理阶段越权触发写操作。
+        if (isReadOnlyReasoningRoute(route) && !isReadOnlyTool(tool)) {
+            AgentToolResult result = AgentToolResults.failed(
+                    tool.name(),
+                    "当前只读推理阶段不允许调用写工具，请改用查询或检索类工具。",
+                    null
+            );
+            capture(toolContext, tool.name(), result);
+            return result;
+        }
         ToolCallPlan plan = ToolCallPlan.builder()
                 .intent(intent)
                 .toolName(tool.name())
@@ -119,6 +144,67 @@ public class SpringAiToolSupport {
         }
         capture(toolContext, tool.name(), result);
         return result;
+    }
+
+    /**
+     * 判断当前工具是否在执行策略允许的白名单中。
+     *
+     * <p>P4 开始模型侧即使拿到了函数定义，也必须再次通过后端白名单校验，
+     * 避免 toolContext 原始路由与实际执行策略不一致时出现越权工具调用。</p>
+     */
+    private boolean isAllowedTool(ToolContext toolContext, AgentTool tool) {
+        if (tool == null) {
+            return false;
+        }
+        List<String> allowedToolNames = allowedToolNames(toolContext);
+        if (allowedToolNames.isEmpty()) {
+            return true;
+        }
+        return allowedToolNames.contains(tool.name());
+    }
+
+    /**
+     * 判断当前原始路由是否属于只读 ReAct 场景。
+     *
+     * @param route 本轮原始意图路由
+     * @return true 表示本轮只允许查询和检索类工具，不允许写操作
+     */
+    private boolean isReadOnlyReasoningRoute(IntentRoute route) {
+        if (route == null || route.getIntent() == null) {
+            return false;
+        }
+        return route.getIntent() == AgentIntent.QUERY_TICKET
+                || route.getIntent() == AgentIntent.SEARCH_HISTORY;
+    }
+
+    /**
+     * 判断工具是否为只读工具。
+     *
+     * @param tool 当前准备执行的 Tool
+     * @return true 表示该工具不会修改数据库状态，可安全暴露给只读 ReAct
+     */
+    private boolean isReadOnlyTool(AgentTool tool) {
+        return tool != null
+                && tool.metadata() != null
+                && tool.metadata().isReadOnly();
+    }
+
+    /**
+     * 从 ToolContext 中读取当前轮允许暴露的工具白名单。
+     */
+    @SuppressWarnings("unchecked")
+    private List<String> allowedToolNames(ToolContext toolContext) {
+        if (toolContext == null || toolContext.getContext() == null) {
+            return List.of();
+        }
+        Object value = toolContext.getContext().get(ALLOWED_TOOL_NAMES_KEY);
+        if (value instanceof List<?> rawList) {
+            return rawList.stream()
+                    .filter(String.class::isInstance)
+                    .map(String.class::cast)
+                    .toList();
+        }
+        return List.of();
     }
 
     /**

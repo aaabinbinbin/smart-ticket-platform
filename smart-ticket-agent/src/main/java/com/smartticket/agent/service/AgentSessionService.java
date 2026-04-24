@@ -66,7 +66,10 @@ public class AgentSessionService {
     }
 
     /**
-     * 调用后根据 Tool 结果更新并保存上下文。
+     * 调用后根据 Tool 结果更新上下文。
+     *
+     * <p>P2 开始由 AgentFacade 在记忆写入完成后统一保存 session，避免同一轮先更新上下文再保存、
+     * 然后又因 memory 回写再次保存。该方法因此只负责修改 context 本身，不直接提交。</p>
      *
      * @param sessionId 会话 ID
      * @param context 当前会话上下文
@@ -82,7 +85,6 @@ public class AgentSessionService {
             AgentToolResult toolResult
     ) {
         contextUpdater.apply(context, route, message, toolResult);
-        save(sessionId, context);
     }
 
     /**

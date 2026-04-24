@@ -1514,28 +1514,235 @@ AgentOrchestratorIntegrationTest
 
 ## 18. 给 Codex 的执行提示词模板
 
-可以把下面内容交给 Codex 分阶段执行：
+本节用于把重构任务交给 Codex 分阶段执行。建议配合仓库根目录的 `AGENTS.md` 使用。
+
+OpenAI 官方文档建议在仓库根目录放置 `AGENTS.md` 来记录项目规范、构建测试命令、工程约束和完成标准；Codex CLI 也提供 `/init` 命令生成 `AGENTS.md` 起始文件。因此，本项目建议把长期约束写入 `AGENTS.md`，把每一轮具体任务写在下面的阶段提示词里。
+
+### 18.1 使用原则
 
 ```text
-你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。请严格按 docs/agent-refactor-implementation-plan.md 执行，不要一次性大改。
+1. 每次只执行一个阶段，例如 P0、P1、P2。
+2. 不要让 Codex 一次性按整份文档全量重构。
+3. 每轮开始前必须让 Codex 读取：
+   - AGENTS.md
+   - docs/agent-refactor-checklist.md
+   - docs/agent-refactor-implementation-plan.md
+4. 每轮必须要求 Codex 说明改动文件、设计原因、兼容性影响、测试命令和测试结果。
+5. 每轮必须跑测试，失败时先修复，不要继续下一阶段。
+6. 如果 Codex 想提前实现后续阶段内容，必须拒绝并拉回当前阶段。
+```
+
+---
+
+### 18.2 通用阶段执行提示词
+
+每次开始一个阶段时，可以使用这个模板，只替换“当前阶段”和“本阶段任务”。
+
+```text
+你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。
+
+请先阅读以下文件：
+1. AGENTS.md
+2. docs/agent-refactor-checklist.md
+3. docs/agent-refactor-implementation-plan.md
+
+当前阶段：<填写 P0 / P1 / P2 / P3 ...>
+
+本阶段任务：
+<填写本阶段要完成的具体内容>
+
+强制要求：
+1. 只完成当前阶段，不要提前实现其他阶段。
+2. 不要一次性重写整个 Agent 模块。
+3. 不要改变 /api/agent/chat 的接口协议，除非当前阶段明确要求。
+4. 不要新增 SSE、限流、高压治理、指标等后续阶段能力，除非当前阶段就是这些内容。
+5. 保留现有业务行为；如果需要改变行为，必须说明原因并补测试。
+6. 写操作仍然必须走确定性链路，不能让 LLM 直接执行数据库变更。
+7. ReAct 只能用于只读场景，不能暴露创建、转派、关闭、修改优先级等写工具。
+8. 生成或修改 Java 代码时必须补充清晰的中文注释：
+   - 类、接口、枚举、核心 public 方法使用 /** */ Javadoc。
+   - Javadoc 要说明职责、在 Agent 主链中的位置、关键业务约束、入参、返回值，以及是否会修改 session/memory/pendingAction/trace。
+   - 重要字段、复杂分支、复杂方法内部关键步骤使用 // 注释。
+   - 写操作确认、补参、取消 pendingAction、降级、超时、限流、session lock 等关键节点必须写 // 注释。
+   - 不要给 getter/setter、简单构造器、简单赋值、明显 null 判断、显而易见代码写废话注释。
+   - 注释重点解释“为什么这样设计 / 业务约束是什么 / 保护了什么风险”，不要只是复述代码。
+9. 完成后执行：mvn -q -pl smart-ticket-agent -am test
+10. 如果修改了 API 层，还要执行：mvn -q -pl smart-ticket-api -am test
+11. 测试失败必须先修复；如果无法修复，说明失败原因、涉及测试和当前判断。
+
+完成后按以下格式输出：
+
+## 本阶段改动文件
+- ...
+
+## 核心设计说明
+- ...
+
+## 兼容性影响
+- 是否改变接口：是/否
+- 是否改变数据库 schema：是/否
+- 是否改变现有行为：是/否，如有请说明
+
+## 测试结果
+- 执行命令：...
+- 结果：通过/失败
+- 失败项及原因：...
+
+## 剩余风险
+- ...
+
+## 是否可以进入下一阶段
+- 是/否
+- 下一阶段建议：...
+```
+
+---
+
+### 18.3 P0 提示词：基线梳理与保护性测试
+
+建议第一轮先执行 P0，不要直接开始拆主链。
+
+```text
+你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。
+
+请先阅读：
+1. AGENTS.md
+2. docs/agent-refactor-checklist.md
+3. docs/agent-refactor-implementation-plan.md
+
+当前阶段：P0：基线梳理与保护性测试。
+
+要求：
+1. 不要重构主链，不要拆 AgentFacade，不要新增 SSE，不要实现高压治理。
+2. 先阅读当前 smart-ticket-agent 模块中的 AgentFacade、IntentRouter、AgentPlanner、SkillRegistry、tool、memory、trace、execution、orchestration 相关代码。
+3. 梳理当前 /api/agent/chat 的实际调用链。
+4. 补充或完善当前主链的回归测试，至少覆盖：
+   - QUERY_TICKET 正常查询
+   - SEARCH_HISTORY 历史案例检索
+   - CREATE_TICKET 缺参进入 pendingAction
+   - CREATE_TICKET 补参后继续处理
+   - TRANSFER_TICKET 需要确认
+   - 取消 pendingAction
+   - ReAct 不允许调用写工具，如果当前代码已有类似边界则补测试保护
+5. 不改变现有接口协议。
+6. 不做大规模包结构调整。
+7. 生成或修改 Java 代码时必须补充清晰中文注释，遵守 AGENTS.md 中的“中文注释规范”。
+8. 执行 mvn -q -pl smart-ticket-agent -am test，并修复失败。
+9. 最后输出：
+   - 改动文件列表
+   - 当前 Agent 主链简述
+   - 新增/修改的测试说明
+   - 测试结果
+   - 是否可以进入 P1
+```
+
+---
+
+### 18.4 P1 提示词：统一结果模型与回复渲染
+
+```text
+你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。
+
+请先阅读：
+1. AGENTS.md
+2. docs/agent-refactor-checklist.md
+3. docs/agent-refactor-implementation-plan.md
 
 当前阶段：P1：统一结果模型与回复渲染。
 
 要求：
-1. 先阅读 docs/agent-refactor-implementation-plan.md 和 docs/agent-refactor-checklist.md。
-2. 只完成当前阶段，不要提前实现 SSE、高压治理或大规模重排包结构。
-3. 新增 AgentTurnStatus、AgentExecutionMode、AgentExecutionSummary、AgentReplyRenderer。
-4. 让现有 AgentFacade 的主要返回路径都能生成 AgentExecutionSummary，再由 AgentReplyRenderer 生成最终 reply。
-5. 不改变 /api/agent/chat 的接口协议。
-6. 补 AgentReplyRendererTest 和必要的 AgentFacade 回归测试。
-7. 生成代码时必须补充清晰的中文注释：类、接口、枚举、核心 public 方法使用 `/** */` Javadoc 说明职责、入参、返回值和关键约束；字段、分支判断、复杂方法内部关键步骤使用 `//` 行内注释；不要为 getter/setter、构造器、简单赋值、显而易见的代码写无意义注释；注释要解释“为什么这样设计 / 业务约束是什么”，不要只重复代码在做什么。
-8. 执行 mvn -q -pl smart-ticket-agent -am test，并修复失败。
-9. 输出改动文件列表、核心设计说明、测试结果。
+1. 只完成 P1，不要实现 P2-P8。
+2. 新增或完善：
+   - AgentTurnStatus
+   - AgentExecutionMode
+   - AgentExecutionSummary
+   - AgentReplyRenderer
+3. 让现有 AgentFacade 的主要返回路径逐步生成 AgentExecutionSummary，再由 AgentReplyRenderer 生成最终 reply。
+4. 不改变 /api/agent/chat 的接口协议。
+5. 不改变现有业务行为。
+6. AgentReplyRenderer 只负责渲染回复，不允许查询数据库、不允许调用 tool、不允许修改 session/memory/pendingAction。
+7. 补充 AgentReplyRendererTest 和必要的 AgentFacade 回归测试。
+8. 生成或修改 Java 代码时必须补充清晰中文注释，遵守 AGENTS.md 中的“中文注释规范”。
+9. 执行 mvn -q -pl smart-ticket-agent -am test，并修复失败。
+10. 最后输出改动文件列表、核心设计说明、兼容性影响、测试结果、剩余风险。
 ```
 
-每次只换“当前阶段”即可，例如 P2、P3、P4。
+---
+
+### 18.5 P2 提示词：PendingActionCoordinator
+
+```text
+你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。
+
+请先阅读：
+1. AGENTS.md
+2. docs/agent-refactor-checklist.md
+3. docs/agent-refactor-implementation-plan.md
+
+当前阶段：P2：抽取 PendingActionCoordinator。
+
+要求：
+1. 只完成 P2，不要实现 P3-P8。
+2. 将补参、确认、取消、pendingAction 恢复和清理逻辑从 AgentFacade 中迁移到 PendingActionCoordinator。
+3. PendingActionCoordinator 是 pendingAction 的唯一入口，其他类不能散落创建、修改、清空 pendingAction 的逻辑。
+4. 支持 CREATE_TICKET 缺参、继续补参、取消补参。
+5. 支持 TRANSFER_TICKET 高风险确认、确认后执行、取消确认。
+6. 不改变 /api/agent/chat 的接口协议。
+7. 保证同一轮 Agent turn 仍然只提交一次 session/memory/pendingAction。
+8. 补充 PendingActionCoordinatorTest 和必要的 AgentFacade 回归测试。
+9. 生成或修改 Java 代码时必须补充清晰中文注释，遵守 AGENTS.md 中的“中文注释规范”。
+10. 执行 mvn -q -pl smart-ticket-agent -am test，并修复失败。
+11. 最后输出改动文件列表、核心设计说明、兼容性影响、测试结果、剩余风险。
+```
 
 ---
+
+### 18.6 P3 提示词：写操作 Command 化
+
+```text
+你现在要重构 smart-ticket-platform 的 smart-ticket-agent 模块。
+
+请先阅读：
+1. AGENTS.md
+2. docs/agent-refactor-checklist.md
+3. docs/agent-refactor-implementation-plan.md
+
+当前阶段：P3：写操作 Command 化。
+
+要求：
+1. 只完成 P3，不要实现 P4-P8。
+2. 将 CREATE_TICKET、TRANSFER_TICKET 等写操作从 fallback 概念中剥离，迁移为确定性 Command / Executor 链路。
+3. 可以新增或完善：
+   - AgentCommandDraft
+   - AgentCommandType
+   - WriteCommandExecutor 或 DeterministicCommandExecutor
+   - CreateTicketCommandHandler
+   - TransferTicketCommandHandler
+4. 写操作执行顺序必须是：参数抽取/合并 -> 参数校验 -> 权限/风险校验 -> 必要确认 -> 确定性执行 -> summary。
+5. LLM 只允许辅助理解和补参，不能直接触发数据库写入。
+6. 不改变 /api/agent/chat 的接口协议。
+7. 补充写操作相关单元测试和回归测试。
+8. 生成或修改 Java 代码时必须补充清晰中文注释，遵守 AGENTS.md 中的“中文注释规范”。
+9. 执行 mvn -q -pl smart-ticket-agent -am test，并修复失败。
+10. 最后输出改动文件列表、核心设计说明、兼容性影响、测试结果、剩余风险。
+```
+
+---
+
+### 18.7 P4-P8 简化提示词
+
+后续阶段可以使用 18.2 的通用模板，并把任务换成：
+
+```text
+P4：实现 AgentExecutionPolicyService，按 intent、risk、allowedTools、confirmation、budget 选择执行模式。
+P5：实现 ReadOnlyReactExecutor 和 AgentReactToolCatalog，确保 ReAct 只暴露只读工具。
+P6：实现 session lock、rate limit、timeout、degrade policy 等高压治理能力。
+P7：新增 /api/agent/chat/stream SSE 接口，接入 AgentEventSink，final 事件必须返回完整 AgentChatResult。
+P8：补 metrics、压测脚本、稳定性验收文档和 README/简历表达。
+```
+
+每个阶段都必须遵守 AGENTS.md 中的注释规范、测试要求和完成输出格式。
+
 
 ## 19. 执行建议
 
