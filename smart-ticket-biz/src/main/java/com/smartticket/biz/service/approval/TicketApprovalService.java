@@ -29,14 +29,24 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class TicketApprovalService {
+    // 支撑
     private final TicketServiceSupport support;
+    // 工单审批仓储
     private final TicketApprovalRepository ticketApprovalRepository;
+    // 工单审批步骤仓储
     private final TicketApprovalStepRepository ticketApprovalStepRepository;
+    // 工单审批模板服务
     private final TicketApprovalTemplateService ticketApprovalTemplateService;
+    // 工单审批步骤工厂
     private final TicketApprovalStepFactory ticketApprovalStepFactory;
+    // 工单用户目录服务
     private final TicketUserDirectoryService ticketUserDirectoryService;
+    // 工单详情缓存服务
     private final TicketDetailCacheService ticketDetailCacheService;
 
+    /**
+     * 构造工单审批服务。
+     */
     public TicketApprovalService(
             TicketServiceSupport support,
             TicketApprovalRepository ticketApprovalRepository,
@@ -55,6 +65,9 @@ public class TicketApprovalService {
         this.ticketDetailCacheService = ticketDetailCacheService;
     }
 
+    /**
+     * 获取审批。
+     */
     public TicketApproval getApproval(CurrentUser operator, Long ticketId) {
         Ticket ticket = support.requireVisibleTicket(operator, ticketId);
         if (!requiresApproval(ticket)) {
@@ -63,14 +76,18 @@ public class TicketApprovalService {
         return enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
     }
 
+    /**
+     * 提交审批。
+     */
     @Transactional
     public TicketApproval submitApproval(CurrentUser operator, Long ticketId, Long templateId, Long approverId, String submitComment) {
         Ticket ticket = support.requireTicket(ticketId);
         requireApprovalTicket(ticket);
         if (!operator.isAdmin() && !operator.getUserId().equals(ticket.getCreatorId())) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "Only admin or creator can submit approval");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "仅管理员或工单创建人可以提交审批");
         }
 
+        // 优先解析显式模板；没有模板时再尝试按工单类型命中启用中的默认模板。
         TicketApprovalTemplate template = resolveTemplate(ticket.getType(), templateId, approverId);
         List<TicketApprovalStep> steps = ticketApprovalStepFactory.build(ticketId, template, approverId);
         TicketApproval existing = ticketApprovalRepository.findByTicketId(ticketId);
@@ -78,6 +95,7 @@ public class TicketApprovalService {
         Long firstApproverId = steps.get(0).getApproverId();
 
         if (existing == null) {
+            // 首次提交时创建主审批单与步骤数据。
             TicketApproval approval = TicketApproval.builder()
                     .ticketId(ticketId)
                     .templateId(template == null ? null : template.getId())
@@ -92,10 +110,11 @@ public class TicketApprovalService {
             ticketApprovalStepFactory.assignApprovalId(steps, approval.getId());
             ticketApprovalStepRepository.insertBatch(steps);
         } else if (existing.getApprovalStatus() == TicketApprovalStatusEnum.APPROVED) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval already passed");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批已通过，不能重复提交");
         } else if (existing.getApprovalStatus() == TicketApprovalStatusEnum.PENDING) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval is already pending");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批正在进行中，不能重复提交");
         } else {
+            // 被驳回后的再次提交会重置主单状态，并用新的步骤集覆盖旧步骤。
             support.requireUpdated(ticketApprovalRepository.updateForResubmit(
                     ticketId,
                     template == null ? null : template.getId(),
@@ -113,34 +132,46 @@ public class TicketApprovalService {
         }
 
         TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
-        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.SUBMIT_APPROVAL, "Submit approval", approvalSnapshot(existing), approvalSnapshot(after));
+        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.SUBMIT_APPROVAL, "提交审批", approvalSnapshot(existing), approvalSnapshot(after));
         ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
+    /**
+     * 审批通过。
+     */
     @Transactional
     public TicketApproval approve(CurrentUser operator, Long ticketId, String decisionComment) {
         return decide(operator, ticketId, true, decisionComment);
     }
 
+    /**
+     * 审批拒绝。
+     */
     @Transactional
     public TicketApproval reject(CurrentUser operator, Long ticketId, String decisionComment) {
         return decide(operator, ticketId, false, decisionComment);
     }
 
+    /**
+     * 校验工单审批已通过。
+     */
     public void requireApprovalPassed(Ticket ticket) {
         if (!requiresApproval(ticket)) {
             return;
         }
         TicketApproval approval = ticketApprovalRepository.findByTicketId(ticket.getId());
         if (approval == null) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "Approval submission is required");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "当前工单必须先提交审批");
         }
         if (approval.getApprovalStatus() != TicketApprovalStatusEnum.APPROVED) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "Approval has not passed yet");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_REQUIRED, "当前工单审批尚未通过");
         }
     }
 
+    /**
+     * 处理审批决策。
+     */
     private TicketApproval decide(CurrentUser operator, Long ticketId, boolean approved, String decisionComment) {
         Ticket ticket = support.requireTicket(ticketId);
         requireApprovalTicket(ticket);
@@ -149,15 +180,15 @@ public class TicketApprovalService {
             throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_NOT_FOUND);
         }
         if (before.getApprovalStatus() != TicketApprovalStatusEnum.PENDING) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval is not in pending state");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批当前不处于待处理状态");
         }
 
         TicketApprovalStep currentStep = ticketApprovalStepRepository.findCurrentPendingByTicketId(ticketId);
         if (currentStep == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Current approval step is missing");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "当前审批步骤不存在");
         }
         if (!operator.isAdmin() && !operator.getUserId().equals(currentStep.getApproverId())) {
-            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "Only current approver can make the decision");
+            throw new BusinessException(BusinessErrorCode.TICKET_APPROVAL_FORBIDDEN, "只有当前审批人可以执行审批操作");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -170,6 +201,7 @@ public class TicketApprovalService {
         ));
 
         if (!approved) {
+            // 任一节点驳回后，主审批单直接进入拒绝态，不再继续后续步骤。
             support.requireUpdated(ticketApprovalRepository.updateDecision(
                     ticketId,
                     TicketApprovalStatusEnum.PENDING,
@@ -180,13 +212,14 @@ public class TicketApprovalService {
                     now
             ));
             TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
-            support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.REJECT, "Reject approval", approvalSnapshot(before), approvalSnapshot(after));
+            support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.REJECT, "审批拒绝", approvalSnapshot(before), approvalSnapshot(after));
             ticketDetailCacheService.evict(ticketId);
             return after;
         }
 
         TicketApprovalStep nextStep = ticketApprovalStepRepository.findNextWaitingByTicketId(ticketId, currentStep.getStepOrder());
         if (nextStep != null) {
+            // 多级审批命中下一步时，只推进当前审批人，不结束整个审批单。
             support.requireUpdated(ticketApprovalStepRepository.activateStep(
                     nextStep.getId(),
                     TicketApprovalStepStatusEnum.WAITING,
@@ -202,6 +235,7 @@ public class TicketApprovalService {
                     null
             ));
         } else {
+            // 没有后续步骤时，当前通过即代表整张审批单通过。
             support.requireUpdated(ticketApprovalRepository.updateDecision(
                     ticketId,
                     TicketApprovalStatusEnum.PENDING,
@@ -214,19 +248,22 @@ public class TicketApprovalService {
         }
 
         TicketApproval after = enrichApproval(ticketApprovalRepository.findByTicketId(ticketId));
-        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.APPROVE, "Approve approval", approvalSnapshot(before), approvalSnapshot(after));
+        support.writeLog(ticketId, operator.getUserId(), OperationTypeEnum.APPROVE, "审批通过", approvalSnapshot(before), approvalSnapshot(after));
         ticketDetailCacheService.evict(ticketId);
         return after;
     }
 
+    /**
+     * 解析模板。
+     */
     private TicketApprovalTemplate resolveTemplate(TicketTypeEnum ticketType, Long templateId, Long approverId) {
         if (templateId != null) {
             TicketApprovalTemplate template = ticketApprovalTemplateService.get(templateId);
             if (!Integer.valueOf(1).equals(template.getEnabled())) {
-                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval template is disabled");
+                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批模板已停用");
             }
             if (template.getTicketType() != ticketType) {
-                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Approval template does not match ticket type");
+                throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批模板与工单类型不匹配");
             }
             return template;
         }
@@ -235,22 +272,31 @@ public class TicketApprovalService {
             return autoTemplate;
         }
         if (approverId == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "No enabled template found and no approver specified");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "未找到可用审批模板，且未指定审批人");
         }
         ticketUserDirectoryService.requireApproverUser(approverId);
         return null;
     }
 
+    /**
+     * 校验审批工单。
+     */
     private void requireApprovalTicket(Ticket ticket) {
         if (!requiresApproval(ticket)) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "Current ticket type does not require approval");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "当前工单类型不需要审批");
         }
     }
 
+    /**
+     * 判断工单是否需要审批。
+     */
     private boolean requiresApproval(Ticket ticket) {
         return ticket != null && (ticket.getType() == TicketTypeEnum.ACCESS_REQUEST || ticket.getType() == TicketTypeEnum.CHANGE_REQUEST);
     }
 
+    /**
+     * 补全审批模板和步骤信息。
+     */
     private TicketApproval enrichApproval(TicketApproval approval) {
         if (approval == null) {
             return null;
@@ -262,6 +308,9 @@ public class TicketApprovalService {
         return approval;
     }
 
+    /**
+     * 生成审批快照。
+     */
     private String approvalSnapshot(TicketApproval approval) {
         if (approval == null) {
             return null;

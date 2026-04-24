@@ -28,19 +28,34 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单SLA服务。
+ */
 @Service
 public class TicketSlaService {
+    // LIMIT
     private static final int DEFAULT_SCAN_LIMIT = 100;
+    // LIMIT
     private static final int MAX_SCAN_LIMIT = 1000;
 
+    // 策略仓储
     private final TicketSlaPolicyRepository policyRepository;
+    // instance仓储
     private final TicketSlaInstanceRepository instanceRepository;
+    // 工单仓储
     private final TicketRepository ticketRepository;
+    // 操作Log仓储
     private final TicketOperationLogRepository operationLogRepository;
+    // 权限服务
     private final TicketPermissionService permissionService;
+    // 工单详情缓存服务
     private final TicketDetailCacheService ticketDetailCacheService;
+    // 通知服务
     private final TicketSlaNotificationService notificationService;
 
+    /**
+     * 构造工单SLA服务。
+     */
     public TicketSlaService(
             TicketSlaPolicyRepository policyRepository,
             TicketSlaInstanceRepository instanceRepository,
@@ -59,6 +74,9 @@ public class TicketSlaService {
         this.notificationService = notificationService;
     }
 
+    /**
+     * 创建策略。
+     */
     @Transactional
     public TicketSlaPolicy createPolicy(CurrentUser operator, TicketSlaPolicyCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -75,6 +93,9 @@ public class TicketSlaService {
         return requirePolicy(policy.getId());
     }
 
+    /**
+     * 更新策略。
+     */
     @Transactional
     public TicketSlaPolicy updatePolicy(CurrentUser operator, Long policyId, TicketSlaPolicyCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -90,6 +111,9 @@ public class TicketSlaService {
         return requirePolicy(policyId);
     }
 
+    /**
+     * 更新策略启用。
+     */
     @Transactional
     public TicketSlaPolicy updatePolicyEnabled(CurrentUser operator, Long policyId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -98,10 +122,16 @@ public class TicketSlaService {
         return requirePolicy(policyId);
     }
 
+    /**
+     * 获取策略。
+     */
     public TicketSlaPolicy getPolicy(Long policyId) {
         return requirePolicy(policyId);
     }
 
+    /**
+     * 分页查询策略。
+     */
     public PageResult<TicketSlaPolicy> pagePolicies(TicketSlaPolicyPageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -119,6 +149,9 @@ public class TicketSlaService {
                 .build();
     }
 
+    /**
+     * 创建OrRefreshInstance。
+     */
     @Transactional
     public void createOrRefreshInstance(Ticket ticket) {
         if (ticket == null || ticket.getId() == null) {
@@ -143,6 +176,9 @@ public class TicketSlaService {
         }
     }
 
+    /**
+     * 获取Instance按工单ID。
+     */
     public TicketSlaInstance getInstanceByTicketId(Long ticketId) {
         TicketSlaInstance instance = instanceRepository.findByTicketId(ticketId);
         if (instance == null) {
@@ -151,22 +187,34 @@ public class TicketSlaService {
         return instance;
     }
 
+    /**
+     * 扫描BreachedInstances。
+     */
     @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, Integer limit) {
         return scanBreachedInstances(operator, LocalDateTime.now(), limit);
     }
 
+    /**
+     * 扫描BreachedInstances。
+     */
     @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, LocalDateTime now, Integer limit) {
         permissionService.requireAdmin(operator);
         return doScanBreachedInstances(now, limit);
     }
 
+    /**
+     * 扫描BreachedInstancesAutomatically。
+     */
     @Transactional
     public TicketSlaScanResultDTO scanBreachedInstancesAutomatically() {
         return doScanBreachedInstances(LocalDateTime.now(), null);
     }
 
+    /**
+     * 执行ScanBreachedInstances。
+     */
     private TicketSlaScanResultDTO doScanBreachedInstances(LocalDateTime now, Integer limit) {
         int normalizedLimit = normalizeScanLimit(limit);
         LocalDateTime scanTime = now == null ? LocalDateTime.now() : now;
@@ -223,6 +271,9 @@ public class TicketSlaService {
                 .build();
     }
 
+    /**
+     * 查询Escalation管理用户ID。
+     */
     private Optional<Long> findEscalationAdminUserId() {
         return ticketRepository.findUsersByRoleCode("ADMIN").stream()
                 .filter(user -> Integer.valueOf(1).equals(user.getStatus()))
@@ -230,6 +281,9 @@ public class TicketSlaService {
                 .findFirst();
     }
 
+    /**
+     * 处理Breach类型。
+     */
     private String determineBreachType(Ticket ticket, TicketSlaInstance instance, LocalDateTime now) {
         if (instance.getFirstResponseDeadline() != null && !now.isBefore(instance.getFirstResponseDeadline()) && ticket.getStatus() == TicketStatusEnum.PENDING_ASSIGN && ticket.getAssigneeId() == null) {
             return "FIRST_RESPONSE";
@@ -240,6 +294,9 @@ public class TicketSlaService {
         return null;
     }
 
+    /**
+     * 处理工单。
+     */
     private boolean escalateTicket(Ticket ticket, Long adminUserId, String breachType) {
         boolean changed = false;
         if (ticket.getPriority() != TicketPriorityEnum.URGENT) {
@@ -254,6 +311,9 @@ public class TicketSlaService {
         return changed;
     }
 
+    /**
+     * 解析操作人ID。
+     */
     private Long resolveOperatorId(Ticket ticket, Long adminUserId) {
         if (adminUserId != null) {
             return adminUserId;
@@ -264,6 +324,9 @@ public class TicketSlaService {
         return ticket.getCreatorId();
     }
 
+    /**
+     * 写入AuditLog。
+     */
     private void writeAuditLog(Long ticketId, Long operatorId, OperationTypeEnum operationType, String operationDesc, String beforeValue, String afterValue) {
         operationLogRepository.insert(TicketOperationLog.builder()
                 .ticketId(ticketId)
@@ -275,6 +338,9 @@ public class TicketSlaService {
                 .build());
     }
 
+    /**
+     * 校验策略。
+     */
     private TicketSlaPolicy requirePolicy(Long policyId) {
         TicketSlaPolicy policy = policyRepository.findById(policyId);
         if (policy == null) {
@@ -283,6 +349,9 @@ public class TicketSlaService {
         return policy;
     }
 
+    /**
+     * 校验策略。
+     */
     private void validatePolicy(TicketSlaPolicyCommandDTO command) {
         if (command.getFirstResponseMinutes() == null || command.getFirstResponseMinutes() <= 0) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_SLA_POLICY, "首次响应时限必须大于 0");
@@ -295,14 +364,23 @@ public class TicketSlaService {
         }
     }
 
+    /**
+     * 处理编码。
+     */
     private String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }
 
+    /**
+     * 转换为启用。
+     */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }
 
+    /**
+     * 规范化ScanLimit。
+     */
     private int normalizeScanLimit(Integer limit) {
         if (limit == null) {
             return DEFAULT_SCAN_LIMIT;

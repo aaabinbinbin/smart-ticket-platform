@@ -28,15 +28,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单分组控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/ticket-groups")
-@Tag(name = "Ticket Groups", description = "Ticket group management")
+@Tag(name = "工单分组", description = "工单分组管理")
 public class TicketGroupController {
+    // 工单分组服务
     private final TicketGroupService ticketGroupService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 装配器
     private final P1ConfigAssembler assembler;
 
+    /**
+     * 构造工单分组控制器。
+     */
     public TicketGroupController(
             TicketGroupService ticketGroupService,
             CurrentUserResolver currentUserResolver,
@@ -47,8 +56,11 @@ public class TicketGroupController {
         this.assembler = assembler;
     }
 
+    /**
+     * 创建。
+     */
     @PostMapping
-    @Operation(summary = "Create ticket group", description = "Admin only")
+    @Operation(summary = "创建工单分组", description = "仅管理员可操作")
     public ApiResponse<TicketGroupVO> create(
             Authentication authentication,
             @Valid @RequestBody TicketGroupRequest request
@@ -57,8 +69,11 @@ public class TicketGroupController {
         return ApiResponse.success(assembler.toGroupVO(group));
     }
 
+    /**
+     * 更新。
+     */
     @PutMapping("/{groupId}")
-    @Operation(summary = "Update ticket group", description = "Admin only")
+    @Operation(summary = "更新工单分组", description = "仅管理员可操作")
     public ApiResponse<TicketGroupVO> update(
             Authentication authentication,
             @PathVariable("groupId") Long groupId,
@@ -68,8 +83,11 @@ public class TicketGroupController {
         return ApiResponse.success(assembler.toGroupVO(group));
     }
 
+    /**
+     * 更新启用。
+     */
     @PatchMapping("/{groupId}/enabled")
-    @Operation(summary = "Enable or disable ticket group", description = "Admin only")
+    @Operation(summary = "启用或停用工单分组", description = "仅管理员可操作")
     public ApiResponse<TicketGroupVO> updateEnabled(
             Authentication authentication,
             @PathVariable("groupId") Long groupId,
@@ -79,14 +97,20 @@ public class TicketGroupController {
         return ApiResponse.success(assembler.toGroupVO(group));
     }
 
+    /**
+     * 获取详情。
+     */
     @GetMapping("/{groupId}")
-    @Operation(summary = "Get ticket group")
+    @Operation(summary = "获取工单分组")
     public ApiResponse<TicketGroupVO> get(@PathVariable("groupId") Long groupId) {
         return ApiResponse.success(assembler.toGroupVO(ticketGroupService.get(groupId)));
     }
 
+    /**
+     * 分页查询。
+     */
     @GetMapping
-    @Operation(summary = "Page ticket groups")
+    @Operation(summary = "分页查询工单分组")
     public ApiResponse<PageResult<TicketGroupVO>> page(
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -109,6 +133,9 @@ public class TicketGroupController {
                 .build());
     }
 
+    /**
+     * 转换为命令。
+     */
     private TicketGroupCommandDTO toCommand(TicketGroupRequest request) {
         return TicketGroupCommandDTO.builder()
                 .groupName(request.getGroupName())

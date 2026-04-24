@@ -13,7 +13,9 @@ public enum TicketPriorityEnum implements CodeInfoEnum {
     HIGH("HIGH", "高"),
     URGENT("URGENT", "紧急");
 
+    // 编码
     private final String code;
+    // info
     private final String info;
 
     TicketPriorityEnum(String code, String info) {
@@ -21,14 +23,23 @@ public enum TicketPriorityEnum implements CodeInfoEnum {
         this.info = info;
     }
 
+    /**
+     * 获取编码。
+     */
     public String getCode() {
         return code;
     }
 
+    /**
+     * 获取Info。
+     */
     public String getInfo() {
         return info;
     }
 
+    /**
+     * 处理编码。
+     */
     public static TicketPriorityEnum fromCode(String code) {
         return Arrays.stream(values())
                 .filter(value -> value.code.equals(code))

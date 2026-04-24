@@ -7,9 +7,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Agent Tool 结果构造器。
+ * 智能体工具结果构造器。
  */
 public final class AgentToolResults {
+    /**
+     * 禁止实例化工具结果构造器。
+     */
     private AgentToolResults() {
     }
 
@@ -65,6 +68,9 @@ public final class AgentToolResults {
                 .build();
     }
 
+    /**
+     * 生成缺失字段提示语。
+     */
     private static String buildMissingFieldsReply(List<AgentToolParameterField> missingFields) {
         if (missingFields == null || missingFields.isEmpty()) {
             return "请补充必要信息。";

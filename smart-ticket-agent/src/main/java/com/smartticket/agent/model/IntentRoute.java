@@ -13,7 +13,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class IntentRoute {
+    // 意图
     private AgentIntent intent;
+    // confidence
     private double confidence;
+    // reason
     private String reason;
 }

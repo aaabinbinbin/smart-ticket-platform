@@ -15,16 +15,23 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentToolValidationResult {
+    // valid
     private boolean valid;
     @Builder.Default
     private List<AgentToolParameterField> missingFields = new ArrayList<>();
 
+    /**
+     * 处理成功状态。
+     */
     public static AgentToolValidationResult success() {
         return AgentToolValidationResult.builder()
                 .valid(true)
                 .build();
     }
 
+    /**
+     * 处理missing。
+     */
     public static AgentToolValidationResult missing(List<AgentToolParameterField> missingFields) {
         return AgentToolValidationResult.builder()
                 .valid(false)

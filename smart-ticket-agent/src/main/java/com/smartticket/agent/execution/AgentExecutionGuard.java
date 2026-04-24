@@ -12,7 +12,7 @@ import com.smartticket.biz.model.CurrentUser;
 import org.springframework.stereotype.Component;
 
 /**
- * Agent 执行边界守卫。
+ * 智能体执行边界守卫。
  *
  * <p>该组件把执行前的安全边界集中为平台能力：计划合法性、风险确认、必填参数都在这里统一判断。
  * 编排器只消费决策结果，Tool 执行器只负责执行已放行的 Tool。</p>
@@ -25,6 +25,9 @@ public class AgentExecutionGuard {
     /** Tool 参数校验器，负责根据 Tool 元数据检查 requiredFields。 */
     private final AgentToolRequestValidator requestValidator;
 
+    /**
+     * 构造智能体Execution守卫。
+     */
     public AgentExecutionGuard(
             ToolCallPlanValidator planValidator,
             AgentToolRequestValidator requestValidator

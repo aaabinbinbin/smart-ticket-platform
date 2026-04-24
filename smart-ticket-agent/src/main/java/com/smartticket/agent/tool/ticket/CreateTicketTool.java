@@ -36,14 +36,23 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CreateTicketTool implements AgentTool {
+    // NAME
     private static final String NAME = "createTicket";
 
+    // 工单命令服务
     private final TicketCommandService ticketCommandService;
+    // 校验器
     private final AgentToolRequestValidator validator;
+    // 检索服务
     private final RetrievalService retrievalService;
+    // SpringAI工具支撑
     private final SpringAiToolSupport springAiToolSupport;
+    // deflectionThreshold
     private final double deflectionThreshold;
 
+    /**
+     * 构造创建工单工具。
+     */
     public CreateTicketTool(
             TicketCommandService ticketCommandService,
             AgentToolRequestValidator validator,
@@ -58,16 +67,25 @@ public class CreateTicketTool implements AgentTool {
         this.deflectionThreshold = deflectionThreshold;
     }
 
+    /**
+     * 处理名称。
+     */
     @Override
     public String name() {
         return NAME;
     }
 
+    /**
+     * 处理支撑。
+     */
     @Override
     public boolean support(AgentIntent intent) {
         return intent == AgentIntent.CREATE_TICKET;
     }
 
+    /**
+     * 处理元数据。
+     */
     @Override
     public AgentToolMetadata metadata() {
         return AgentToolMetadata.builder()
@@ -83,6 +101,9 @@ public class CreateTicketTool implements AgentTool {
                 .build();
     }
 
+    /**
+     * 执行操作。
+     */
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
         AgentToolValidationResult validation = validator.validate(this, request);
@@ -124,6 +145,9 @@ public class CreateTicketTool implements AgentTool {
         );
     }
 
+    /**
+     * 构建Reply。
+     */
     private String buildReply(RetrievalResult similarCases, boolean deflectionSuggested, boolean userAlreadyTried) {
         if (similarCases.getHits().isEmpty()) {
             return "已创建工单。";
@@ -137,6 +161,9 @@ public class CreateTicketTool implements AgentTool {
         return "已创建工单，并找到相似历史案例供处理时参考。相似案例不会阻止本次创建。";
     }
 
+    /**
+     * 处理转向建议。
+     */
     private boolean shouldSuggestDeflection(RetrievalResult similarCases) {
         if (similarCases == null || similarCases.getHits().isEmpty()) {
             return false;
@@ -145,6 +172,9 @@ public class CreateTicketTool implements AgentTool {
         return score != null && score >= deflectionThreshold;
     }
 
+    /**
+     * 处理已尝试解决信息。
+     */
     private boolean userAlreadyTriedSolution(String message, String description) {
         String text = (message == null ? "" : message) + " " + (description == null ? "" : description);
         return text.contains("试过")
@@ -154,6 +184,9 @@ public class CreateTicketTool implements AgentTool {
                 || text.toLowerCase().contains("already tried");
     }
 
+    /**
+     * 创建工单。
+     */
     @Tool(name = NAME, description = "创建新工单，内部会复用业务层的幂等和校验逻辑")
     public AgentToolResult createTicket(
             @ToolParam(description = "工单标题") String title,
@@ -179,6 +212,9 @@ public class CreateTicketTool implements AgentTool {
         );
     }
 
+    /**
+     * 解析类型。
+     */
     private TicketTypeEnum parseType(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
@@ -190,6 +226,9 @@ public class CreateTicketTool implements AgentTool {
         }
     }
 
+    /**
+     * 解析分类。
+     */
     private TicketCategoryEnum parseCategory(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
@@ -201,6 +240,9 @@ public class CreateTicketTool implements AgentTool {
         }
     }
 
+    /**
+     * 解析优先级。
+     */
     private TicketPriorityEnum parsePriority(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;

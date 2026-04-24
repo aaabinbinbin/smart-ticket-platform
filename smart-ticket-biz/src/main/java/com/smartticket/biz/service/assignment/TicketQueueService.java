@@ -13,12 +13,21 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单队列服务。
+ */
 @Service
 public class TicketQueueService {
+    // 工单队列仓储
     private final TicketQueueRepository ticketQueueRepository;
+    // 工单分组服务
     private final TicketGroupService ticketGroupService;
+    // 权限服务
     private final TicketPermissionService permissionService;
 
+    /**
+     * 构造工单队列服务。
+     */
     public TicketQueueService(
             TicketQueueRepository ticketQueueRepository,
             TicketGroupService ticketGroupService,
@@ -29,6 +38,9 @@ public class TicketQueueService {
         this.permissionService = permissionService;
     }
 
+    /**
+     * 创建。
+     */
     @Transactional
     public TicketQueue create(CurrentUser operator, TicketQueueCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -47,6 +59,9 @@ public class TicketQueueService {
         return requireById(queue.getId());
     }
 
+    /**
+     * 更新。
+     */
     @Transactional
     public TicketQueue update(CurrentUser operator, Long queueId, TicketQueueCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -59,6 +74,9 @@ public class TicketQueueService {
         return requireById(queueId);
     }
 
+    /**
+     * 更新启用。
+     */
     @Transactional
     public TicketQueue updateEnabled(CurrentUser operator, Long queueId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -67,10 +85,16 @@ public class TicketQueueService {
         return requireById(queueId);
     }
 
+    /**
+     * 获取详情。
+     */
     public TicketQueue get(Long queueId) {
         return requireById(queueId);
     }
 
+    /**
+     * 校验启用。
+     */
     public TicketQueue requireEnabled(Long queueId) {
         TicketQueue queue = requireById(queueId);
         if (!Integer.valueOf(1).equals(queue.getEnabled())) {
@@ -79,6 +103,9 @@ public class TicketQueueService {
         return queue;
     }
 
+    /**
+     * 分页查询。
+     */
     public PageResult<TicketQueue> page(TicketQueuePageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -95,6 +122,9 @@ public class TicketQueueService {
                 .build();
     }
 
+    /**
+     * 校验按ID。
+     */
     private TicketQueue requireById(Long queueId) {
         TicketQueue queue = ticketQueueRepository.findById(queueId);
         if (queue == null) {
@@ -103,14 +133,23 @@ public class TicketQueueService {
         return queue;
     }
 
+    /**
+     * 规范化编码。
+     */
     private String normalizeCode(String code) {
         return code == null ? null : code.trim().toUpperCase();
     }
 
+    /**
+     * 规范化关键字。
+     */
     private String normalizeKeyword(String keyword) {
         return keyword == null || keyword.trim().isEmpty() ? null : keyword.trim();
     }
 
+    /**
+     * 转换为启用。
+     */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }

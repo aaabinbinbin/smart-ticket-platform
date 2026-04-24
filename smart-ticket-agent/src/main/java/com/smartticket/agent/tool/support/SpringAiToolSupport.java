@@ -51,15 +51,18 @@ public class SpringAiToolSupport {
     public static final String STATE_KEY = "toolCallState";
 
     /**
-     * Agent 执行边界守卫。
+     * 智能体执行边界守卫。
      */
     private final AgentExecutionGuard executionGuard;
 
     /**
-     * Agent 会话服务，用于执行前的最小指代消解。
+     * 智能体会话服务，用于执行前的最小指代消解。
      */
     private final AgentSessionService sessionService;
 
+    /**
+     * 构造 Spring AI 工具支撑组件。
+     */
     public SpringAiToolSupport(@Lazy AgentExecutionGuard executionGuard, AgentSessionService sessionService) {
         this.executionGuard = executionGuard;
         this.sessionService = sessionService;

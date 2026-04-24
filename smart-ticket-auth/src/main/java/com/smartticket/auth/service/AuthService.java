@@ -17,9 +17,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AuthService {
+    // authenticationManager
     private final AuthenticationManager authenticationManager;
+    // JWT令牌提供器
     private final JwtTokenProvider jwtTokenProvider;
 
+    /**
+     * 构造认证服务。
+     */
     public AuthService(AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider) {
         this.authenticationManager = authenticationManager;
         this.jwtTokenProvider = jwtTokenProvider;

@@ -11,7 +11,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         scanBasePackages = "com.smartticket",
         excludeName = "org.springframework.ai.vectorstore.pgvector.autoconfigure.PgVectorStoreAutoConfiguration"
 )
+/**
+ * Smart工单Application类。
+ */
 public class SmartTicketApplication {
+    /**
+     * 应用启动入口。
+     */
     public static void main(String[] args) {
         SpringApplication.run(SmartTicketApplication.class, args);
     }

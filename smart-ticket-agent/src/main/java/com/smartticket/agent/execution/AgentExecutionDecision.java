@@ -12,7 +12,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Agent 执行前置决策结果。
+ * 智能体执行前置决策结果。
  *
  * <p>Guard 会把 Tool 是否存在、风险确认、必填参数等判断归一成该对象。编排层只需要根据状态决定
  * 是否执行 Tool、追问用户或直接失败。</p>

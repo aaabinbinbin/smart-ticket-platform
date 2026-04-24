@@ -11,12 +11,16 @@ public enum AgentToolParameterField {
     CATEGORY("工单分类"),
     PRIORITY("工单优先级");
 
+    // label
     private final String label;
 
     AgentToolParameterField(String label) {
         this.label = label;
     }
 
+    /**
+     * 获取Label。
+     */
     public String getLabel() {
         return label;
     }

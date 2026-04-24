@@ -16,23 +16,42 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Agent 对话 HTTP 入口。
- * 这里只负责接收请求和组装响应，会话编排由 agent facade 承担。
+ * Agent 对话 HTTP 入口，只负责接收请求、解析当前用户并组装响应。
  */
 @RestController
 @RequestMapping("/api/agent")
-@Tag(name = "Agent Chat", description = "Agent chat entry")
+@Tag(name = "智能体对话", description = "智能体对话入口")
 public class AgentController {
+    /**
+     * 智能体主链应用服务。
+     */
     private final AgentFacade agentFacade;
+
+    /**
+     * 当前登录用户解析器。
+     */
     private final CurrentUserResolver currentUserResolver;
 
+    /**
+     * 创建智能体对话控制器。
+     *
+     * @param agentFacade Agent 主链应用服务
+     * @param currentUserResolver 当前登录用户解析器
+     */
     public AgentController(AgentFacade agentFacade, CurrentUserResolver currentUserResolver) {
         this.agentFacade = agentFacade;
         this.currentUserResolver = currentUserResolver;
     }
 
+    /**
+     * 执行一次 Agent 对话。
+     *
+     * @param authentication 当前认证信息
+     * @param request 对话请求
+     * @return Agent 对话响应
+     */
     @PostMapping("/chat")
-    @Operation(summary = "Chat with agent", description = "Run agent chat and tool orchestration")
+    @Operation(summary = "智能体对话", description = "执行智能体对话与工具编排")
     public ApiResponse<AgentChatResponse> chat(
             Authentication authentication,
             @Valid @RequestBody AgentChatRequest request
@@ -41,6 +60,12 @@ public class AgentController {
         return ApiResponse.success(toResponse(result));
     }
 
+    /**
+     * 将 agent 模块的应用层结果转换为 HTTP 响应 DTO。
+     *
+     * @param result Agent 应用层结果
+     * @return HTTP 响应 DTO
+     */
     private AgentChatResponse toResponse(AgentChatResult result) {
         return AgentChatResponse.builder()
                 .sessionId(result.getSessionId())

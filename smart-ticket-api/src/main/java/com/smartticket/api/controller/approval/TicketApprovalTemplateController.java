@@ -33,15 +33,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单审批模板控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/ticket-approval-templates")
-@Tag(name = "Approval Templates", description = "Approval template management")
+@Tag(name = "审批模板", description = "审批模板管理")
 public class TicketApprovalTemplateController {
+    // 工单审批管理服务
     private final TicketApprovalAdminService ticketApprovalAdminService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 装配器
     private final P1ConfigAssembler assembler;
 
+    /**
+     * 构造工单审批模板控制器。
+     */
     public TicketApprovalTemplateController(
             TicketApprovalAdminService ticketApprovalAdminService,
             CurrentUserResolver currentUserResolver,
@@ -52,8 +61,11 @@ public class TicketApprovalTemplateController {
         this.assembler = assembler;
     }
 
+    /**
+     * 创建。
+     */
     @PostMapping
-    @Operation(summary = "Create approval template")
+    @Operation(summary = "创建审批模板")
     public ApiResponse<TicketApprovalTemplateVO> create(
             Authentication authentication,
             @Valid @RequestBody TicketApprovalTemplateRequestDTO request
@@ -62,8 +74,11 @@ public class TicketApprovalTemplateController {
         return ApiResponse.success(assembler.toApprovalTemplateVO(template));
     }
 
+    /**
+     * 更新。
+     */
     @PutMapping("/{templateId}")
-    @Operation(summary = "Update approval template")
+    @Operation(summary = "更新审批模板")
     public ApiResponse<TicketApprovalTemplateVO> update(
             Authentication authentication,
             @PathVariable("templateId") Long templateId,
@@ -73,8 +88,11 @@ public class TicketApprovalTemplateController {
         return ApiResponse.success(assembler.toApprovalTemplateVO(template));
     }
 
+    /**
+     * 更新启用。
+     */
     @PatchMapping("/{templateId}/enabled")
-    @Operation(summary = "Enable or disable approval template")
+    @Operation(summary = "启用或停用审批模板")
     public ApiResponse<TicketApprovalTemplateVO> updateEnabled(
             Authentication authentication,
             @PathVariable("templateId") Long templateId,
@@ -84,14 +102,20 @@ public class TicketApprovalTemplateController {
         return ApiResponse.success(assembler.toApprovalTemplateVO(template));
     }
 
+    /**
+     * 获取详情。
+     */
     @GetMapping("/{templateId}")
-    @Operation(summary = "Get approval template")
+    @Operation(summary = "获取审批模板")
     public ApiResponse<TicketApprovalTemplateVO> get(@PathVariable("templateId") Long templateId) {
         return ApiResponse.success(assembler.toApprovalTemplateVO(ticketApprovalAdminService.getTemplate(templateId)));
     }
 
+    /**
+     * 分页查询。
+     */
     @GetMapping
-    @Operation(summary = "Page approval templates")
+    @Operation(summary = "分页查询审批模板")
     public ApiResponse<PageResult<TicketApprovalTemplateVO>> page(
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -114,6 +138,9 @@ public class TicketApprovalTemplateController {
                 .build());
     }
 
+    /**
+     * 转换为命令。
+     */
     private TicketApprovalTemplateCommandDTO toCommand(TicketApprovalTemplateRequestDTO request) {
         List<TicketApprovalTemplateStepCommandDTO> steps = request.getSteps().stream()
                 .map(step -> TicketApprovalTemplateStepCommandDTO.builder()
@@ -131,6 +158,9 @@ public class TicketApprovalTemplateController {
                 .build();
     }
 
+    /**
+     * 解析类型。
+     */
     private TicketTypeEnum parseType(String code) {
         if (code == null || code.isBlank()) {
             return null;

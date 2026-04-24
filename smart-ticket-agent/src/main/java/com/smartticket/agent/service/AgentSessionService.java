@@ -9,7 +9,7 @@ import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import org.springframework.stereotype.Service;
 
 /**
- * Agent 会话上下文服务。
+ * 智能体会话上下文服务。
  *
  * <p>该服务统一管理短会话上下文的加载、保存、更新和最小指代消解。
  * 底层 Redis key 为 {@code agent:session:{sessionId}}，实际读写委托
@@ -32,6 +32,9 @@ public class AgentSessionService {
      */
     private final AgentContextReferenceResolver referenceResolver;
 
+    /**
+     * 构造智能体会话服务。
+     */
     public AgentSessionService(
             AgentSessionCacheService cacheService,
             AgentContextUpdater contextUpdater,

@@ -1,5 +1,8 @@
 package com.smartticket.agent.planner;
 
+/**
+ * 智能体计划阶段枚举定义。
+ */
 public enum AgentPlanStage {
     ROUTE_INTENT,
     COLLECT_REQUIRED_SLOTS,

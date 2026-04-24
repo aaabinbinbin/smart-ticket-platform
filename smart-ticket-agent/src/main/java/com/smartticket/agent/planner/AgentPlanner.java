@@ -14,17 +14,36 @@ import java.util.ArrayList;
 import java.util.List;
 import org.springframework.stereotype.Service;
 
+/**
+ * 智能体执行计划编排器，负责把路由结果转换为可推进、可追踪的计划状态。
+ */
 @Service
 public class AgentPlanner {
+    /**
+     * 技能注册表，用于根据意图推导计划中下一步要调用的技能。
+     */
     private final SkillRegistry skillRegistry;
 
+    /**
+     * 创建智能体计划编排器。
+     *
+     * @param skillRegistry 技能注册表
+     */
     public AgentPlanner(SkillRegistry skillRegistry) {
         this.skillRegistry = skillRegistry;
     }
 
+    /**
+     * 根据会话中的旧计划和当前路由结果构建或恢复执行计划。
+     *
+     * @param context 当前会话上下文
+     * @param route 当前意图路由结果
+     * @return 本轮对话应使用的执行计划
+     */
     public AgentPlan buildOrLoadPlan(AgentSessionContext context, IntentRoute route) {
         AgentPlan existing = context == null ? null : context.getPlanState();
         if (existing != null && existing.getIntent() == route.getIntent() && existing.isWaitingForUser()) {
+            // 已经在等待用户补充信息的同意图计划，继续保持补槽推进，不重新生成计划。
             existing.setCurrentStage(AgentPlanStage.COLLECT_REQUIRED_SLOTS);
             existing.setNextAction(AgentPlanAction.COLLECT_SLOTS);
             existing.setUpdatedAt(LocalDateTime.now());
@@ -44,10 +63,12 @@ public class AgentPlanner {
                 .updatedAt(LocalDateTime.now())
                 .build();
         if (route.getConfidence() < 0.50d) {
+            // 低置信度请求先进入澄清阶段，避免误触发真实业务动作。
             plan.setCurrentStage(AgentPlanStage.WAIT_USER);
             plan.setNextAction(AgentPlanAction.CLARIFY_INTENT);
             plan.setWaitingForUser(true);
         } else if (skill.riskLevel() == ToolRiskLevel.HIGH_RISK_WRITE && !skill.canAutoExecute()) {
+            // 高风险写操作必须等待用户二次确认，不能直接自动执行。
             plan.setCurrentStage(AgentPlanStage.WAIT_USER);
             plan.setNextAction(AgentPlanAction.CONFIRM_HIGH_RISK);
             plan.setWaitingForUser(true);
@@ -55,6 +76,12 @@ public class AgentPlanner {
         return plan;
     }
 
+    /**
+     * 将计划推进到意图澄清状态。
+     *
+     * @param plan 当前执行计划
+     * @param summary 澄清原因摘要
+     */
     public void markClarify(AgentPlan plan, String summary) {
         complete(plan, AgentPlanStage.ROUTE_INTENT, AgentPlanAction.CLARIFY_INTENT, null, summary);
         plan.setCurrentStage(AgentPlanStage.WAIT_USER);
@@ -63,6 +90,11 @@ public class AgentPlanner {
         plan.setUpdatedAt(LocalDateTime.now());
     }
 
+    /**
+     * 在执行 Tool 或 Skill 前，把计划推进到执行阶段。
+     *
+     * @param plan 当前执行计划
+     */
     public void beforeExecute(AgentPlan plan) {
         if (plan == null) {
             return;
@@ -73,6 +105,12 @@ public class AgentPlanner {
         plan.setUpdatedAt(LocalDateTime.now());
     }
 
+    /**
+     * 将计划推进到高风险操作确认状态。
+     *
+     * @param plan 当前执行计划
+     * @param summary 需要确认的原因摘要
+     */
     public void markNeedConfirmation(AgentPlan plan, String summary) {
         if (plan == null) {
             return;
@@ -84,12 +122,19 @@ public class AgentPlanner {
         plan.setUpdatedAt(LocalDateTime.now());
     }
 
+    /**
+     * 根据 Tool 执行结果更新计划状态。
+     *
+     * @param plan 当前执行计划
+     * @param result Tool 执行结果
+     */
     public void afterTool(AgentPlan plan, AgentToolResult result) {
         if (plan == null || result == null) {
             return;
         }
         complete(plan, AgentPlanStage.EXECUTE_SKILL, AgentPlanAction.EXECUTE_TOOL, result.getToolName(), result.getStatus().name());
         if (result.getStatus() == AgentToolStatus.NEED_MORE_INFO) {
+            // Tool 明确要求补充信息时，把缺失字段回写到计划，供前端或调试端展示。
             plan.setCurrentStage(AgentPlanStage.COLLECT_REQUIRED_SLOTS);
             plan.setNextAction(AgentPlanAction.COLLECT_SLOTS);
             plan.setWaitingForUser(true);
@@ -102,6 +147,15 @@ public class AgentPlanner {
         plan.setUpdatedAt(LocalDateTime.now());
     }
 
+    /**
+     * 记录一个已经完成的计划步骤。
+     *
+     * @param plan 当前执行计划
+     * @param stage 完成时所在阶段
+     * @param action 完成的动作
+     * @param skillCode 关联的技能编码
+     * @param summary 执行摘要
+     */
     private void complete(AgentPlan plan, AgentPlanStage stage, AgentPlanAction action, String skillCode, String summary) {
         if (plan == null) {
             return;
@@ -116,6 +170,12 @@ public class AgentPlanner {
                 .build());
     }
 
+    /**
+     * 从 Tool 返回数据中提取缺失字段列表。
+     *
+     * @param data Tool 结果中的结构化数据
+     * @return 缺失字段列表
+     */
     private List<AgentToolParameterField> extractMissingFields(Object data) {
         if (!(data instanceof List<?> rawList)) {
             return List.of();
@@ -129,6 +189,12 @@ public class AgentPlanner {
         return fields;
     }
 
+    /**
+     * 把业务意图转换为计划目标编码。
+     *
+     * @param intent 业务意图
+     * @return 计划目标编码
+     */
     private String goalFor(AgentIntent intent) {
         return switch (intent) {
             case CREATE_TICKET -> "create_ticket";
@@ -138,6 +204,13 @@ public class AgentPlanner {
         };
     }
 
+    /**
+     * 生成计划的标准步骤模板。
+     *
+     * @param intent 业务意图
+     * @param skill 当前意图对应的技能
+     * @return 计划步骤模板
+     */
     private List<AgentPlanStep> templateSteps(AgentIntent intent, AgentSkill skill) {
         List<AgentPlanStep> steps = new ArrayList<>();
         steps.add(step(AgentPlanStage.ROUTE_INTENT, AgentPlanAction.CLARIFY_INTENT, null, "identify goal and ambiguity"));
@@ -155,6 +228,15 @@ public class AgentPlanner {
         return steps;
     }
 
+    /**
+     * 创建一个未完成的计划步骤。
+     *
+     * @param stage 计划阶段
+     * @param action 下一步动作
+     * @param skillCode 关联技能编码
+     * @param summary 步骤摘要
+     * @return 计划步骤
+     */
     private AgentPlanStep step(AgentPlanStage stage, AgentPlanAction action, String skillCode, String summary) {
         return AgentPlanStep.builder()
                 .stage(stage)

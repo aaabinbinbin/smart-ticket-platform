@@ -15,6 +15,9 @@ public class TicketKnowledgeReadRepository {
     /** 工单知识 Mapper。 */
     private final TicketKnowledgeMapper mapper;
 
+    /**
+     * 构造工单知识Read仓储。
+     */
     public TicketKnowledgeReadRepository(TicketKnowledgeMapper mapper) {
         this.mapper = mapper;
     }

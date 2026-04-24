@@ -11,9 +11,18 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface TicketAttachmentMapper {
 
+    /**
+     * 处理新增。
+     */
     int insert(TicketAttachment ticketAttachment);
 
+    /**
+     * 查询按ID。
+     */
     TicketAttachment findById(@Param("id") Long id);
 
+    /**
+     * 查询按工单ID。
+     */
     List<TicketAttachment> findByTicketId(@Param("ticketId") Long ticketId);
 }

@@ -25,6 +25,9 @@ public class JwtTokenProvider {
     /** 访问令牌有效期。 */
     private final Duration expiration;
 
+    /**
+     * 构造JWT令牌提供器。
+     */
     public JwtTokenProvider(
             @Value("${smart-ticket.jwt.secret}") String secret,
             @Value("${smart-ticket.jwt.expiration-minutes}") long expirationMinutes
@@ -78,6 +81,9 @@ public class JwtTokenProvider {
         return expiration.toSeconds();
     }
 
+    /**
+     * 解析Claims。
+     */
     private Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)

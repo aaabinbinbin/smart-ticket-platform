@@ -14,28 +14,47 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class TicketApprovalAdminService {
+    // 工单审批模板服务
     private final TicketApprovalTemplateService ticketApprovalTemplateService;
 
+    /**
+     * 构造工单审批管理服务。
+     */
     public TicketApprovalAdminService(TicketApprovalTemplateService ticketApprovalTemplateService) {
         this.ticketApprovalTemplateService = ticketApprovalTemplateService;
     }
 
+    /**
+     * 创建模板。
+     */
     public TicketApprovalTemplate createTemplate(CurrentUser operator, TicketApprovalTemplateCommandDTO command) {
         return ticketApprovalTemplateService.create(operator, command);
     }
 
+    /**
+     * 更新模板。
+     */
     public TicketApprovalTemplate updateTemplate(CurrentUser operator, Long templateId, TicketApprovalTemplateCommandDTO command) {
         return ticketApprovalTemplateService.update(operator, templateId, command);
     }
 
+    /**
+     * 更新模板启用。
+     */
     public TicketApprovalTemplate updateTemplateEnabled(CurrentUser operator, Long templateId, boolean enabled) {
         return ticketApprovalTemplateService.updateEnabled(operator, templateId, enabled);
     }
 
+    /**
+     * 获取模板。
+     */
     public TicketApprovalTemplate getTemplate(Long templateId) {
         return ticketApprovalTemplateService.get(templateId);
     }
 
+    /**
+     * 分页查询模板。
+     */
     public PageResult<TicketApprovalTemplate> pageTemplates(TicketApprovalTemplatePageQueryDTO query) {
         return ticketApprovalTemplateService.page(query);
     }

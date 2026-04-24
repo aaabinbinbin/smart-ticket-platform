@@ -13,11 +13,18 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentToolResult {
+    // invoked
     private boolean invoked;
+    // 状态
     private AgentToolStatus status;
+    // 工具Name
     private String toolName;
+    // reply
     private String reply;
+    // data
     private Object data;
+    // active工单ID
     private Long activeTicketId;
+    // active处理人ID
     private Long activeAssigneeId;
 }

@@ -1,5 +1,8 @@
 package com.smartticket.common.exception;
 
+/**
+ * BusinessError编码枚举定义。
+ */
 public enum BusinessErrorCode {
     UNAUTHORIZED("UNAUTHORIZED", "未登录或提供的凭证无效"),
     INVALID_TICKET_STATUS("INVALID_TICKET_STATUS", "不支持的工单状态: %s"),
@@ -48,7 +51,9 @@ public enum BusinessErrorCode {
     INVALID_IDEMPOTENCY_KEY("INVALID_IDEMPOTENCY_KEY", "幂等键不合法，必须是长度不超过 128 的非空字符串"),
     IDEMPOTENT_REQUEST_PROCESSING("IDEMPOTENT_REQUEST_PROCESSING", "相同幂等键的请求正在处理中，请稍后重试");
 
+    // 编码
     private final String code;
+    // 消息
     private final String message;
 
     BusinessErrorCode(String code, String message) {
@@ -56,14 +61,23 @@ public enum BusinessErrorCode {
         this.message = message;
     }
 
+    /**
+     * 获取编码。
+     */
     public String getCode() {
         return code;
     }
 
+    /**
+     * 获取消息。
+     */
     public String getMessage() {
         return message;
     }
 
+    /**
+     * 处理消息。
+     */
     public String formatMessage(Object... args) {
         if (args == null || args.length == 0) {
             return message;

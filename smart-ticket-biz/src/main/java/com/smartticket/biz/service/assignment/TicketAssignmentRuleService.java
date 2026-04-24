@@ -27,20 +27,37 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单分派规则服务。
+ */
 @Service
 public class TicketAssignmentRuleService {
+    // 规则仓储
     private final TicketAssignmentRuleRepository ruleRepository;
+    // 工单查询服务
     private final TicketQueryService ticketQueryService;
+    // 工单流转服务
     private final TicketWorkflowService ticketWorkflowService;
+    // 工单队列绑定服务
     private final TicketQueueBindingService ticketQueueBindingService;
+    // 工单分组服务
     private final TicketGroupService ticketGroupService;
+    // 工单队列服务
     private final TicketQueueService ticketQueueService;
+    // 工单分派目标解析器
     private final TicketAssignmentTargetResolver ticketAssignmentTargetResolver;
+    // 工单队列成员服务
     private final TicketQueueMemberService ticketQueueMemberService;
+    // 工单操作日志仓储
     private final TicketOperationLogRepository ticketOperationLogRepository;
+    // 权限服务
     private final TicketPermissionService permissionService;
+    // 工单用户目录服务
     private final TicketUserDirectoryService ticketUserDirectoryService;
 
+    /**
+     * 构造工单分派规则服务。
+     */
     public TicketAssignmentRuleService(
             TicketAssignmentRuleRepository ruleRepository,
             TicketQueryService ticketQueryService,
@@ -67,6 +84,9 @@ public class TicketAssignmentRuleService {
         this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
+    /**
+     * 创建。
+     */
     @Transactional
     public TicketAssignmentRule create(CurrentUser operator, TicketAssignmentRuleCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -85,6 +105,9 @@ public class TicketAssignmentRuleService {
         return requireById(rule.getId());
     }
 
+    /**
+     * 更新。
+     */
     @Transactional
     public TicketAssignmentRule update(CurrentUser operator, Long ruleId, TicketAssignmentRuleCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -102,6 +125,9 @@ public class TicketAssignmentRuleService {
         return requireById(ruleId);
     }
 
+    /**
+     * 更新启用。
+     */
     @Transactional
     public TicketAssignmentRule updateEnabled(CurrentUser operator, Long ruleId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -110,10 +136,16 @@ public class TicketAssignmentRuleService {
         return requireById(ruleId);
     }
 
+    /**
+     * 获取详情。
+     */
     public TicketAssignmentRule get(Long ruleId) {
         return requireById(ruleId);
     }
 
+    /**
+     * 分页查询。
+     */
     public PageResult<TicketAssignmentRule> page(TicketAssignmentRulePageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -131,6 +163,9 @@ public class TicketAssignmentRuleService {
                 .build();
     }
 
+    /**
+     * 预览分派结果。
+     */
     public TicketAssignmentPreviewDTO preview(CurrentUser operator, Long ticketId) {
         Ticket ticket = ticketQueryService.getDetail(operator, ticketId).getTicket();
         TicketAssignmentRule rule = findMatchedRule(ticket);
@@ -138,7 +173,7 @@ public class TicketAssignmentRuleService {
             return TicketAssignmentPreviewDTO.builder()
                     .ticketId(ticketId)
                     .matched(false)
-                    .reason("No enabled assignment rule matched")
+                    .reason("未匹配到已启用的分派规则")
                     .build();
         }
         return TicketAssignmentPreviewDTO.builder()
@@ -149,10 +184,13 @@ public class TicketAssignmentRuleService {
                 .targetGroupId(rule.getTargetGroupId())
                 .targetQueueId(rule.getTargetQueueId())
                 .targetUserId(rule.getTargetUserId())
-                .reason("Matched assignment rule: " + rule.getRuleName())
+                .reason("命中的分派规则：" + rule.getRuleName())
                 .build();
     }
 
+    /**
+     * 获取统计信息。
+     */
     public TicketAssignmentStatsDTO stats() {
         long matched = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.AUTO_ASSIGN_MATCHED.getCode());
         long fallback = ticketOperationLogRepository.countByOperationType(OperationTypeEnum.AUTO_ASSIGN_FALLBACK.getCode());
@@ -174,6 +212,9 @@ public class TicketAssignmentRuleService {
                 .build();
     }
 
+    /**
+     * 执行分派。
+     */
     @Transactional
     public Ticket autoAssign(CurrentUser operator, Long ticketId) {
         Ticket ticket = ticketQueryService.getDetail(operator, ticketId).getTicket();
@@ -230,10 +271,16 @@ public class TicketAssignmentRuleService {
         return ticketWorkflowService.assignTicket(operator, ticketId, target.assigneeId());
     }
 
+    /**
+     * 查询命中的规则。
+     */
     private TicketAssignmentRule findMatchedRule(Ticket ticket) {
         return ruleRepository.findBestMatch(enumCode(ticket.getCategory()), enumCode(ticket.getPriority()));
     }
 
+    /**
+     * 校验按ID。
+     */
     private TicketAssignmentRule requireById(Long ruleId) {
         TicketAssignmentRule rule = ruleRepository.findById(ruleId);
         if (rule == null) {
@@ -242,11 +289,14 @@ public class TicketAssignmentRuleService {
         return rule;
     }
 
+    /**
+     * 校验规则。
+     */
     private void validateRule(TicketAssignmentRuleCommandDTO command) {
         if (command.getTargetGroupId() == null
                 && command.getTargetQueueId() == null
                 && command.getTargetUserId() == null) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "Assignment target is required");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "必须指定分派目标");
         }
         if (command.getTargetGroupId() != null) {
             ticketGroupService.requireEnabled(command.getTargetGroupId());
@@ -256,13 +306,16 @@ public class TicketAssignmentRuleService {
             queue = ticketQueueService.requireEnabled(command.getTargetQueueId());
         }
         if (command.getTargetGroupId() != null && queue != null && !command.getTargetGroupId().equals(queue.getGroupId())) {
-            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "Queue does not belong to target group");
+            throw new BusinessException(BusinessErrorCode.INVALID_TICKET_ASSIGNMENT_RULE, "队列不属于指定分组");
         }
         if (command.getTargetUserId() != null) {
             ticketUserDirectoryService.requireStaffUser(command.getTargetUserId());
         }
     }
 
+    /**
+     * 写入操作Log。
+     */
     private void writeOperationLog(
             Long ticketId,
             Long operatorId,
@@ -281,10 +334,16 @@ public class TicketAssignmentRuleService {
                 .build());
     }
 
+    /**
+     * 处理编码。
+     */
     private String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }
 
+    /**
+     * 转换为启用。
+     */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }

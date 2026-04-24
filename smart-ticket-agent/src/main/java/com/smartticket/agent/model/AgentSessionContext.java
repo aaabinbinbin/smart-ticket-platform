@@ -10,7 +10,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Agent 会话上下文。
+ * 智能体会话上下文。
  *
  * <p>该对象以 {@code agent:session:{sessionId}} 为 key 存入 Redis，用于保存短期多轮对话状态。
  * 这里不保存工单事实数据，工单事实仍然以 MySQL 和 biz 层查询结果为准。</p>
@@ -36,11 +36,15 @@ public class AgentSessionContext {
     /** 当前等待用户补充或确认的动作；为空表示下一轮走正常单 Agent 编排流程。 */
     private AgentPendingAction pendingAction;
 
+    // 计划State
     private AgentPlan planState;
 
+    // working记忆
     private AgentWorkingMemory workingMemory;
 
+    // 用户Preference记忆
     private AgentUserPreferenceMemory userPreferenceMemory;
 
+    // 工单领域记忆
     private AgentTicketDomainMemory ticketDomainMemory;
 }

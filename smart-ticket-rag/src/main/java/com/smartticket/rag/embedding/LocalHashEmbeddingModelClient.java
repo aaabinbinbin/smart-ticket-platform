@@ -15,8 +15,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class LocalHashEmbeddingModelClient implements EmbeddingModelClient {
+    // DIMENSION
     private static final int VECTOR_DIMENSION = 32;
 
+    /**
+     * 生成向量。
+     */
     @Override
     public List<Double> embed(String text) {
         byte[] digest = sha256(text == null ? "" : text);

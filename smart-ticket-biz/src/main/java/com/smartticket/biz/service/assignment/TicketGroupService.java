@@ -27,6 +27,9 @@ public class TicketGroupService {
     /** 工单权限服务，用于复用 ADMIN 判断。 */
     private final TicketPermissionService permissionService;
 
+    /**
+     * 构造工单分组服务。
+     */
     public TicketGroupService(
             TicketGroupRepository ticketGroupRepository,
             TicketPermissionService permissionService

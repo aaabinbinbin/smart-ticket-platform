@@ -1,7 +1,7 @@
 package com.smartticket.agent.execution;
 
 /**
- * Agent 执行前置决策状态。
+ * 智能体执行前置决策状态。
  *
  * <p>该状态用于表达 Tool 调用计划在真正执行前的处理结果，让编排层不用关心每一种校验细节。</p>
  */

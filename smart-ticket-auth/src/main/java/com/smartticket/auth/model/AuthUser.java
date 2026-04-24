@@ -25,6 +25,9 @@ public class AuthUser implements UserDetails {
     /** Spring Security 权限集合，例如 ROLE_USER、ROLE_STAFF、ROLE_ADMIN。 */
     private final List<GrantedAuthority> authorities;
 
+    /**
+     * 构造认证用户。
+     */
     public AuthUser(SysUser sysUser, List<GrantedAuthority> authorities) {
         this.userId = sysUser.getId();
         this.username = sysUser.getUsername();
@@ -34,44 +37,71 @@ public class AuthUser implements UserDetails {
         this.authorities = authorities;
     }
 
+    /**
+     * 获取用户ID。
+     */
     public Long getUserId() {
         return userId;
     }
 
+    /**
+     * 获取RealName。
+     */
     public String getRealName() {
         return realName;
     }
 
+    /**
+     * 获取Authorities。
+     */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return authorities;
     }
 
+    /**
+     * 获取Password。
+     */
     @Override
     public String getPassword() {
         return password;
     }
 
+    /**
+     * 获取Username。
+     */
     @Override
     public String getUsername() {
         return username;
     }
 
+    /**
+     * 判断账号是否未过期。
+     */
     @Override
     public boolean isAccountNonExpired() {
         return true;
     }
 
+    /**
+     * 判断账号是否未锁定。
+     */
     @Override
     public boolean isAccountNonLocked() {
         return true;
     }
 
+    /**
+     * 判断凭证是否未过期。
+     */
     @Override
     public boolean isCredentialsNonExpired() {
         return true;
     }
 
+    /**
+     * 处理启用。
+     */
     @Override
     public boolean isEnabled() {
         return enabled;

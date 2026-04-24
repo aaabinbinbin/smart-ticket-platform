@@ -18,40 +18,68 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class TicketAssignmentService {
+    // 工单Assignment规则服务
     private final TicketAssignmentRuleService ticketAssignmentRuleService;
 
+    /**
+     * 构造工单分派服务。
+     */
     public TicketAssignmentService(TicketAssignmentRuleService ticketAssignmentRuleService) {
         this.ticketAssignmentRuleService = ticketAssignmentRuleService;
     }
 
+    /**
+     * 创建规则。
+     */
     public TicketAssignmentRule createRule(CurrentUser operator, TicketAssignmentRuleCommandDTO command) {
         return ticketAssignmentRuleService.create(operator, command);
     }
 
+    /**
+     * 更新规则。
+     */
     public TicketAssignmentRule updateRule(CurrentUser operator, Long ruleId, TicketAssignmentRuleCommandDTO command) {
         return ticketAssignmentRuleService.update(operator, ruleId, command);
     }
 
+    /**
+     * 更新规则启用。
+     */
     public TicketAssignmentRule updateRuleEnabled(CurrentUser operator, Long ruleId, boolean enabled) {
         return ticketAssignmentRuleService.updateEnabled(operator, ruleId, enabled);
     }
 
+    /**
+     * 获取规则。
+     */
     public TicketAssignmentRule getRule(Long ruleId) {
         return ticketAssignmentRuleService.get(ruleId);
     }
 
+    /**
+     * 分页查询规则。
+     */
     public PageResult<TicketAssignmentRule> pageRules(TicketAssignmentRulePageQueryDTO query) {
         return ticketAssignmentRuleService.page(query);
     }
 
+    /**
+     * 获取统计信息。
+     */
     public TicketAssignmentStatsDTO stats() {
         return ticketAssignmentRuleService.stats();
     }
 
+    /**
+     * 预览分派结果。
+     */
     public TicketAssignmentPreviewDTO preview(CurrentUser operator, Long ticketId) {
         return ticketAssignmentRuleService.preview(operator, ticketId);
     }
 
+    /**
+     * 执行分派。
+     */
     public Ticket autoAssign(CurrentUser operator, Long ticketId) {
         return ticketAssignmentRuleService.autoAssign(operator, ticketId);
     }

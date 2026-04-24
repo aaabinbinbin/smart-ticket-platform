@@ -27,6 +27,9 @@ public class SpringAiEmbeddingModelClient implements EmbeddingModelClient {
     /** 本地稳定向量兜底实现，用于无模型密钥和单元测试场景。 */
     private final LocalHashEmbeddingModelClient fallbackClient;
 
+    /**
+     * 构造 Spring AI 向量模型客户端。
+     */
     public SpringAiEmbeddingModelClient(ObjectProvider<SpringAiEmbeddingModelHolder> embeddingModelHolderProvider) {
         this.embeddingModelHolderProvider = embeddingModelHolderProvider;
         this.fallbackClient = new LocalHashEmbeddingModelClient();
@@ -47,7 +50,7 @@ public class SpringAiEmbeddingModelClient implements EmbeddingModelClient {
         try {
             return toDoubleList(holder.embeddingModel().embed(text == null ? "" : text));
         } catch (RuntimeException ex) {
-            log.warn("spring ai embedding failed, fallback to local hash embedding: reason={}", ex.getMessage());
+            log.warn("Spring AI 向量化失败，回退到本地哈希向量：reason={}", ex.getMessage());
             return fallbackClient.embed(text);
         }
     }

@@ -13,8 +13,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketSummaryBundleDTO {
+    // submitter摘要
     private TicketSummaryDTO submitterSummary;
+    // 处理人摘要
     private TicketSummaryDTO assigneeSummary;
+    // 管理摘要
     private TicketSummaryDTO adminSummary;
 }
 

@@ -31,7 +31,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class RetrievalService {
     private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
+    // K
     private static final int DEFAULT_TOP_K = 3;
+    // K
     private static final int MAX_TOP_K = 10;
 
     /** Embedding 模型客户端，用于默认 MySQL 兜底检索生成查询向量。 */
@@ -55,6 +57,9 @@ public class RetrievalService {
     /** 是否启用 Spring AI VectorStore 检索。 */
     private final boolean vectorStoreEnabled;
 
+    /**
+     * 构造检索服务。
+     */
     public RetrievalService(
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
@@ -142,7 +147,7 @@ public class RetrievalService {
                     .map(this::toHit)
                     .toList();
             List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rewrittenQuery, hits, topK);
-            log.info("rag retrieval path=PGVECTOR, fallbackUsed=false, query='{}', topK={}, hits={}",
+            log.info("RAG 检索路径=PGVECTOR，fallbackUsed=false，query='{}', topK={}, hits={}",
                     rewrittenQuery, topK, rerankedHits.size());
             return Optional.of(RetrievalResult.builder()
                     .queryText(queryText)
@@ -153,7 +158,7 @@ public class RetrievalService {
                     .hits(rerankedHits)
                     .build());
         } catch (RuntimeException ex) {
-            log.warn("spring ai vector store retrieval failed, fallback to mysql vectors: reason={}", ex.getMessage());
+            log.warn("Spring AI 向量检索失败，回退到 MySQL 向量：reason={}", ex.getMessage());
             return Optional.empty();
         }
     }
@@ -172,7 +177,7 @@ public class RetrievalService {
                 .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
                 .toList();
         List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rewrittenQuery, hits, topK);
-        log.warn("rag retrieval path=MYSQL_FALLBACK, fallbackUsed=true, query='{}', topK={}, hits={}",
+        log.warn("RAG 检索路径=MYSQL_FALLBACK，fallbackUsed=true，query='{}', topK={}, hits={}",
                 rewrittenQuery, topK, rerankedHits.size());
 
         return RetrievalResult.builder()
@@ -241,6 +246,9 @@ public class RetrievalService {
                 .build();
     }
 
+    /**
+     * 处理Reason。
+     */
     private String matchReason(String chunkType, String sourceField) {
         if (!hasText(chunkType)) {
             return "命中历史工单全文片段。";

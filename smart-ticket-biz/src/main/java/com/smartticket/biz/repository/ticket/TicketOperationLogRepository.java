@@ -10,20 +10,33 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public class TicketOperationLogRepository {
+    // 工单操作Log映射接口
     private final TicketOperationLogMapper ticketOperationLogMapper;
 
+    /**
+     * 构造工单操作日志仓储。
+     */
     public TicketOperationLogRepository(TicketOperationLogMapper ticketOperationLogMapper) {
         this.ticketOperationLogMapper = ticketOperationLogMapper;
     }
 
+    /**
+     * 处理新增。
+     */
     public int insert(TicketOperationLog operationLog) {
         return ticketOperationLogMapper.insert(operationLog);
     }
 
+    /**
+     * 查询按工单ID。
+     */
     public List<TicketOperationLog> findByTicketId(Long ticketId) {
         return ticketOperationLogMapper.findByTicketId(ticketId);
     }
 
+    /**
+     * 统计按操作类型。
+     */
     public long countByOperationType(String operationType) {
         return ticketOperationLogMapper.countByOperationType(operationType);
     }

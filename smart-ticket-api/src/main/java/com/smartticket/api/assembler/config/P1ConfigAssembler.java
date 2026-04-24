@@ -24,8 +24,14 @@ import com.smartticket.domain.entity.TicketSlaInstance;
 import com.smartticket.domain.entity.TicketSlaPolicy;
 import org.springframework.stereotype.Component;
 
+/**
+ * 1配置装配器类。
+ */
 @Component
 public class P1ConfigAssembler {
+    /**
+     * 转换为分组VO。
+     */
     public TicketGroupVO toGroupVO(TicketGroup group) {
         if (group == null) {
             return null;
@@ -41,6 +47,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为队列VO。
+     */
     public TicketQueueVO toQueueVO(TicketQueue queue) {
         if (queue == null) {
             return null;
@@ -56,6 +65,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为队列成员VO。
+     */
     public TicketQueueMemberVO toQueueMemberVO(TicketQueueMember member) {
         if (member == null) {
             return null;
@@ -71,6 +83,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为SLA策略VO。
+     */
     public TicketSlaPolicyVO toSlaPolicyVO(TicketSlaPolicy policy) {
         if (policy == null) {
             return null;
@@ -88,6 +103,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为SLAInstanceVO。
+     */
     public TicketSlaInstanceVO toSlaInstanceVO(TicketSlaInstance instance) {
         if (instance == null) {
             return null;
@@ -104,6 +122,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为SLAScan结果VO。
+     */
     public TicketSlaScanResultVO toSlaScanResultVO(TicketSlaScanResultDTO result) {
         if (result == null) {
             return null;
@@ -121,6 +142,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为Assignment规则VO。
+     */
     public TicketAssignmentRuleVO toAssignmentRuleVO(TicketAssignmentRule rule) {
         if (rule == null) {
             return null;
@@ -140,6 +164,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为AssignmentPreviewVO。
+     */
     public TicketAssignmentPreviewVO toAssignmentPreviewVO(TicketAssignmentPreviewDTO preview) {
         if (preview == null) {
             return null;
@@ -156,6 +183,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为Assignment统计VO。
+     */
     public TicketAssignmentStatsVO toAssignmentStatsVO(TicketAssignmentStatsDTO stats) {
         if (stats == null) {
             return null;
@@ -171,6 +201,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为审批模板VO。
+     */
     public TicketApprovalTemplateVO toApprovalTemplateVO(TicketApprovalTemplate template) {
         if (template == null) {
             return null;
@@ -188,6 +221,9 @@ public class P1ConfigAssembler {
                 .build();
     }
 
+    /**
+     * 转换为审批模板步骤VO。
+     */
     public TicketApprovalTemplateStepVO toApprovalTemplateStepVO(TicketApprovalTemplateStep step) {
         if (step == null) {
             return null;

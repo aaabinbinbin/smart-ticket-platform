@@ -11,12 +11,21 @@ import com.smartticket.domain.enums.TicketStatusEnum;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单评论服务。
+ */
 @Service
 public class TicketCommentService {
+    // 支撑
     private final TicketServiceSupport support;
+    // 工单评论仓储
     private final TicketCommentRepository ticketCommentRepository;
+    // 工单详情缓存服务
     private final TicketDetailCacheService ticketDetailCacheService;
 
+    /**
+     * 构造工单评论服务。
+     */
     public TicketCommentService(
             TicketServiceSupport support,
             TicketCommentRepository ticketCommentRepository,
@@ -27,6 +36,9 @@ public class TicketCommentService {
         this.ticketDetailCacheService = ticketDetailCacheService;
     }
 
+    /**
+     * 新增评论。
+     */
     @Transactional
     public TicketComment addComment(CurrentUser operator, Long ticketId, String content) {
         Ticket ticket = support.requireVisibleTicket(operator, ticketId);

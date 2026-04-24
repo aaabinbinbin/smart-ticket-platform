@@ -11,7 +11,11 @@ import com.smartticket.agent.model.AgentChatResult;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.planner.AgentPlan;
+import com.smartticket.agent.planner.AgentPlanAction;
+import com.smartticket.agent.planner.AgentPlanStage;
 import com.smartticket.agent.service.AgentFacade;
+import com.smartticket.agent.tool.core.ToolRiskLevel;
 import com.smartticket.api.advice.ApiExceptionHandler;
 import com.smartticket.api.controller.agent.AgentController;
 import com.smartticket.api.support.CurrentUserResolver;
@@ -64,7 +68,11 @@ class AgentControllerWebMvcTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.intent").value("QUERY_TICKET"))
                 .andExpect(jsonPath("$.data.reply").value("已查询工单详情。"))
-                .andExpect(jsonPath("$.data.context.activeTicketId").value(1001));
+                .andExpect(jsonPath("$.data.context.activeTicketId").value(1001))
+                .andExpect(jsonPath("$.data.plan.currentStage").value("SUMMARIZE_RESULT"))
+                .andExpect(jsonPath("$.data.plan.nextAction").value("RETURN_RESULT"))
+                .andExpect(jsonPath("$.data.plan.nextSkillCode").value("query-ticket"))
+                .andExpect(jsonPath("$.data.traceId").value("trace-test"));
     }
 
     @Test
@@ -140,7 +148,25 @@ class AgentControllerWebMvcTest {
                         .build())
                 .context(AgentSessionContext.builder().activeTicketId(activeTicketId).build())
                 .springAiChatReady(false)
+                .plan(AgentPlan.builder()
+                        .goal(intent.name().toLowerCase())
+                        .intent(intent)
+                        .currentStage(AgentPlanStage.SUMMARIZE_RESULT)
+                        .nextAction(AgentPlanAction.RETURN_RESULT)
+                        .nextSkillCode(skillCode(intent))
+                        .riskLevel(ToolRiskLevel.READ_ONLY)
+                        .build())
+                .traceId("trace-test")
                 .build());
+    }
+
+    private String skillCode(AgentIntent intent) {
+        return switch (intent) {
+            case QUERY_TICKET -> "query-ticket";
+            case CREATE_TICKET -> "create-ticket";
+            case TRANSFER_TICKET -> "transfer-ticket";
+            case SEARCH_HISTORY -> "search-history";
+        };
     }
 
     private void mockCurrentUser() {

@@ -20,14 +20,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单通知控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/notifications")
-@Tag(name = "Notifications", description = "In-app notification APIs")
+@Tag(name = "通知中心", description = "站内通知接口")
 public class TicketNotificationController {
+    // 工单通知服务
     private final TicketNotificationService ticketNotificationService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
 
+    /**
+     * 构造工单通知控制器。
+     */
     public TicketNotificationController(
             TicketNotificationService ticketNotificationService,
             CurrentUserResolver currentUserResolver
@@ -36,8 +44,11 @@ public class TicketNotificationController {
         this.currentUserResolver = currentUserResolver;
     }
 
+    /**
+     * 分页查询。
+     */
     @GetMapping
-    @Operation(summary = "Page my notifications")
+    @Operation(summary = "分页查询我的通知")
     public ApiResponse<PageResult<TicketNotificationVO>> page(
             Authentication authentication,
             @Min(value = 1, message = "pageNo must be >= 1")
@@ -47,7 +58,7 @@ public class TicketNotificationController {
             @RequestParam(value = "pageSize", defaultValue = "10") int pageSize,
             @RequestParam(value = "unreadOnly", required = false) Boolean unreadOnly
     ) {
-        PageResult<TicketNotification> page = ticketNotificationService.pageMyNotifications(
+        PageResult<TicketNotification> page = ticketNotificationService.pageMy通知中心(
                 currentUserResolver.resolve(authentication),
                 TicketNotificationPageQueryDTO.builder()
                         .pageNo(pageNo)
@@ -63,8 +74,11 @@ public class TicketNotificationController {
                 .build());
     }
 
+    /**
+     * 读取数据。
+     */
     @PatchMapping("/{notificationId}/read")
-    @Operation(summary = "Mark notification as read")
+    @Operation(summary = "标记通知已读")
     public ApiResponse<TicketNotificationVO> markRead(
             Authentication authentication,
             @PathVariable("notificationId") Long notificationId
@@ -75,6 +89,9 @@ public class TicketNotificationController {
         )));
     }
 
+    /**
+     * 转换为VO。
+     */
     private TicketNotificationVO toVO(TicketNotification notification) {
         if (notification == null) {
             return null;

@@ -9,10 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Agent 对话响应。
- *
- * <p>该对象是 `/api/agent/chat` 的 HTTP 响应模型。业务结果保持结构化返回，
- * 便于前端展示和后续调试。</p>
+ * Agent 对话 HTTP 响应模型。
  */
 @Data
 @Builder
@@ -25,7 +22,7 @@ public class AgentChatResponse {
     private String sessionId;
 
     /**
-     * 本轮识别出的意图编码。
+     * 本轮识别出的业务意图编码。
      */
     private String intent;
 
@@ -35,17 +32,17 @@ public class AgentChatResponse {
     private String reply;
 
     /**
-     * 意图路由明细。
+     * 意图路由明细，包含意图、置信度和路由原因。
      */
     private IntentRoute route;
 
     /**
-     * 本轮执行后的会话上下文。
+     * 本轮执行后的 智能体会话上下文。
      */
     private AgentSessionContext context;
 
     /**
-     * Tool 或编排器返回的结构化结果。
+     * Tool 或编排器返回的结构化业务结果。
      */
     private Object result;
 
@@ -54,7 +51,13 @@ public class AgentChatResponse {
      */
     private boolean springAiChatReady;
 
+    /**
+     * 本轮执行计划，用于前端调试和执行链路复盘。
+     */
     private AgentPlan plan;
 
+    /**
+     * 本轮 Agent trace ID，用于查询完整执行轨迹。
+     */
     private String traceId;
 }

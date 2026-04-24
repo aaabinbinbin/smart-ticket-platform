@@ -11,6 +11,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class QueryRewriteService {
 
+    /**
+     * 为历史搜索改写查询语句。
+     */
     public String rewriteForHistorySearch(String queryText) {
         String normalized = normalizeProblemStatement(queryText);
         if (!hasText(normalized)) {
@@ -19,6 +22,9 @@ public class QueryRewriteService {
         return "历史工单 相似问题 处理经验 " + normalized;
     }
 
+    /**
+     * 规范化ProblemStatement。
+     */
     public String normalizeProblemStatement(String queryText) {
         if (!hasText(queryText)) {
             return "";
@@ -38,6 +44,9 @@ public class QueryRewriteService {
         return normalized;
     }
 
+    /**
+     * 处理文本。
+     */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

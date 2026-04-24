@@ -24,10 +24,16 @@ public class CurrentUser {
     /** 当前用户拥有的角色编码，例如 USER、STAFF、ADMIN。 */
     private List<String> roles;
 
+    /**
+     * 处理角色。
+     */
     public boolean hasRole(String role) {
         return roles != null && roles.contains(role);
     }
 
+    /**
+     * 处理管理。
+     */
     public boolean isAdmin() {
         return hasRole("ADMIN");
     }

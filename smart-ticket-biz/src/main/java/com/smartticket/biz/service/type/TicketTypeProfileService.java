@@ -17,14 +17,23 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单类型画像服务。
+ */
 @Service
 public class TicketTypeProfileService {
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
+    // 支撑
     private final TicketServiceSupport support;
+    // 工单类型画像仓储
     private final TicketTypeProfileRepository ticketTypeProfileRepository;
+    // object映射接口
     private final ObjectMapper objectMapper;
 
+    /**
+     * 构造工单类型画像服务。
+     */
     public TicketTypeProfileService(
             TicketServiceSupport support,
             TicketTypeProfileRepository ticketTypeProfileRepository,
@@ -35,6 +44,9 @@ public class TicketTypeProfileService {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 保存或更新。
+     */
     @Transactional
     public void saveOrUpdate(Long ticketId, TicketTypeEnum type, Map<String, Object> typeProfile) {
         Map<String, Object> normalized = normalize(typeProfile);
@@ -53,6 +65,9 @@ public class TicketTypeProfileService {
         support.requireUpdated(ticketTypeProfileRepository.updateByTicketId(ticketId, profileSchema, profileData));
     }
 
+    /**
+     * 获取画像。
+     */
     public Map<String, Object> getProfile(Long ticketId) {
         TicketTypeProfile profile = ticketTypeProfileRepository.findByTicketId(ticketId);
         if (profile == null || profile.getProfileData() == null || profile.getProfileData().isBlank()) {
@@ -61,6 +76,9 @@ public class TicketTypeProfileService {
         return readJson(profile.getProfileData());
     }
 
+    /**
+     * 附加画像。
+     */
     public void attachProfile(Ticket ticket) {
         if (ticket == null || ticket.getId() == null) {
             return;
@@ -68,6 +86,9 @@ public class TicketTypeProfileService {
         ticket.setTypeProfile(getProfile(ticket.getId()));
     }
 
+    /**
+     * 附加画像信息。
+     */
     public void attachProfiles(List<Ticket> tickets) {
         if (tickets == null || tickets.isEmpty()) {
             return;
@@ -81,6 +102,9 @@ public class TicketTypeProfileService {
         }
     }
 
+    /**
+     * 处理校验。
+     */
     public void validate(TicketTypeEnum type, Map<String, Object> typeProfile) {
         Map<String, Object> profile = normalize(typeProfile);
         switch (type) {
@@ -114,6 +138,9 @@ public class TicketTypeProfileService {
         }
     }
 
+    /**
+     * 规范化处理。
+     */
     private Map<String, Object> normalize(Map<String, Object> typeProfile) {
         if (typeProfile == null || typeProfile.isEmpty()) {
             return new HashMap<>();
@@ -121,6 +148,9 @@ public class TicketTypeProfileService {
         return new HashMap<>(typeProfile);
     }
 
+    /**
+     * 校验Text。
+     */
     private void requireText(Map<String, Object> profile, String field, String label) {
         Object value = profile.get(field);
         if (value == null || String.valueOf(value).trim().isEmpty()) {
@@ -128,6 +158,9 @@ public class TicketTypeProfileService {
         }
     }
 
+    /**
+     * 写入JSON。
+     */
     private String writeJson(Map<String, Object> profile) {
         try {
             return objectMapper.writeValueAsString(profile == null ? Collections.emptyMap() : profile);
@@ -136,6 +169,9 @@ public class TicketTypeProfileService {
         }
     }
 
+    /**
+     * 读取JSON。
+     */
     private Map<String, Object> readJson(String text) {
         try {
             if (text == null || text.isBlank()) {

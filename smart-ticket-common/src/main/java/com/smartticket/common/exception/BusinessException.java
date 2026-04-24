@@ -9,11 +9,17 @@ public class BusinessException extends RuntimeException {
     /** 业务错误码。 */
     private final String code;
 
+    /**
+     * 构造业务异常。
+     */
     public BusinessException(BusinessErrorCode errorCode, Object... messageArgs) {
         super(errorCode.formatMessage(messageArgs));
         this.code = errorCode.getCode();
     }
 
+    /**
+     * 获取编码。
+     */
     public String getCode() {
         return code;
     }

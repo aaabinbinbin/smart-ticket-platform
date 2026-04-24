@@ -16,10 +16,15 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentToolMetadata {
+    // name
     private String name;
+    // 描述
     private String description;
+    // riskLevel
     private ToolRiskLevel riskLevel;
+    // readOnly
     private boolean readOnly;
+    // requireConfirmation
     private boolean requireConfirmation;
     @Builder.Default
     private List<AgentToolParameterField> requiredFields = new ArrayList<>();

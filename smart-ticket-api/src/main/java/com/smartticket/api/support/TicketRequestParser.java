@@ -18,6 +18,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TicketRequestParser {
 
+    /**
+     * 解析状态。
+     */
     public TicketStatusEnum parseStatus(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -29,6 +32,9 @@ public class TicketRequestParser {
         }
     }
 
+    /**
+     * 解析类型。
+     */
     public TicketTypeEnum parseType(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -40,6 +46,9 @@ public class TicketRequestParser {
         }
     }
 
+    /**
+     * 解析分类。
+     */
     public TicketCategoryEnum parseCategory(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -51,6 +60,9 @@ public class TicketRequestParser {
         }
     }
 
+    /**
+     * 解析优先级。
+     */
     public TicketPriorityEnum parsePriority(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -62,6 +74,9 @@ public class TicketRequestParser {
         }
     }
 
+    /**
+     * 解析摘要View。
+     */
     public TicketSummaryViewEnum parseSummaryView(String code) {
         if (code == null || code.isBlank()) {
             return null;

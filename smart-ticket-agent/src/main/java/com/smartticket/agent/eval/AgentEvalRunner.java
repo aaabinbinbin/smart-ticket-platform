@@ -10,16 +10,27 @@ import java.util.List;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
+/**
+ * 智能体评测Runner类。
+ */
 @Component
 public class AgentEvalRunner {
+    // 意图Router
     private final IntentRouter intentRouter;
+    // object映射接口
     private final ObjectMapper objectMapper;
 
+    /**
+     * 构造智能体评测Runner。
+     */
     public AgentEvalRunner(IntentRouter intentRouter, ObjectMapper objectMapper) {
         this.intentRouter = intentRouter;
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 处理种子案例。
+     */
     public AgentEvalReport runSeedCases() {
         List<AgentEvalCase> cases = loadSeedCases();
         int routePassed = 0;
@@ -43,6 +54,9 @@ public class AgentEvalRunner {
                 .build();
     }
 
+    /**
+     * 加载SeedCases。
+     */
     private List<AgentEvalCase> loadSeedCases() {
         try {
             ClassPathResource resource = new ClassPathResource("agent/eval/seed-cases.json");

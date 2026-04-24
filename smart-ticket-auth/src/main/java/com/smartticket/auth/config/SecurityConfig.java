@@ -29,10 +29,16 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+    // JWTAuthenticationFilter
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    // authenticationEntryPoint
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
+    // 访问DeniedHandler
     private final RestAccessDeniedHandler accessDeniedHandler;
 
+    /**
+     * 构造安全配置。
+     */
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             JwtAuthenticationEntryPoint authenticationEntryPoint,
@@ -43,6 +49,9 @@ public class SecurityConfig {
         this.accessDeniedHandler = accessDeniedHandler;
     }
 
+    /**
+     * 处理过滤器链。
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
@@ -89,6 +98,9 @@ public class SecurityConfig {
         return PasswordEncoderFactories.createDelegatingPasswordEncoder();
     }
 
+    /**
+     * 处理负责人。
+     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();

@@ -7,14 +7,23 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StreamUtils;
 
+/**
+ * 提示词模板服务。
+ */
 @Service
 public class PromptTemplateService {
     private final Map<String, PromptTemplate> cache = new ConcurrentHashMap<>();
 
+    /**
+     * 处理加载。
+     */
     public PromptTemplate load(String code) {
         return cache.computeIfAbsent(code, this::loadFromClasspath);
     }
 
+    /**
+     * 处理内容。
+     */
     public String content(String code, String fallback) {
         PromptTemplate template = load(code);
         return template == null || template.getContent() == null || template.getContent().isBlank()
@@ -22,11 +31,17 @@ public class PromptTemplateService {
                 : template.getContent();
     }
 
+    /**
+     * 处理版本。
+     */
     public String version(String code) {
         PromptTemplate template = load(code);
         return template == null ? "inline-fallback" : template.getVersion();
     }
 
+    /**
+     * 加载FromClasspath。
+     */
     private PromptTemplate loadFromClasspath(String code) {
         String path = "agent/prompt/" + code + ".md";
         try {
@@ -46,6 +61,9 @@ public class PromptTemplateService {
         }
     }
 
+    /**
+     * 提取工具参数。
+     */
     private String extract(String content, String prefix, String fallback) {
         return content.lines()
                 .filter(line -> line.startsWith(prefix))
@@ -54,6 +72,9 @@ public class PromptTemplateService {
                 .orElse(fallback);
     }
 
+    /**
+     * 移除Header。
+     */
     private String removeHeader(String content) {
         return content.lines()
                 .filter(line -> !line.startsWith("version:") && !line.startsWith("purpose:"))

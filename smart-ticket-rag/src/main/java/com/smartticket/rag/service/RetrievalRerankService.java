@@ -17,14 +17,22 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class RetrievalRerankService {
+    // WEIGHT
     private static final double FEEDBACK_WEIGHT = 0.05d;
 
+    // 检索增强反馈服务
     private final RagFeedbackService ragFeedbackService;
 
+    /**
+     * 构造检索重排服务。
+     */
     public RetrievalRerankService(RagFeedbackService ragFeedbackService) {
         this.ragFeedbackService = ragFeedbackService;
     }
 
+    /**
+     * 处理重排。
+     */
     public List<RetrievalHit> rerank(String queryText, List<RetrievalHit> hits, int topK) {
         if (hits == null || hits.isEmpty()) {
             return List.of();
@@ -38,6 +46,9 @@ public class RetrievalRerankService {
                 .toList();
     }
 
+    /**
+     * 处理命中结果。
+     */
     private RetrievalHit scoreHit(Set<String> queryTerms, Map<Long, Double> feedbackScores, RetrievalHit hit) {
         double baseScore = hit.getScore() == null ? 0.0d : hit.getScore();
         double coverageBoost = overlapRatio(queryTerms, tokenize(hit.getChunkText())) * 0.15d;
@@ -59,6 +70,9 @@ public class RetrievalRerankService {
                 .build();
     }
 
+    /**
+     * 处理反馈Reason。
+     */
     private String appendFeedbackReason(String reason, double feedbackScore) {
         String base = reason == null ? "" : reason;
         if (feedbackScore > 0) {
@@ -70,6 +84,9 @@ public class RetrievalRerankService {
         return base;
     }
 
+    /**
+     * 处理比率。
+     */
     private double overlapRatio(Set<String> queryTerms, Set<String> targetTerms) {
         if (queryTerms.isEmpty() || targetTerms.isEmpty()) {
             return 0.0d;
@@ -78,6 +95,9 @@ public class RetrievalRerankService {
         return (double) matched / (double) queryTerms.size();
     }
 
+    /**
+     * 执行分词。
+     */
     private Set<String> tokenize(String text) {
         if (text == null || text.trim().isEmpty()) {
             return Set.of();

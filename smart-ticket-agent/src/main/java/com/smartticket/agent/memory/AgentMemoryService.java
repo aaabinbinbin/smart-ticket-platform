@@ -18,14 +18,22 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
+/**
+ * 智能体记忆服务。
+ */
 @Service
 public class AgentMemoryService {
     private static final Logger log = LoggerFactory.getLogger(AgentMemoryService.class);
     private static final Duration TICKET_MEMORY_TTL = Duration.ofMinutes(30);
 
+    // 用户偏好映射接口提供器
     private final ObjectProvider<AgentUserPreferenceMemoryMapper> preferenceMapperProvider;
+    // Redis JSON 客户端提供器
     private final ObjectProvider<RedisJsonClient> redisJsonClientProvider;
 
+    /**
+     * 构造智能体记忆服务。
+     */
     public AgentMemoryService(
             ObjectProvider<AgentUserPreferenceMemoryMapper> preferenceMapperProvider,
             ObjectProvider<RedisJsonClient> redisJsonClientProvider
@@ -34,6 +42,9 @@ public class AgentMemoryService {
         this.redisJsonClientProvider = redisJsonClientProvider;
     }
 
+    /**
+     * 填充上下文。
+     */
     public void hydrate(CurrentUser currentUser, AgentSessionContext context) {
         if (context == null) {
             return;
@@ -42,6 +53,9 @@ public class AgentMemoryService {
         loadTicketDomainMemory(context);
     }
 
+    /**
+     * 记录记忆。
+     */
     public void remember(
             CurrentUser currentUser,
             AgentSessionContext context,
@@ -64,6 +78,9 @@ public class AgentMemoryService {
         rememberTicketDomain(context, toolResult);
     }
 
+    /**
+     * 加载用户偏好记忆。
+     */
     private void loadUserPreference(CurrentUser currentUser, AgentSessionContext context) {
         if (currentUser == null || currentUser.getUserId() == null) {
             return;
@@ -79,6 +96,9 @@ public class AgentMemoryService {
         }
     }
 
+    /**
+     * 加载工单领域记忆。
+     */
     private void loadTicketDomainMemory(AgentSessionContext context) {
         if (context.getActiveTicketId() == null) {
             return;
@@ -97,6 +117,9 @@ public class AgentMemoryService {
         }
     }
 
+    /**
+     * 记录用户偏好记忆。
+     */
     private void rememberUserPreference(
             CurrentUser currentUser,
             AgentSessionContext context,
@@ -118,6 +141,9 @@ public class AgentMemoryService {
         }
     }
 
+    /**
+     * 合并新的用户偏好信息。
+     */
     private AgentUserPreferenceMemory mergePreference(
             Long userId,
             AgentUserPreferenceMemory existing,
@@ -142,6 +168,9 @@ public class AgentMemoryService {
         return memory;
     }
 
+    /**
+     * 记录工单领域记忆。
+     */
     private void rememberTicketDomain(AgentSessionContext context, AgentToolResult toolResult) {
         Long ticketId = toolResult.getActiveTicketId() == null
                 ? context.getActiveTicketId()
@@ -169,6 +198,9 @@ public class AgentMemoryService {
         }
     }
 
+    /**
+     * 根据回复文本推断风险状态。
+     */
     private String riskStatus(String text) {
         if (containsAny(text, "紧急", "高优先级", "URGENT", "HIGH", "风险", "失败")) {
             return "WATCH";
@@ -176,6 +208,9 @@ public class AgentMemoryService {
         return "NORMAL";
     }
 
+    /**
+     * 根据回复文本推断审批状态。
+     */
     private String approvalStatus(String text) {
         if (containsAny(text, "审批", "approval", "APPROVAL")) {
             return "MENTIONED";
@@ -183,6 +218,9 @@ public class AgentMemoryService {
         return "UNKNOWN";
     }
 
+    /**
+     * 判断文本中是否包含任一候选词。
+     */
     private boolean containsAny(String text, String... candidates) {
         if (text == null) {
             return false;
@@ -195,6 +233,9 @@ public class AgentMemoryService {
         return false;
     }
 
+    /**
+     * 按最大长度截断文本。
+     */
     private String limit(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) {
             return value;

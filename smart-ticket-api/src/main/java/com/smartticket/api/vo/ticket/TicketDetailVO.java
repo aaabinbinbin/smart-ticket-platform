@@ -16,9 +16,14 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Schema(description = "工单详情响应对象")
 public class TicketDetailVO {
+    // 工单
     private TicketVO ticket;
+    // 审批
     private TicketApprovalVO approval;
+    // comments
     private List<TicketCommentVO> comments;
+    // 操作Logs
     private List<TicketOperationLogVO> operationLogs;
+    // summaries
     private TicketSummaryBundleVO summaries;
 }

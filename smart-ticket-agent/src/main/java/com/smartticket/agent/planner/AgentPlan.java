@@ -11,18 +11,29 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 智能体计划类。
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentPlan {
+    // goal
     private String goal;
+    // 意图
     private AgentIntent intent;
+    // 当前阶段
     private AgentPlanStage currentStage;
+    // next动作
     private AgentPlanAction nextAction;
+    // next技能编码
     private String nextSkillCode;
+    // riskLevel
     private ToolRiskLevel riskLevel;
+    // waitingFor用户
     private boolean waitingForUser;
+    // 更新时间
     private LocalDateTime updatedAt;
 
     @Builder.Default

@@ -23,10 +23,16 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class TicketApprovalTemplateService {
+    // 仓储
     private final TicketApprovalTemplateRepository repository;
+    // 权限服务
     private final TicketPermissionService permissionService;
+    // 工单用户目录服务
     private final TicketUserDirectoryService ticketUserDirectoryService;
 
+    /**
+     * 构造工单审批模板服务。
+     */
     public TicketApprovalTemplateService(
             TicketApprovalTemplateRepository repository,
             TicketPermissionService permissionService,
@@ -37,6 +43,9 @@ public class TicketApprovalTemplateService {
         this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
+    /**
+     * 创建。
+     */
     @Transactional
     public TicketApprovalTemplate create(CurrentUser operator, TicketApprovalTemplateCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -47,6 +56,9 @@ public class TicketApprovalTemplateService {
         return repository.findById(template.getId());
     }
 
+    /**
+     * 更新。
+     */
     @Transactional
     public TicketApprovalTemplate update(CurrentUser operator, Long templateId, TicketApprovalTemplateCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -58,6 +70,9 @@ public class TicketApprovalTemplateService {
         return repository.findById(templateId);
     }
 
+    /**
+     * 更新启用。
+     */
     @Transactional
     public TicketApprovalTemplate updateEnabled(CurrentUser operator, Long templateId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -66,14 +81,23 @@ public class TicketApprovalTemplateService {
         return repository.findById(templateId);
     }
 
+    /**
+     * 获取详情。
+     */
     public TicketApprovalTemplate get(Long templateId) {
         return requireById(templateId);
     }
 
+    /**
+     * 查询启用模板。
+     */
     public TicketApprovalTemplate findEnabledTemplate(String ticketType) {
         return repository.findEnabledByTicketType(ticketType);
     }
 
+    /**
+     * 分页查询。
+     */
     public PageResult<TicketApprovalTemplate> page(TicketApprovalTemplatePageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -90,6 +114,9 @@ public class TicketApprovalTemplateService {
                 .build();
     }
 
+    /**
+     * 校验按ID。
+     */
     private TicketApprovalTemplate requireById(Long templateId) {
         TicketApprovalTemplate template = repository.findById(templateId);
         if (template == null) {
@@ -98,6 +125,9 @@ public class TicketApprovalTemplateService {
         return template;
     }
 
+    /**
+     * 校验命令。
+     */
     private void validateCommand(TicketApprovalTemplateCommandDTO command) {
         if (command.getTicketType() == null) {
             throw new BusinessException(BusinessErrorCode.INVALID_TICKET_APPROVAL, "审批模板必须绑定工单类型");
@@ -116,6 +146,9 @@ public class TicketApprovalTemplateService {
         }
     }
 
+    /**
+     * 构建Steps。
+     */
     private List<TicketApprovalTemplateStep> buildSteps(Long templateId, List<TicketApprovalTemplateStepCommandDTO> steps) {
         return sortSteps(steps).stream()
                 .map(step -> TicketApprovalTemplateStep.builder()
@@ -127,6 +160,9 @@ public class TicketApprovalTemplateService {
                 .toList();
     }
 
+    /**
+     * 应用模板Fields。
+     */
     private TicketApprovalTemplate applyTemplateFields(
             TicketApprovalTemplate template,
             TicketApprovalTemplateCommandDTO command
@@ -138,12 +174,18 @@ public class TicketApprovalTemplateService {
         return template;
     }
 
+    /**
+     * 处理步骤信息。
+     */
     private List<TicketApprovalTemplateStepCommandDTO> sortSteps(List<TicketApprovalTemplateStepCommandDTO> steps) {
         return steps.stream()
                 .sorted(Comparator.comparing(TicketApprovalTemplateStepCommandDTO::getStepOrder))
                 .toList();
     }
 
+    /**
+     * 转换为启用。
+     */
     private int toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }

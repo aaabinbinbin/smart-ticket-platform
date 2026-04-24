@@ -18,8 +18,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
+    // 认证服务
     private final AuthService authService;
 
+    /**
+     * 构造认证控制器。
+     */
     public AuthController(AuthService authService) {
         this.authService = authService;
     }

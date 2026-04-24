@@ -24,7 +24,9 @@ public class RetrievalHit {
 
     /** 命中的切片序号。 */
     private Integer chunkIndex;
+    // chunk类型
     private String chunkType;
+    // 来源Field
     private String sourceField;
 
     /** 相似度分数，第一版使用余弦相似度。 */
@@ -35,7 +37,10 @@ public class RetrievalHit {
 
     /** 命中的切片文本，用于解释召回来源。 */
     private String chunkText;
+    // whyMatched
     private String whyMatched;
+    // similarFields
     private String similarFields;
+    // differenceFields
     private String differenceFields;
 }

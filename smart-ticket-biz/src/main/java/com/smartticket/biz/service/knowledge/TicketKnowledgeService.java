@@ -56,6 +56,9 @@ public class TicketKnowledgeService {
      */
     private final TicketKnowledgeRepository ticketKnowledgeRepository;
 
+    /**
+     * 构造工单知识服务。
+     */
     public TicketKnowledgeService(
             TicketRepository ticketRepository,
             TicketCommentRepository ticketCommentRepository,
@@ -137,7 +140,7 @@ public class TicketKnowledgeService {
     /**
      * 从评论中提取关键评论。
      *
-     * <p>优先级：SOLUTION 评论 > PROCESS_LOG 评论 > 其他有内容的评论。第一版不调用
+     * <p>优先级：解决方案评论 > 处理日志评论 > 其他有内容的评论。第一版不调用
      * LLM 做摘要抽取，保证知识生产链路可解释、可回放。</p>
      *
      * @param comments 工单评论列表
@@ -245,6 +248,9 @@ public class TicketKnowledgeService {
         );
     }
 
+    /**
+     * 处理行文本。
+     */
     private void appendLine(StringBuilder builder, String label, Object value) {
         builder.append(label).append("：").append(value == null ? "" : value).append("\n");
     }
@@ -262,11 +268,17 @@ public class TicketKnowledgeService {
         return 2;
     }
 
+    /**
+     * 压缩内容。
+     */
     private String compact(String title, String description) {
         String text = (nullToEmpty(title) + " " + nullToEmpty(description)).trim();
         return hasText(text) ? text : "暂未沉淀明确问题现象。";
     }
 
+    /**
+     * 处理匹配评论。
+     */
     private String firstMatchingComment(List<TicketComment> comments, List<String> keywords) {
         if (comments == null || comments.isEmpty()) {
             return "";
@@ -280,6 +292,9 @@ public class TicketKnowledgeService {
                 .orElse("");
     }
 
+    /**
+     * 处理limit。
+     */
     private String limit(String text, int maxLength) {
         if (text == null || text.length() <= maxLength) {
             return text;

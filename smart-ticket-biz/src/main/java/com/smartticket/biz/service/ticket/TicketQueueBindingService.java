@@ -10,12 +10,21 @@ import com.smartticket.domain.enums.TicketStatusEnum;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单队列绑定服务。
+ */
 @Service
 public class TicketQueueBindingService {
+    // 支撑
     private final TicketServiceSupport support;
+    // 工单仓储
     private final TicketRepository ticketRepository;
+    // 工单详情缓存服务
     private final TicketDetailCacheService ticketDetailCacheService;
 
+    /**
+     * 构造工单队列绑定服务。
+     */
     public TicketQueueBindingService(
             TicketServiceSupport support,
             TicketRepository ticketRepository,
@@ -26,6 +35,9 @@ public class TicketQueueBindingService {
         this.ticketDetailCacheService = ticketDetailCacheService;
     }
 
+    /**
+     * 绑定工单队列。
+     */
     @Transactional
     public Ticket bindTicketQueue(CurrentUser operator, Long ticketId, Long groupId, Long queueId) {
         support.permissionService().requireAdmin(operator);

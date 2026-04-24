@@ -11,12 +11,21 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 知识准入服务。
+ */
 @Service
 public class KnowledgeAdmissionService {
+    // 工单仓储
     private final TicketRepository ticketRepository;
+    // 工单评论仓储
     private final TicketCommentRepository ticketCommentRepository;
+    // 候选仓储
     private final TicketKnowledgeCandidateRepository candidateRepository;
 
+    /**
+     * 构造知识准入服务。
+     */
     public KnowledgeAdmissionService(
             TicketRepository ticketRepository,
             TicketCommentRepository ticketCommentRepository,
@@ -27,6 +36,9 @@ public class KnowledgeAdmissionService {
         this.candidateRepository = candidateRepository;
     }
 
+    /**
+     * 执行评估。
+     */
     @Transactional
     public KnowledgeAdmissionResult evaluate(Long ticketId) {
         Ticket ticket = ticketRepository.findById(ticketId);
@@ -44,6 +56,9 @@ public class KnowledgeAdmissionService {
         return result;
     }
 
+    /**
+     * 执行评估。
+     */
     public KnowledgeAdmissionResult evaluate(Ticket ticket, List<TicketComment> comments) {
         int score = qualityScore(ticket, comments);
         boolean sensitive = containsSensitiveInfo(ticket, comments);
@@ -72,6 +87,9 @@ public class KnowledgeAdmissionService {
                 .build();
     }
 
+    /**
+     * 处理评分。
+     */
     private int qualityScore(Ticket ticket, List<TicketComment> comments) {
         if (ticket == null) {
             return 0;
@@ -92,6 +110,9 @@ public class KnowledgeAdmissionService {
         return Math.min(score, 100);
     }
 
+    /**
+     * 处理敏感信息。
+     */
     private boolean containsSensitiveInfo(Ticket ticket, List<TicketComment> comments) {
         StringBuilder text = new StringBuilder();
         if (ticket != null) {
@@ -111,6 +132,9 @@ public class KnowledgeAdmissionService {
                 || normalized.contains("密码");
     }
 
+    /**
+     * 处理文本。
+     */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

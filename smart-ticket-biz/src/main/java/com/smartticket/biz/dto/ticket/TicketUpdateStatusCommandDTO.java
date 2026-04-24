@@ -14,7 +14,9 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketUpdateStatusCommandDTO {
+    // 目标状态
     private TicketStatusEnum targetStatus;
+    // 解决摘要
     private String solutionSummary;
 }
 

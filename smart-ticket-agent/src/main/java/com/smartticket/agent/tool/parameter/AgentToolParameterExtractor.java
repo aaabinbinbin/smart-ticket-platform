@@ -19,6 +19,9 @@ import org.springframework.stereotype.Component;
 public class AgentToolParameterExtractor {
     private static final Pattern NUMBER_PATTERN = Pattern.compile("\\d+");
 
+    /**
+     * 提取工具参数。
+     */
     public AgentToolParameters extract(String message, AgentSessionContext context) {
         List<Long> numbers = numbers(message);
         Long contextTicketId = context == null ? null : context.getActiveTicketId();
@@ -38,6 +41,9 @@ public class AgentToolParameterExtractor {
                 .build();
     }
 
+    /**
+     * 提取消息中的数字参数。
+     */
     private List<Long> numbers(String message) {
         Matcher matcher = NUMBER_PATTERN.matcher(message == null ? "" : message);
         return matcher.results()
@@ -45,6 +51,9 @@ public class AgentToolParameterExtractor {
                 .toList();
     }
 
+    /**
+     * 解析标题。
+     */
     private String resolveTitle(String message) {
         String title = message == null ? "" : message.trim();
         title = title.replaceFirst("^(创建|新建|提交|发起|报修|开单)\\s*", "");
@@ -54,6 +63,9 @@ public class AgentToolParameterExtractor {
         return title.length() <= 80 ? title : title.substring(0, 80);
     }
 
+    /**
+     * 解析描述。
+     */
     private String resolveDescription(String message) {
         if (message == null || message.trim().isEmpty()) {
             return null;
@@ -61,6 +73,9 @@ public class AgentToolParameterExtractor {
         return message.trim();
     }
 
+    /**
+     * 解析类型。
+     */
     private TicketTypeEnum resolveType(String message) {
         String text = message == null ? "" : message;
         String lower = text.toLowerCase();
@@ -82,6 +97,9 @@ public class AgentToolParameterExtractor {
         return null;
     }
 
+    /**
+     * 解析分类。
+     */
     private TicketCategoryEnum resolveCategory(String message) {
         String text = message == null ? "" : message;
         String lower = text.toLowerCase();
@@ -100,6 +118,9 @@ public class AgentToolParameterExtractor {
         return null;
     }
 
+    /**
+     * 解析优先级。
+     */
     private TicketPriorityEnum resolvePriority(String message) {
         String text = message == null ? "" : message.toLowerCase();
         if (text.contains("紧急") || text.contains("urgent")) {
@@ -117,6 +138,9 @@ public class AgentToolParameterExtractor {
         return null;
     }
 
+    /**
+     * 解析摘要Requested。
+     */
     private Boolean resolveSummaryRequested(String message) {
         String text = message == null ? "" : message.toLowerCase();
         return text.contains("摘要")
@@ -126,6 +150,9 @@ public class AgentToolParameterExtractor {
                 || text.contains("风险");
     }
 
+    /**
+     * 解析摘要View。
+     */
     private TicketSummaryViewEnum resolveSummaryView(String message) {
         String text = message == null ? "" : message.toLowerCase();
         if (text.contains("管理员") || text.contains("管理视角") || text.contains("风险")) {

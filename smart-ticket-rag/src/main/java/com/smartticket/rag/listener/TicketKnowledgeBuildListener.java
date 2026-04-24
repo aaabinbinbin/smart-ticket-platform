@@ -18,16 +18,42 @@ import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+/**
+ * 工单关闭后知识构建的消息监听与补偿投递组件。
+ */
 @Component
 @ConditionalOnProperty(prefix = "smart-ticket.knowledge.rabbit", name = "enabled", havingValue = "true")
 public class TicketKnowledgeBuildListener {
     private static final Logger log = LoggerFactory.getLogger(TicketKnowledgeBuildListener.class);
 
+    /**
+     * RabbitMQ 发送模板，用于投递知识构建消息。
+     */
     private final RabbitTemplate rabbitTemplate;
+
+    /**
+     * 知识构建任务 Mapper，用于查询待投递任务。
+     */
     private final TicketKnowledgeBuildTaskMapper taskMapper;
+
+    /**
+     * 知识构建任务处理器，用于消费消息后执行实际构建。
+     */
     private final TicketKnowledgeBuildTaskProcessor taskProcessor;
+
+    /**
+     * 每次补偿投递扫描的最大任务数。
+     */
     private final int relayBatchSize;
 
+    /**
+     * 创建知识构建消息监听器。
+     *
+     * @param rabbitTemplate RabbitMQ 模板
+     * @param taskMapper 知识构建任务 Mapper
+     * @param taskProcessor 知识构建任务处理器
+     * @param relayBatchSize 补偿投递批大小
+     */
     public TicketKnowledgeBuildListener(
             RabbitTemplate rabbitTemplate,
             TicketKnowledgeBuildTaskMapper taskMapper,
@@ -40,29 +66,43 @@ public class TicketKnowledgeBuildListener {
         this.relayBatchSize = relayBatchSize;
     }
 
+    /**
+     * 监听工单关闭领域事件，并把对应知识构建任务投递到 RabbitMQ。
+     *
+     * @param event 工单关闭事件
+     */
     @EventListener
     public void onTicketClosed(TicketClosedEvent event) {
         Long taskId = event.knowledgeBuildTaskId();
         if (taskId == null) {
+            // 兼容旧事件结构：如果事件里没有 taskId，则按 ticketId 回查任务。
             TicketKnowledgeBuildTask task = taskMapper.findByTicketId(event.ticketId());
             taskId = task == null ? null : task.getId();
         }
         if (taskId == null) {
-            log.warn("knowledge build task missing when ticket closed event received: ticketId={}", event.ticketId());
+            log.warn("收到工单关闭事件时未找到知识构建任务：ticketId={}", event.ticketId());
             return;
         }
         publish(taskId, event.ticketId());
     }
 
+    /**
+     * 消费 RabbitMQ 中的知识构建消息。
+     *
+     * @param message 知识构建消息
+     */
     @RabbitListener(queues = KnowledgeBuildRabbitConfig.QUEUE)
     public void onMessage(KnowledgeBuildMessage message) {
         if (message == null || message.getTaskId() == null) {
-            log.warn("invalid knowledge build message: {}", message);
+            log.warn("非法的知识构建消息：{}", message);
             return;
         }
         taskProcessor.process(message.getTaskId());
     }
 
+    /**
+     * 定时补偿投递未完成或待重试的知识构建任务。
+     */
     @Scheduled(fixedDelayString = "${smart-ticket.knowledge.task.relay-fixed-delay-ms:30000}")
     public void relayPendingTasks() {
         List<TicketKnowledgeBuildTask> tasks = taskMapper.findDispatchable(LocalDateTime.now(), relayBatchSize);
@@ -71,6 +111,12 @@ public class TicketKnowledgeBuildListener {
         }
     }
 
+    /**
+     * 向 RabbitMQ 投递单个知识构建任务消息。
+     *
+     * @param taskId 知识构建任务 ID
+     * @param ticketId 工单 ID
+     */
     private void publish(Long taskId, Long ticketId) {
         KnowledgeBuildMessage message = KnowledgeBuildMessage.builder()
                 .taskId(taskId)
@@ -81,6 +127,6 @@ public class TicketKnowledgeBuildListener {
                 KnowledgeBuildRabbitConfig.ROUTING_KEY,
                 message
         );
-        log.info("knowledge build task published: taskId={}, ticketId={}", taskId, ticketId);
+        log.info("知识构建任务已发布：taskId={}, ticketId={}", taskId, ticketId);
     }
 }

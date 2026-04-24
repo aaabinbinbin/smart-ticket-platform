@@ -19,34 +19,47 @@ public class TicketDetailCacheService {
     private static final Logger log = LoggerFactory.getLogger(TicketDetailCacheService.class);
     private static final Duration DETAIL_TTL = Duration.ofMinutes(10);
 
+    // RedisJSON客户端
     private final RedisJsonClient redisJsonClient;
 
+    /**
+     * 构造工单详情缓存服务。
+     */
     public TicketDetailCacheService(RedisJsonClient redisJsonClient) {
         this.redisJsonClient = redisJsonClient;
     }
 
+    /**
+     * 获取详情。
+     */
     public TicketDetailDTO get(Long ticketId) {
         try {
             return redisJsonClient.get(RedisKeys.ticketDetail(ticketId), TicketDetailDTO.class);
         } catch (RuntimeException ex) {
-            log.warn("Read ticket detail cache failed, ticketId={}", ticketId, ex);
+            log.warn("读取工单详情缓存失败，ticketId={}", ticketId, ex);
             return null;
         }
     }
 
+    /**
+     * 写入数据。
+     */
     public void put(Long ticketId, TicketDetailDTO detail) {
         try {
             redisJsonClient.set(RedisKeys.ticketDetail(ticketId), detail, DETAIL_TTL);
         } catch (RuntimeException ex) {
-            log.warn("Write ticket detail cache failed, ticketId={}", ticketId, ex);
+            log.warn("写入工单详情缓存失败，ticketId={}", ticketId, ex);
         }
     }
 
+    /**
+     * 清理缓存。
+     */
     public void evict(Long ticketId) {
         try {
             redisJsonClient.delete(RedisKeys.ticketDetail(ticketId));
         } catch (RuntimeException ex) {
-            log.warn("Evict ticket detail cache failed, ticketId={}", ticketId, ex);
+            log.warn("清理工单详情缓存失败，ticketId={}", ticketId, ex);
         }
     }
 }

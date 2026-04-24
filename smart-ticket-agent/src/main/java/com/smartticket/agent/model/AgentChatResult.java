@@ -7,10 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Agent 对话结果。
- *
- * <p>该对象是 agent 模块对外暴露的应用层结果，不绑定 HTTP 协议。
- * api 模块负责把它转换成接口响应模型。</p>
+ * Agent 对话应用层结果，不绑定 HTTP 协议。
  */
 @Data
 @Builder
@@ -18,12 +15,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AgentChatResult {
     /**
-     * 当前会话 ID，用于在多轮对话中读取和更新短期上下文。
+     * 当前会话 ID，用于多轮对话中读取和更新短期上下文。
      */
     private String sessionId;
 
     /**
-     * 本轮识别出的意图编码。
+     * 本轮识别出的业务意图编码。
      */
     private String intent;
 
@@ -38,7 +35,7 @@ public class AgentChatResult {
     private IntentRoute route;
 
     /**
-     * 本轮执行后的 Agent 会话上下文。
+     * 本轮执行后的 智能体会话上下文。
      */
     private AgentSessionContext context;
 
@@ -52,7 +49,13 @@ public class AgentChatResult {
      */
     private boolean springAiChatReady;
 
+    /**
+     * 本轮执行计划，便于接口层透出当前执行阶段和下一步动作。
+     */
     private AgentPlan plan;
 
+    /**
+     * 本轮 Agent trace ID，用于查询完整执行轨迹。
+     */
     private String traceId;
 }

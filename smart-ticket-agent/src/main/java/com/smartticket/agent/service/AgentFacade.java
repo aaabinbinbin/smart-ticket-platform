@@ -40,25 +40,41 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Agent 闁诲海鏁搁、濠囨儊娴犲鈷掗柕濞炬櫆濡椼劑鏌? *
- * <p>闂佹眹鍨肩划楣冩儗妤ｅ啯鍋ㄩ柛妤冨仦閻濄倝鏌涢幇顒€鏆遍柣锝嗗礃閵囨劙骞橀崘宸瀫闂佽婢樼换鎰瑰鈧弫宥囦沪閽樺娅冮梺?Spring AI Tool Calling 闂佺懓鐡ㄩ悧婊堝灳濡皷鍋撶憴鍕暡闁逞屽劯閸愩劌绠查柟鐓庣摠濞茬喖骞楅懖鈺傚磯妞ゆ牗绋戦埛鏃堟偠濞戞瀚版い鏇ㄥ枟閹棃寮径鍝ョ煑闂佺绻戦悘姘跺焵?/p>
+ * 智能体对话门面服务。
+ *
+ * <p>负责串联意图路由、执行守卫、计划编排、参数提取、工具调用、记忆更新和轨迹记录。
+ * 当 Spring AI 工具调用可用时优先走自动编排，否则回退到确定性工具执行流程。</p>
  */
 @Service
 public class AgentFacade {
     private static final Logger log = LoggerFactory.getLogger(AgentFacade.class);
 
+    // 对话客户端提供器
     private final ObjectProvider<ChatClient> chatClientProvider;
+    // 对话启用
     private final boolean chatEnabled;
+    // 意图路由器
     private final IntentRouter intentRouter;
+    // 会话服务
     private final AgentSessionService sessionService;
+    // 执行守卫
     private final AgentExecutionGuard executionGuard;
+    // 智能体规划器
     private final AgentPlanner agentPlanner;
+    // 技能注册表
     private final SkillRegistry skillRegistry;
+    // 记忆服务
     private final AgentMemoryService memoryService;
+    // 轨迹服务
     private final AgentTraceService traceService;
+    // 提示词模板服务
     private final PromptTemplateService promptTemplateService;
+    // 参数提取器
     private final AgentToolParameterExtractor parameterExtractor;
 
+    /**
+     * 构造智能体门面。
+     */
     public AgentFacade(
             ObjectProvider<ChatClient> chatClientProvider,
             @Value("${smart-ticket.ai.chat.enabled:false}") boolean chatEnabled,
@@ -85,6 +101,9 @@ public class AgentFacade {
         this.parameterExtractor = parameterExtractor;
     }
 
+    /**
+     * 处理对话。
+     */
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
         AgentTraceContext trace = traceService.start(currentUser, sessionId, message);
@@ -103,7 +122,7 @@ public class AgentFacade {
         AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
         context.setPlanState(plan);
         traceService.step(trace, "planner", "decision", plan.getNextSkillCode(), plan.getNextAction().name(), plan.getCurrentStage().name());
-        log.info("agent facade chat: sessionId={}, userId={}, intent={}, springAiChatReady={}",
+        log.info("智能体对话开始：sessionId={}, userId={}, intent={}, springAiChatReady={}",
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
 
         if (route.getConfidence() < 0.50d) {
@@ -119,6 +138,9 @@ public class AgentFacade {
         return executeDeterministicFallback(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
     }
 
+    /**
+     * 处理低置信度意图。
+     */
     private AgentChatResult clarifyLowConfidenceIntent(
             CurrentUser currentUser,
             String sessionId,
@@ -141,6 +163,9 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
+    /**
+     * 处理 Spring AI 工具调用。
+     */
     private Optional<AgentChatResult> trySpringAiToolCalling(
             CurrentUser currentUser,
             String sessionId,
@@ -178,7 +203,7 @@ public class AgentFacade {
                     .content();
             AgentToolResult toolResult = state.getResult();
             if (toolResult == null) {
-                log.info("spring ai tool calling produced no tool result, use deterministic fallback: sessionId={}", sessionId);
+                log.info("Spring AI 工具调用未产出工具结果，使用确定性回退流程：sessionId={}", sessionId);
                 traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "NO_TOOL_RESULT", null);
                 return Optional.empty();
             }
@@ -199,12 +224,15 @@ public class AgentFacade {
                     trace
             ));
         } catch (RuntimeException ex) {
-            log.warn("spring ai tool calling failed, use deterministic fallback: sessionId={}, reason={}", sessionId, ex.getMessage());
+            log.warn("Spring AI 工具调用失败，使用确定性回退流程：sessionId={}, reason={}", sessionId, ex.getMessage());
             traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "FAILED", ex.getMessage());
             return Optional.empty();
         }
     }
 
+    /**
+     * 执行确定性回退流程。
+     */
     private AgentChatResult executeDeterministicFallback(
             CurrentUser currentUser,
             String sessionId,
@@ -224,7 +252,7 @@ public class AgentFacade {
                 .toolName(tool.name())
                 .parameters(parameters)
                 .llmGenerated(false)
-                .reason("Spring AI ChatClient unavailable or no tool call")
+                .reason("Spring AI ChatClient 不可用或未触发工具调用")
                 .build();
 
         agentPlanner.beforeExecute(plan);
@@ -263,6 +291,9 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
+    /**
+     * 处理待确认状态。
+     */
     private AgentChatResult continuePendingConfirmation(
             CurrentUser currentUser,
             String sessionId,
@@ -324,6 +355,9 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
+    /**
+     * 处理待创建状态。
+     */
     private AgentChatResult continuePendingCreate(
             CurrentUser currentUser,
             String sessionId,
@@ -376,6 +410,9 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
+    /**
+     * 在工具执行后更新会话。
+     */
     private void updateSessionAfterTool(
             CurrentUser currentUser,
             String sessionId,
@@ -390,6 +427,9 @@ public class AgentFacade {
         sessionService.save(sessionId, context);
     }
 
+    /**
+     * 处理待创建草稿。
+     */
     private boolean hasPendingCreateDraft(AgentSessionContext context) {
         return context != null
                 && context.getPendingAction() != null
@@ -397,12 +437,18 @@ public class AgentFacade {
                 && !context.getPendingAction().isAwaitingConfirmation();
     }
 
+    /**
+     * 处理待确认状态。
+     */
     private boolean hasPendingConfirmation(AgentSessionContext context) {
         return context != null
                 && context.getPendingAction() != null
                 && context.getPendingAction().isAwaitingConfirmation();
     }
 
+    /**
+     * 构建Confirmation结果。
+     */
     private AgentToolResult buildConfirmationResult(
             String toolName,
             IntentRoute route,
@@ -429,6 +475,9 @@ public class AgentFacade {
                 .build();
     }
 
+    /**
+     * 处理待确认的创建动作。
+     */
     private void syncCreatePendingAction(
             AgentSessionContext context,
             IntentRoute route,
@@ -458,6 +507,9 @@ public class AgentFacade {
         toolResult.setReply(buildCreateClarificationReply(missingFields, draft, message));
     }
 
+    /**
+     * 处理缺失字段。
+     */
     private List<AgentToolParameterField> extractMissingFields(Object data) {
         if (!(data instanceof List<?> rawList)) {
             return List.of();
@@ -471,6 +523,9 @@ public class AgentFacade {
         return fields;
     }
 
+    /**
+     * 处理创建草稿参数。
+     */
     private AgentToolParameters mergeCreateDraftParameters(
             AgentToolParameters draft,
             AgentToolParameters extracted,
@@ -501,6 +556,9 @@ public class AgentFacade {
         return merged;
     }
 
+    /**
+     * 补全标题。
+     */
     private boolean shouldFillTitle(
             AgentToolParameters merged,
             List<AgentToolParameterField> awaitingFields,
@@ -510,6 +568,9 @@ public class AgentFacade {
                 && (!hasText(merged.getTitle()) || awaitingFields.contains(AgentToolParameterField.TITLE));
     }
 
+    /**
+     * 补全描述。
+     */
     private boolean shouldFillDescription(
             AgentToolParameters merged,
             List<AgentToolParameterField> awaitingFields,
@@ -522,6 +583,9 @@ public class AgentFacade {
                 || extracted.getDescription() != null);
     }
 
+    /**
+     * 处理LikelyMetadataOnly消息。
+     */
     private boolean isLikelyMetadataOnlyMessage(AgentToolParameters extracted, String message) {
         if (!hasText(message)) {
             return false;
@@ -532,6 +596,9 @@ public class AgentFacade {
                 && !containsProblemNarrative(trimmed);
     }
 
+    /**
+     * 处理问题描述。
+     */
     private boolean containsProblemNarrative(String message) {
         return message.contains("\u65e0\u6cd5")
                 || message.contains("\u5931\u8d25")
@@ -542,6 +609,9 @@ public class AgentFacade {
                 || message.toLowerCase().contains("error");
     }
 
+    /**
+     * 构建创建ClarificationReply。
+     */
     private String buildCreateClarificationReply(
             List<AgentToolParameterField> missingFields,
             AgentToolParameters draft,
@@ -575,6 +645,9 @@ public class AgentFacade {
         return reply.toString();
     }
 
+    /**
+     * 处理参数。
+     */
     private AgentToolParameters copyParameters(AgentToolParameters source) {
         return AgentToolParameters.builder()
                 .ticketId(source.getTicketId())
@@ -591,6 +664,9 @@ public class AgentFacade {
                 .build();
     }
 
+    /**
+     * 处理取消消息。
+     */
     private boolean isCancelMessage(String message) {
         if (!hasText(message)) {
             return false;
@@ -602,6 +678,9 @@ public class AgentFacade {
                 || normalized.equals("cancel");
     }
 
+    /**
+     * 处理确认消息。
+     */
     private boolean isConfirmMessage(String message) {
         if (!hasText(message)) {
             return false;
@@ -614,22 +693,37 @@ public class AgentFacade {
                 || normalized.equals("yes");
     }
 
+    /**
+     * 处理未知兜底值。
+     */
     private String valueOrUnknown(Object value) {
         return value == null ? "\u672a\u8bc6\u522b" : String.valueOf(value);
     }
 
+    /**
+     * 处理AI工具For。
+     */
     private Object springAiToolFor(AgentIntent intent) {
         return toolForIntent(intent);
     }
 
+    /**
+     * 按意图处理。
+     */
     private AgentTool toolForIntent(AgentIntent intent) {
         return skillRegistry.requireByIntent(intent).tool();
     }
 
+    /**
+     * 按名称处理。
+     */
     private AgentTool toolForName(String toolName) {
         return skillRegistry.requireByToolName(toolName).tool();
     }
 
+    /**
+     * 转换为对话结果。
+     */
     private AgentChatResult toChatResult(
             String sessionId,
             IntentRoute route,
@@ -653,6 +747,9 @@ public class AgentFacade {
                 .build();
     }
 
+    /**
+     * 处理提示词。
+     */
     private String systemPrompt(AgentIntent intent) {
         String fallback = switch (intent) {
             case QUERY_TICKET -> "\u4f60\u662f\u5de5\u5355\u67e5\u8be2\u52a9\u624b\u3002\u672c\u8f6e\u53ea\u5141\u8bb8\u8c03\u7528 queryTicket\uff0c\u7528\u4e8e\u67e5\u8be2\u5f53\u524d\u5de5\u5355\u4e8b\u5b9e\uff0c\u4e0d\u5f97\u68c0\u7d22\u5386\u53f2\u77e5\u8bc6\u5e93\u3002";
@@ -663,6 +760,9 @@ public class AgentFacade {
         return promptTemplateService.content(promptCodeFor(intent), fallback);
     }
 
+    /**
+     * 按编码处理。
+     */
     private String promptCodeFor(AgentIntent intent) {
         return switch (intent) {
             case CREATE_TICKET -> "create-ticket-completion";
@@ -671,6 +771,9 @@ public class AgentFacade {
         };
     }
 
+    /**
+     * 处理提示词。
+     */
     private String userPrompt(String message, IntentRoute route) {
         return """
                 闂佸搫鐗滈崜婵嬫偪閸℃稑绠涢煫鍥ㄦ尰缁傚牓鏌?s
@@ -680,10 +783,16 @@ public class AgentFacade {
                 闁荤姴娲弨閬嶆偋閹绢喖绠叉い鏃傚亾閺嗗繘鏌熼幘顔芥暠缂佸鍏橀獮渚€顢涘☉妯煎€掗梺鍛婄懄閻楁洘瀵奸幇鏉跨鐎瑰嫭婢樺Λ姗€鏌℃担瑙勭凡闁艰崵鍠撻幏顐﹀礃椤忓懏娈㈤梺鍝勭墱閸撴繈鎮块崱娑樼闁归偊浜炴潻鏃堟煟閵娿儱顏╁ù鍏煎姍瀹曟寮搁鐔蜂壕闁稿本鐟ч悷婵嬫偡閺囨碍绁伴柣銊у枛閹粙濡搁敂钘夌处闂佸湱绮崝鎺旀閻㈠憡鍎嶉柛鏇ㄥ亗缁憋綁鏌涜箛鏃備粵闁?                """.formatted(route.getIntent().name(), route.getReason(), message);
     }
 
+    /**
+     * 判断 Spring AI 对话是否就绪。
+     */
     private boolean isSpringAiChatReady() {
         return chatEnabled && chatClientProvider.getIfAvailable() != null;
     }
 
+    /**
+     * 处理文本。
+     */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

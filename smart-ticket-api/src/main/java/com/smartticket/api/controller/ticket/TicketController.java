@@ -51,13 +51,20 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RestController
 @RequestMapping("/api/tickets")
-@Tag(name = "Tickets", description = "Ticket APIs")
+@Tag(name = "工单", description = "工单接口")
 public class TicketController {
+    // 工单服务
     private final TicketService ticketService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 工单请求解析器
     private final TicketRequestParser ticketRequestParser;
+    // 工单装配器
     private final TicketAssembler ticketAssembler;
 
+    /**
+     * 构造工单控制器。
+     */
     public TicketController(
             TicketService ticketService,
             CurrentUserResolver currentUserResolver,
@@ -70,8 +77,11 @@ public class TicketController {
         this.ticketAssembler = ticketAssembler;
     }
 
+    /**
+     * 创建工单。
+     */
     @PostMapping
-    @Operation(summary = "Create ticket", description = "Create a ticket in PENDING_ASSIGN state")
+    @Operation(summary = "创建工单", description = "创建一张处于待分配状态的工单")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -89,8 +99,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 获取工单详情。
+     */
     @GetMapping("/{ticketId}")
-    @Operation(summary = "Get ticket detail")
+    @Operation(summary = "获取工单详情")
     public ApiResponse<TicketDetailVO> getTicketDetail(
             Authentication authentication,
             @Parameter(description = "Ticket id") @PathVariable("ticketId") Long ticketId
@@ -98,8 +111,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toDetailVO(ticketService.getDetail(currentUserResolver.resolve(authentication), ticketId)));
     }
 
+    /**
+     * 获取工单摘要。
+     */
     @GetMapping("/{ticketId}/summary")
-    @Operation(summary = "Get ticket summary")
+    @Operation(summary = "获取工单摘要")
     public ApiResponse<TicketSummaryVO> getTicketSummary(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -113,8 +129,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toSummaryVO(summary));
     }
 
+    /**
+     * 获取审批。
+     */
     @GetMapping("/{ticketId}/approval")
-    @Operation(summary = "Get ticket approval")
+    @Operation(summary = "获取工单审批信息")
     public ApiResponse<TicketApprovalVO> getApproval(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -123,8 +142,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
     }
 
+    /**
+     * 提交审批。
+     */
     @PostMapping("/{ticketId}/approval/submit")
-    @Operation(summary = "Submit approval")
+    @Operation(summary = "提交审批")
     public ApiResponse<TicketApprovalVO> submitApproval(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -140,8 +162,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
     }
 
+    /**
+     * 审批通过。
+     */
     @PostMapping("/{ticketId}/approval/approve")
-    @Operation(summary = "Approve ticket approval")
+    @Operation(summary = "审批通过")
     public ApiResponse<TicketApprovalVO> approve(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -151,8 +176,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
     }
 
+    /**
+     * 审批拒绝。
+     */
     @PostMapping("/{ticketId}/approval/reject")
-    @Operation(summary = "Reject ticket approval")
+    @Operation(summary = "审批拒绝")
     public ApiResponse<TicketApprovalVO> reject(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -162,9 +190,12 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toApprovalVO(approval));
     }
 
+    /**
+     * 分页查询工单。
+     */
     @GetMapping
-    @Operation(summary = "Page tickets")
-    public ApiResponse<PageResult<TicketVO>> pageTickets(
+    @Operation(summary = "分页查询工单")
+    public ApiResponse<PageResult<TicketVO>> page工单(
             Authentication authentication,
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -175,7 +206,7 @@ public class TicketController {
             @RequestParam(value = "category", required = false) String category,
             @RequestParam(value = "priority", required = false) String priority
     ) {
-        PageResult<Ticket> page = ticketService.pageTickets(currentUserResolver.resolve(authentication), TicketPageQueryDTO.builder()
+        PageResult<Ticket> page = ticketService.page工单(currentUserResolver.resolve(authentication), TicketPageQueryDTO.builder()
                 .pageNo(pageNo)
                 .pageSize(pageSize)
                 .status(ticketRequestParser.parseStatus(status))
@@ -191,8 +222,11 @@ public class TicketController {
                 .build());
     }
 
+    /**
+     * 分派工单。
+     */
     @PutMapping("/{ticketId}/assign")
-    @Operation(summary = "Assign ticket")
+    @Operation(summary = "分派工单")
     public ApiResponse<TicketVO> assignTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -202,8 +236,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 认领工单。
+     */
     @PutMapping("/{ticketId}/claim")
-    @Operation(summary = "Claim ticket")
+    @Operation(summary = "认领工单")
     public ApiResponse<TicketVO> claimTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -212,8 +249,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 绑定工单队列。
+     */
     @PutMapping("/{ticketId}/queue")
-    @Operation(summary = "Bind ticket queue")
+    @Operation(summary = "绑定工单队列")
     public ApiResponse<TicketVO> bindTicketQueue(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -228,8 +268,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 转派工单。
+     */
     @PutMapping("/{ticketId}/transfer")
-    @Operation(summary = "Transfer ticket")
+    @Operation(summary = "转派工单")
     public ApiResponse<TicketVO> transferTicket(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -239,8 +282,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 更新状态。
+     */
     @PutMapping("/{ticketId}/status")
-    @Operation(summary = "Update ticket status")
+    @Operation(summary = "更新工单状态")
     public ApiResponse<TicketVO> updateStatus(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -253,8 +299,11 @@ public class TicketController {
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 新增评论。
+     */
     @PostMapping("/{ticketId}/comments")
-    @Operation(summary = "Add ticket comment")
+    @Operation(summary = "新增工单评论")
     public ApiResponse<TicketCommentVO> addComment(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId,
@@ -265,13 +314,19 @@ public class TicketController {
         ));
     }
 
+    /**
+     * 关闭工单。
+     */
     @PutMapping("/{ticketId}/close")
-    @Operation(summary = "Close ticket")
+    @Operation(summary = "关闭工单")
     public ApiResponse<TicketVO> closeTicket(Authentication authentication, @PathVariable("ticketId") Long ticketId) {
         Ticket ticket = ticketService.closeTicket(currentUserResolver.resolve(authentication), ticketId);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
+    /**
+     * 解析幂等键。
+     */
     private String resolveIdempotencyKey(String headerValue, String bodyValue) {
         if (headerValue != null && !headerValue.isBlank()) {
             return headerValue;

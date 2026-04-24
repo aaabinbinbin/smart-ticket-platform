@@ -17,9 +17,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AgentToolRequest {
+    // 当前用户
     private CurrentUser currentUser;
+    // 消息
     private String message;
+    // 上下文
     private AgentSessionContext context;
+    // route
     private IntentRoute route;
+    // 参数
     private AgentToolParameters parameters;
 }

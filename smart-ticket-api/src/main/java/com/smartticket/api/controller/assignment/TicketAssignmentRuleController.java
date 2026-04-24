@@ -36,16 +36,26 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单分派规则控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api")
-@Tag(name = "Assignment Rules", description = "Automatic assignment rule management")
+@Tag(name = "分派规则", description = "自动分派规则管理")
 public class TicketAssignmentRuleController {
+    // 工单Assignment服务
     private final TicketAssignmentService ticketAssignmentService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 装配器
     private final P1ConfigAssembler assembler;
+    // 工单装配器
     private final TicketAssembler ticketAssembler;
 
+    /**
+     * 构造工单分派规则控制器。
+     */
     public TicketAssignmentRuleController(
             TicketAssignmentService ticketAssignmentService,
             CurrentUserResolver currentUserResolver,
@@ -58,8 +68,11 @@ public class TicketAssignmentRuleController {
         this.ticketAssembler = ticketAssembler;
     }
 
+    /**
+     * 创建。
+     */
     @PostMapping("/ticket-assignment-rules")
-    @Operation(summary = "Create assignment rule", description = "Admin only")
+    @Operation(summary = "创建分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> create(
             Authentication authentication,
             @Valid @RequestBody TicketAssignmentRuleRequest request
@@ -68,8 +81,11 @@ public class TicketAssignmentRuleController {
         return ApiResponse.success(assembler.toAssignmentRuleVO(rule));
     }
 
+    /**
+     * 更新。
+     */
     @PutMapping("/ticket-assignment-rules/{ruleId}")
-    @Operation(summary = "Update assignment rule", description = "Admin only")
+    @Operation(summary = "更新分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> update(
             Authentication authentication,
             @PathVariable("ruleId") Long ruleId,
@@ -79,8 +95,11 @@ public class TicketAssignmentRuleController {
         return ApiResponse.success(assembler.toAssignmentRuleVO(rule));
     }
 
+    /**
+     * 更新启用。
+     */
     @PatchMapping("/ticket-assignment-rules/{ruleId}/enabled")
-    @Operation(summary = "Enable or disable assignment rule", description = "Admin only")
+    @Operation(summary = "启用或停用分派规则", description = "仅管理员可操作")
     public ApiResponse<TicketAssignmentRuleVO> updateEnabled(
             Authentication authentication,
             @PathVariable("ruleId") Long ruleId,
@@ -90,14 +109,20 @@ public class TicketAssignmentRuleController {
         return ApiResponse.success(assembler.toAssignmentRuleVO(rule));
     }
 
+    /**
+     * 获取详情。
+     */
     @GetMapping("/ticket-assignment-rules/{ruleId}")
-    @Operation(summary = "Get assignment rule")
+    @Operation(summary = "获取分派规则")
     public ApiResponse<TicketAssignmentRuleVO> get(@PathVariable("ruleId") Long ruleId) {
         return ApiResponse.success(assembler.toAssignmentRuleVO(ticketAssignmentService.getRule(ruleId)));
     }
 
+    /**
+     * 分页查询。
+     */
     @GetMapping("/ticket-assignment-rules")
-    @Operation(summary = "Page assignment rules")
+    @Operation(summary = "分页查询分派规则")
     public ApiResponse<PageResult<TicketAssignmentRuleVO>> page(
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -122,14 +147,20 @@ public class TicketAssignmentRuleController {
                 .build());
     }
 
+    /**
+     * 获取统计信息。
+     */
     @GetMapping("/ticket-assignment-rules/stats")
-    @Operation(summary = "Get assignment stats")
+    @Operation(summary = "获取分派统计")
     public ApiResponse<TicketAssignmentStatsVO> stats() {
         return ApiResponse.success(assembler.toAssignmentStatsVO(ticketAssignmentService.stats()));
     }
 
+    /**
+     * 预览分派结果。
+     */
     @PostMapping("/tickets/{ticketId}/assignment-preview")
-    @Operation(summary = "Preview assignment result", description = "Preview only, no write")
+    @Operation(summary = "预览分派结果", description = "仅预览，不执行写入")
     public ApiResponse<TicketAssignmentPreviewVO> preview(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -137,8 +168,11 @@ public class TicketAssignmentRuleController {
         return ApiResponse.success(assembler.toAssignmentPreviewVO(ticketAssignmentService.preview(currentUserResolver.resolve(authentication), ticketId)));
     }
 
+    /**
+     * 执行分派。
+     */
     @PostMapping("/tickets/{ticketId}/auto-assign")
-    @Operation(summary = "Auto assign ticket", description = "Run assignment rules and write result")
+    @Operation(summary = "自动分派工单", description = "执行分派规则并写入结果")
     public ApiResponse<TicketVO> autoAssign(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -146,6 +180,9 @@ public class TicketAssignmentRuleController {
         return ApiResponse.success(ticketAssembler.toVO(ticketAssignmentService.autoAssign(currentUserResolver.resolve(authentication), ticketId)));
     }
 
+    /**
+     * 转换为命令。
+     */
     private TicketAssignmentRuleCommandDTO toCommand(TicketAssignmentRuleRequest request) {
         return TicketAssignmentRuleCommandDTO.builder()
                 .ruleName(request.getRuleName())
@@ -159,6 +196,9 @@ public class TicketAssignmentRuleController {
                 .build();
     }
 
+    /**
+     * 解析分类。
+     */
     private TicketCategoryEnum parseCategory(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -170,6 +210,9 @@ public class TicketAssignmentRuleController {
         }
     }
 
+    /**
+     * 解析优先级。
+     */
     private TicketPriorityEnum parsePriority(String code) {
         if (code == null || code.isBlank()) {
             return null;

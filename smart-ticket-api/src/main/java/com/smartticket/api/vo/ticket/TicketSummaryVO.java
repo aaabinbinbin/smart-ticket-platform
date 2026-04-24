@@ -17,11 +17,18 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Schema(description = "工单摘要响应对象")
 public class TicketSummaryVO {
+    // view
     private String view;
+    // viewInfo
     private String viewInfo;
+    // 标题
     private String title;
+    // 摘要
     private String summary;
+    // highlights
     private List<String> highlights;
+    // riskLevel
     private String riskLevel;
+    // generated时间
     private LocalDateTime generatedAt;
 }

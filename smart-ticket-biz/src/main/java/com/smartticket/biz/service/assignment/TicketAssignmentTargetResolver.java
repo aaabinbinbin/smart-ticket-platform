@@ -23,13 +23,22 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class TicketAssignmentTargetResolver {
+    // 工单分组服务
     private final TicketGroupService ticketGroupService;
+    // 工单队列服务
     private final TicketQueueService ticketQueueService;
+    // 工单队列仓储
     private final TicketQueueRepository ticketQueueRepository;
+    // 工单队列成员服务
     private final TicketQueueMemberService ticketQueueMemberService;
+    // 工单仓储
     private final TicketRepository ticketRepository;
+    // 工单用户目录服务
     private final TicketUserDirectoryService ticketUserDirectoryService;
 
+    /**
+     * 构造工单分派目标解析器。
+     */
     public TicketAssignmentTargetResolver(
             TicketGroupService ticketGroupService,
             TicketQueueService ticketQueueService,
@@ -46,6 +55,9 @@ public class TicketAssignmentTargetResolver {
         this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
+    /**
+     * 处理解析。
+     */
     public AssignmentTarget resolve(TicketAssignmentRule rule) {
         if (rule.getTargetUserId() != null) {
             return new AssignmentTarget(rule.getTargetGroupId(), rule.getTargetQueueId(), rule.getTargetUserId(), null, false);
@@ -68,6 +80,9 @@ public class TicketAssignmentTargetResolver {
         return new AssignmentTarget(groupId, fallbackQueueId, fallbackAssigneeId, null, fallbackAssigneeId != null);
     }
 
+    /**
+     * 解析候选Queues。
+     */
     private List<TicketQueue> resolveCandidateQueues(Long groupId, Long queueId) {
         if (queueId != null) {
             return List.of(ticketQueueService.requireEnabled(queueId));
@@ -79,6 +94,9 @@ public class TicketAssignmentTargetResolver {
         return ticketQueueRepository.findEnabledByGroupId(groupId);
     }
 
+    /**
+     * 处理最空闲候选人。
+     */
     private QueueCandidate selectLeastLoadedCandidate(List<TicketQueue> candidateQueues) {
         List<QueueCandidate> candidates = new ArrayList<>();
         for (TicketQueue queue : candidateQueues) {
@@ -88,7 +106,7 @@ public class TicketAssignmentTargetResolver {
                         queue.getId(),
                         member.getId(),
                         member.getUserId(),
-                        ticketRepository.countOpenAssignedTickets(member.getUserId()),
+                        ticketRepository.countOpenAssigned工单(member.getUserId()),
                         member.getLastAssignedAt()
                 ));
             }
@@ -100,6 +118,9 @@ public class TicketAssignmentTargetResolver {
                 .orElse(null);
     }
 
+    /**
+     * 解析分组OwnerFallback。
+     */
     private Long resolveGroupOwnerFallback(Long groupId) {
         if (groupId == null) {
             return null;

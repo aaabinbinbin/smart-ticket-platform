@@ -11,13 +11,28 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface TicketKnowledgeEmbeddingMapper {
 
+    /**
+     * 处理新增。
+     */
     int insert(TicketKnowledgeEmbedding ticketKnowledgeEmbedding);
 
+    /**
+     * 查询按ID。
+     */
     TicketKnowledgeEmbedding findById(@Param("id") Long id);
 
+    /**
+     * 查询按知识ID。
+     */
     List<TicketKnowledgeEmbedding> findByKnowledgeId(@Param("knowledgeId") Long knowledgeId);
 
+    /**
+     * 查询全部。
+     */
     List<TicketKnowledgeEmbedding> findAll();
 
+    /**
+     * 删除按知识ID。
+     */
     int deleteByKnowledgeId(@Param("knowledgeId") Long knowledgeId);
 }

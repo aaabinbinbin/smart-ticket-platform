@@ -29,8 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class EmbeddingService {
     private static final Logger log = LoggerFactory.getLogger(EmbeddingService.class);
+    // 单个切片的最大字符数
     private static final int CHUNK_SIZE = 500;
+    // 相邻切片的重叠字符数
     private static final int CHUNK_OVERLAP = 80;
+    // 默认重试次数
     private static final int DEFAULT_RETRY_TIMES = 2;
 
     /** Embedding 模型客户端，主实现由 Spring AI EmbeddingModel 适配。 */
@@ -48,6 +51,9 @@ public class EmbeddingService {
     private record KnowledgeChunk(String type, String sourceField, String text) {
     }
 
+    /**
+     * 构造向量服务。
+     */
     public EmbeddingService(
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
@@ -75,7 +81,7 @@ public class EmbeddingService {
         }
         embeddingRepository.deleteByKnowledgeId(knowledge.getId());
         List<KnowledgeChunk> chunks = buildKnowledgeChunks(knowledge);
-        log.info("embedding build started: knowledgeId={}, vectorStoreEnabled={}, chunks={}",
+        log.info("向量构建开始：knowledgeId={}, vectorStoreEnabled={}, chunks={}",
                 knowledge.getId(), vectorStoreEnabled, chunks.size());
         List<TicketKnowledgeEmbedding> saved = new ArrayList<>(chunks.size());
         List<Document> vectorDocuments = new ArrayList<>(chunks.size());
@@ -95,7 +101,7 @@ public class EmbeddingService {
             vectorDocuments.add(toVectorDocument(knowledge, chunk, i));
         }
         writeVectorStore(knowledge.getId(), vectorDocuments);
-        log.info("embedding build finished: knowledgeId={}, mysqlChunks={}", knowledge.getId(), saved.size());
+        log.info("向量构建完成：knowledgeId={}, mysqlChunks={}", knowledge.getId(), saved.size());
         return saved;
     }
 
@@ -122,6 +128,9 @@ public class EmbeddingService {
         return chunks;
     }
 
+    /**
+     * 按知识结构字段和全文内容构建切片列表。
+     */
     private List<KnowledgeChunk> buildKnowledgeChunks(TicketKnowledge knowledge) {
         List<KnowledgeChunk> chunks = new ArrayList<>();
         addStructuredChunk(chunks, "SYMPTOM", "symptomSummary", knowledge.getSymptomSummary());
@@ -136,6 +145,9 @@ public class EmbeddingService {
         return chunks;
     }
 
+    /**
+     * 向切片列表中追加结构化字段切片。
+     */
     private void addStructuredChunk(List<KnowledgeChunk> chunks, String type, String sourceField, String text) {
         if (hasText(text)) {
             chunks.add(new KnowledgeChunk(type, sourceField, text.trim()));
@@ -150,24 +162,27 @@ public class EmbeddingService {
      */
     private void writeVectorStore(Long knowledgeId, List<Document> documents) {
         if (!vectorStoreEnabled || documents == null || documents.isEmpty()) {
-            log.info("vector store skipped: knowledgeId={}, reason={}",
+            log.info("向量存储写入已跳过：knowledgeId={}, reason={}",
                     knowledgeId, vectorStoreEnabled ? "no-documents" : "vector-store-disabled");
             return;
         }
         SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
         if (holder == null || holder.vectorStore() == null) {
-            log.warn("vector store unavailable: knowledgeId={}, fallback remains mysql-only", knowledgeId);
+            log.warn("向量存储不可用：knowledgeId={}, 继续仅使用 MySQL 回退路径", knowledgeId);
             return;
         }
         try {
             holder.vectorStore().delete(documents.stream().map(Document::getId).toList());
             holder.vectorStore().add(documents);
-            log.info("vector store write finished: knowledgeId={}, documents={}", knowledgeId, documents.size());
+            log.info("向量存储写入完成：knowledgeId={}, documents={}", knowledgeId, documents.size());
         } catch (RuntimeException ex) {
-            log.warn("write spring ai vector store failed, knowledgeId={}, reason={}", knowledgeId, ex.getMessage());
+            log.warn("写入 Spring AI 向量存储失败：knowledgeId={}, reason={}", knowledgeId, ex.getMessage());
         }
     }
 
+    /**
+     * 按重试策略生成单个切片的向量。
+     */
     private List<Double> embedWithRetry(Long knowledgeId, int chunkIndex, String chunk) {
         RuntimeException last = null;
         for (int attempt = 1; attempt <= DEFAULT_RETRY_TIMES + 1; attempt++) {
@@ -175,11 +190,11 @@ public class EmbeddingService {
                 return embeddingModelClient.embed(chunk);
             } catch (RuntimeException ex) {
                 last = ex;
-                log.warn("embedding chunk failed: knowledgeId={}, chunkIndex={}, attempt={}, reason={}",
+                log.warn("向量分片失败：knowledgeId={}, chunkIndex={}, attempt={}, reason={}",
                         knowledgeId, chunkIndex, attempt, ex.getMessage());
             }
         }
-        log.error("embedding chunk permanently failed: knowledgeId={}, chunkIndex={}", knowledgeId, chunkIndex, last);
+        log.error("向量分片永久失败：knowledgeId={}, chunkIndex={}", knowledgeId, chunkIndex, last);
         throw last;
     }
 

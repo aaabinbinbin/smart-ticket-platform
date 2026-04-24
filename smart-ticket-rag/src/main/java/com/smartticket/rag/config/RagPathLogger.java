@@ -16,6 +16,9 @@ import org.springframework.context.annotation.Configuration;
 public class RagPathLogger {
     private static final Logger log = LoggerFactory.getLogger(RagPathLogger.class);
 
+    /**
+     * 创建路径日志启动器。
+     */
     @Bean
     public ApplicationRunner ragPathApplicationRunner(
             @Value("${smart-ticket.ai.vector-store.enabled:false}") boolean vectorStoreEnabled,
@@ -25,10 +28,10 @@ public class RagPathLogger {
     ) {
         return args -> {
             boolean holderReady = vectorStoreHolderProvider.getIfAvailable() != null;
-            log.info("rag path status: embeddingEnabled={}, vectorStoreEnabled={}, vectorStoreReady={}, pgvectorUrl={}",
+            log.info("RAG 路径状态：embeddingEnabled={}, vectorStoreEnabled={}, vectorStoreReady={}, pgvectorUrl={}",
                     embeddingEnabled, vectorStoreEnabled, holderReady, pgvectorUrl);
             if (!vectorStoreEnabled || !holderReady) {
-                log.warn("rag mysql fallback is active. this path is for development fallback and should not be the long-term main retrieval path.");
+                log.warn("RAG MySQL 回退路径已启用。该路径仅用于开发阶段回退，不应作为长期主检索路径。");
             }
         };
     }

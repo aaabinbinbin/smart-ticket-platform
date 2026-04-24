@@ -13,7 +13,9 @@ public enum TicketStatusEnum implements CodeInfoEnum {
     RESOLVED("RESOLVED", "已解决"),
     CLOSED("CLOSED", "已关闭");
 
+    // 编码
     private final String code;
+    // info
     private final String info;
 
     TicketStatusEnum(String code, String info) {
@@ -21,14 +23,23 @@ public enum TicketStatusEnum implements CodeInfoEnum {
         this.info = info;
     }
 
+    /**
+     * 获取编码。
+     */
     public String getCode() {
         return code;
     }
 
+    /**
+     * 获取Info。
+     */
     public String getInfo() {
         return info;
     }
 
+    /**
+     * 处理编码。
+     */
     public static TicketStatusEnum fromCode(String code) {
         return Arrays.stream(values())
                 .filter(value -> value.code.equals(code))

@@ -7,7 +7,13 @@ package com.smartticket.domain.enums;
  */
 public interface CodeInfoEnum {
 
+    /**
+     * 获取编码。
+     */
     String getCode();
 
+    /**
+     * 获取Info。
+     */
     String getInfo();
 }

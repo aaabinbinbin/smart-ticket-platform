@@ -16,20 +16,31 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 检索增强反馈控制器。
+ */
 @RestController
 @RequestMapping("/api/agent/rag-feedback")
-@Tag(name = "RAG Feedback", description = "RAG retrieval feedback")
+@Tag(name = "RAG 反馈", description = "RAG 检索反馈")
 public class RagFeedbackController {
+    // 反馈服务
     private final RagFeedbackService feedbackService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
 
+    /**
+     * 构造检索增强反馈控制器。
+     */
     public RagFeedbackController(RagFeedbackService feedbackService, CurrentUserResolver currentUserResolver) {
         this.feedbackService = feedbackService;
         this.currentUserResolver = currentUserResolver;
     }
 
+    /**
+     * 处理submit。
+     */
     @PostMapping
-    @Operation(summary = "Submit RAG feedback")
+    @Operation(summary = "提交 RAG 反馈")
     public ApiResponse<RagFeedback> submit(Authentication authentication, @Valid @RequestBody RagFeedbackRequest request) {
         Long userId = currentUserResolver.resolve(authentication).getUserId();
         return ApiResponse.success(feedbackService.submit(
@@ -43,8 +54,11 @@ public class RagFeedbackController {
         ));
     }
 
+    /**
+     * 获取统计信息。
+     */
     @GetMapping("/stats")
-    @Operation(summary = "Query RAG feedback stats")
+    @Operation(summary = "查询 RAG 反馈统计")
     public ApiResponse<Map<String, Object>> stats() {
         return ApiResponse.success(feedbackService.stats());
     }

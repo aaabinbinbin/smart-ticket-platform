@@ -18,10 +18,15 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketDetailDTO {
+    // 工单
     private Ticket ticket;
+    // 审批
     private TicketApproval approval;
+    // comments
     private List<TicketComment> comments;
+    // 操作Logs
     private List<TicketOperationLog> operationLogs;
+    // summaries
     private TicketSummaryBundleDTO summaries;
 }
 

@@ -14,6 +14,9 @@ public class TicketKnowledgeRepository {
     /** 工单知识 MyBatis Mapper。 */
     private final TicketKnowledgeMapper ticketKnowledgeMapper;
 
+    /**
+     * 构造工单知识仓储。
+     */
     public TicketKnowledgeRepository(TicketKnowledgeMapper ticketKnowledgeMapper) {
         this.ticketKnowledgeMapper = ticketKnowledgeMapper;
     }

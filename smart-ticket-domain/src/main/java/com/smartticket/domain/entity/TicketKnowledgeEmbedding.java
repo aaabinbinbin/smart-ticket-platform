@@ -22,7 +22,9 @@ public class TicketKnowledgeEmbedding {
     private Long knowledgeId;
     /** 切片序号。 */
     private Integer chunkIndex;
+    // chunk类型
     private String chunkType;
+    // 来源Field
     private String sourceField;
     /** 切片文本内容。 */
     private String chunkText;

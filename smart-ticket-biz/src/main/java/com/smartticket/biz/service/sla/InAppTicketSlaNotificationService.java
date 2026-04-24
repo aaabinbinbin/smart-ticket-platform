@@ -7,14 +7,24 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
+/**
+ * In应用工单SLA通知服务。
+ */
 @Service
 public class InAppTicketSlaNotificationService implements TicketSlaNotificationService {
+    // 工单通知服务
     private final TicketNotificationService ticketNotificationService;
 
+    /**
+     * 构造In应用工单SLA通知服务。
+     */
     public InAppTicketSlaNotificationService(TicketNotificationService ticketNotificationService) {
         this.ticketNotificationService = ticketNotificationService;
     }
 
+    /**
+     * 处理Breached。
+     */
     @Override
     public void notifyBreached(Ticket ticket, TicketSlaInstance instance, String breachType, boolean escalated) {
         if (ticket == null || ticket.getId() == null) {
@@ -37,6 +47,9 @@ public class InAppTicketSlaNotificationService implements TicketSlaNotificationS
         }
     }
 
+    /**
+     * 构建标题。
+     */
     private String buildTitle(Ticket ticket, String breachType) {
         String ticketNo = ticket.getTicketNo() == null ? String.valueOf(ticket.getId()) : ticket.getTicketNo();
         if ("FIRST_RESPONSE".equals(breachType)) {
@@ -45,6 +58,9 @@ public class InAppTicketSlaNotificationService implements TicketSlaNotificationS
         return "工单 " + ticketNo + " 解决时限超时";
     }
 
+    /**
+     * 构建内容。
+     */
     private String buildContent(Ticket ticket, TicketSlaInstance instance, String breachType, boolean escalated) {
         StringBuilder builder = new StringBuilder();
         builder.append("工单【")

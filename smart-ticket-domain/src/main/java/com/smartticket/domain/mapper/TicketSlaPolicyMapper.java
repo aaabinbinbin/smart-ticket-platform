@@ -11,10 +11,19 @@ import org.apache.ibatis.annotations.Param;
 @Mapper
 public interface TicketSlaPolicyMapper {
 
+    /**
+     * 处理新增。
+     */
     int insert(TicketSlaPolicy policy);
 
+    /**
+     * 查询按ID。
+     */
     TicketSlaPolicy findById(@Param("id") Long id);
 
+    /**
+     * 分页查询。
+     */
     List<TicketSlaPolicy> page(
             @Param("category") String category,
             @Param("priority") String priority,
@@ -23,15 +32,27 @@ public interface TicketSlaPolicyMapper {
             @Param("limit") int limit
     );
 
+    /**
+     * 获取统计信息。
+     */
     long count(
             @Param("category") String category,
             @Param("priority") String priority,
             @Param("enabled") Integer enabled
     );
 
+    /**
+     * 更新。
+     */
     int update(TicketSlaPolicy policy);
 
+    /**
+     * 更新启用。
+     */
     int updateEnabled(@Param("id") Long id, @Param("enabled") Integer enabled);
 
+    /**
+     * 查询最佳匹配结果。
+     */
     TicketSlaPolicy findBestMatch(@Param("category") String category, @Param("priority") String priority);
 }

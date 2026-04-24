@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Schema(description = "添加工单评论请求")
 public class AddTicketCommentRequestDTO {
+    // 内容
     @NotBlank(message = "评论内容不能为空")
     @Size(max = 5000, message = "评论内容不能超过 5000 个字符")
     @Schema(description = "评论内容", example = "已收到，正在排查登录服务日志")

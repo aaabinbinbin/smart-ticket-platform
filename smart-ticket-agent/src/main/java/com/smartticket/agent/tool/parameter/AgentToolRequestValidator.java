@@ -10,6 +10,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AgentToolRequestValidator {
+    /**
+     * 处理校验。
+     */
     public AgentToolValidationResult validate(AgentTool tool, AgentToolRequest request) {
         // Tool 只声明静态必填字段；复杂业务规则仍交给具体 Tool 和 biz 层处理。
         List<AgentToolParameterField> missingFields = tool.metadata().getRequiredFields()
@@ -22,6 +25,9 @@ public class AgentToolRequestValidator {
         return AgentToolValidationResult.missing(missingFields);
     }
 
+    /**
+     * 处理Missing。
+     */
     private boolean isMissing(AgentToolParameterField field, AgentToolParameters parameters) {
         if (parameters == null) {
             return true;

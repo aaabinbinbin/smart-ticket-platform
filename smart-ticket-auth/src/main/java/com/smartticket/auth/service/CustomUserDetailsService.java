@@ -20,16 +20,25 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
+    // PREFIX
     private static final String ROLE_PREFIX = "ROLE_";
 
+    // sys用户映射接口
     private final SysUserMapper sysUserMapper;
+    // sys用户角色映射接口
     private final SysUserRoleMapper sysUserRoleMapper;
 
+    /**
+     * 构造自定义用户详情服务。
+     */
     public CustomUserDetailsService(SysUserMapper sysUserMapper, SysUserRoleMapper sysUserRoleMapper) {
         this.sysUserMapper = sysUserMapper;
         this.sysUserRoleMapper = sysUserRoleMapper;
     }
 
+    /**
+     * 加载用户按Username。
+     */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         SysUser sysUser = sysUserMapper.findByUsername(username);

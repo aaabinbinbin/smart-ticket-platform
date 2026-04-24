@@ -35,16 +35,26 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单SLA控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api")
-@Tag(name = "SLA Policies", description = "SLA policy and instance APIs")
+@Tag(name = "SLA 策略", description = "SLA 策略与实例接口")
 public class TicketSlaController {
+    // 工单SLA服务
     private final TicketSlaService ticketSlaService;
+    // 工单查询服务
     private final TicketQueryService ticketQueryService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 装配器
     private final P1ConfigAssembler assembler;
 
+    /**
+     * 构造工单SLA控制器。
+     */
     public TicketSlaController(
             TicketSlaService ticketSlaService,
             TicketQueryService ticketQueryService,
@@ -57,8 +67,11 @@ public class TicketSlaController {
         this.assembler = assembler;
     }
 
+    /**
+     * 创建策略。
+     */
     @PostMapping("/ticket-sla-policies")
-    @Operation(summary = "Create SLA policy", description = "Admin only")
+    @Operation(summary = "创建 SLA 策略", description = "仅管理员可操作")
     public ApiResponse<TicketSlaPolicyVO> createPolicy(
             Authentication authentication,
             @Valid @RequestBody TicketSlaPolicyRequest request
@@ -67,8 +80,11 @@ public class TicketSlaController {
         return ApiResponse.success(assembler.toSlaPolicyVO(policy));
     }
 
+    /**
+     * 更新策略。
+     */
     @PutMapping("/ticket-sla-policies/{policyId}")
-    @Operation(summary = "Update SLA policy", description = "Admin only")
+    @Operation(summary = "更新 SLA 策略", description = "仅管理员可操作")
     public ApiResponse<TicketSlaPolicyVO> updatePolicy(
             Authentication authentication,
             @PathVariable("policyId") Long policyId,
@@ -78,8 +94,11 @@ public class TicketSlaController {
         return ApiResponse.success(assembler.toSlaPolicyVO(policy));
     }
 
+    /**
+     * 更新策略启用。
+     */
     @PatchMapping("/ticket-sla-policies/{policyId}/enabled")
-    @Operation(summary = "Enable or disable SLA policy", description = "Admin only")
+    @Operation(summary = "启用或停用 SLA 策略", description = "仅管理员可操作")
     public ApiResponse<TicketSlaPolicyVO> updatePolicyEnabled(
             Authentication authentication,
             @PathVariable("policyId") Long policyId,
@@ -89,14 +108,20 @@ public class TicketSlaController {
         return ApiResponse.success(assembler.toSlaPolicyVO(policy));
     }
 
+    /**
+     * 获取策略。
+     */
     @GetMapping("/ticket-sla-policies/{policyId}")
-    @Operation(summary = "Get SLA policy")
+    @Operation(summary = "获取 SLA 策略")
     public ApiResponse<TicketSlaPolicyVO> getPolicy(@PathVariable("policyId") Long policyId) {
         return ApiResponse.success(assembler.toSlaPolicyVO(ticketSlaService.getPolicy(policyId)));
     }
 
+    /**
+     * 分页查询策略。
+     */
     @GetMapping("/ticket-sla-policies")
-    @Operation(summary = "Page SLA policies")
+    @Operation(summary = "分页查询 SLA 策略")
     public ApiResponse<PageResult<TicketSlaPolicyVO>> pagePolicies(
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -121,8 +146,11 @@ public class TicketSlaController {
                 .build());
     }
 
+    /**
+     * 获取工单SLA。
+     */
     @GetMapping("/tickets/{ticketId}/sla")
-    @Operation(summary = "Get ticket SLA instance")
+    @Operation(summary = "获取工单 SLA 实例")
     public ApiResponse<TicketSlaInstanceVO> getTicketSla(
             Authentication authentication,
             @PathVariable("ticketId") Long ticketId
@@ -131,8 +159,11 @@ public class TicketSlaController {
         return ApiResponse.success(assembler.toSlaInstanceVO(ticketSlaService.getInstanceByTicketId(ticketId)));
     }
 
+    /**
+     * 扫描BreachedInstances。
+     */
     @PostMapping("/ticket-sla-instances/breach-scan")
-    @Operation(summary = "Scan breached SLA instances", description = "Admin only")
+    @Operation(summary = "扫描超时的 SLA 实例", description = "仅管理员可操作")
     public ApiResponse<TicketSlaScanResultVO> scanBreachedInstances(
             Authentication authentication,
             @Min(value = 1, message = "limit must be >= 1")
@@ -144,6 +175,9 @@ public class TicketSlaController {
         ));
     }
 
+    /**
+     * 转换为命令。
+     */
     private TicketSlaPolicyCommandDTO toCommand(TicketSlaPolicyRequest request) {
         return TicketSlaPolicyCommandDTO.builder()
                 .policyName(request.getPolicyName())
@@ -155,6 +189,9 @@ public class TicketSlaController {
                 .build();
     }
 
+    /**
+     * 解析分类。
+     */
     private TicketCategoryEnum parseCategory(String code) {
         if (code == null || code.isBlank()) {
             return null;
@@ -166,6 +203,9 @@ public class TicketSlaController {
         }
     }
 
+    /**
+     * 解析优先级。
+     */
     private TicketPriorityEnum parsePriority(String code) {
         if (code == null || code.isBlank()) {
             return null;

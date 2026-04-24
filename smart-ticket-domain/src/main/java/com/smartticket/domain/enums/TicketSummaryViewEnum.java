@@ -10,7 +10,9 @@ public enum TicketSummaryViewEnum implements CodeInfoEnum {
     ASSIGNEE("ASSIGNEE", "处理人视角"),
     ADMIN("ADMIN", "管理员视角");
 
+    // 编码
     private final String code;
+    // info
     private final String info;
 
     TicketSummaryViewEnum(String code, String info) {
@@ -18,16 +20,25 @@ public enum TicketSummaryViewEnum implements CodeInfoEnum {
         this.info = info;
     }
 
+    /**
+     * 获取编码。
+     */
     @Override
     public String getCode() {
         return code;
     }
 
+    /**
+     * 获取Info。
+     */
     @Override
     public String getInfo() {
         return info;
     }
 
+    /**
+     * 处理编码。
+     */
     public static TicketSummaryViewEnum fromCode(String code) {
         return Arrays.stream(values())
                 .filter(value -> value.code.equals(code))

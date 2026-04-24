@@ -20,13 +20,22 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class TicketQueryService {
+    // 支撑
     private final TicketServiceSupport support;
+    // 工单仓储
     private final TicketRepository ticketRepository;
+    // 工单详情缓存服务
     private final TicketDetailCacheService ticketDetailCacheService;
+    // 工单类型画像服务
     private final TicketTypeProfileService ticketTypeProfileService;
+    // 工单审批服务
     private final TicketApprovalService ticketApprovalService;
+    // 工单摘要服务
     private final TicketSummaryService ticketSummaryService;
 
+    /**
+     * 构造工单查询服务。
+     */
     public TicketQueryService(
             TicketServiceSupport support,
             TicketRepository ticketRepository,
@@ -43,6 +52,9 @@ public class TicketQueryService {
         this.ticketSummaryService = ticketSummaryService;
     }
 
+    /**
+     * 获取详情。
+     */
     public TicketDetailDTO getDetail(CurrentUser operator, Long ticketId) {
         TicketDetailDTO cached = loadCachedDetail(operator, ticketId);
         if (cached != null) {
@@ -51,13 +63,19 @@ public class TicketQueryService {
         return loadAndCacheDetail(operator, ticketId);
     }
 
+    /**
+     * 获取摘要。
+     */
     public TicketSummaryDTO getSummary(CurrentUser operator, Long ticketId, TicketSummaryViewEnum requestedView) {
         TicketDetailDTO detail = getDetail(operator, ticketId);
         TicketSummaryViewEnum view = ticketSummaryService.resolveView(operator, detail.getTicket(), requestedView);
         return ticketSummaryService.generateForView(detail, view);
     }
 
-    public PageResult<Ticket> pageTickets(CurrentUser operator, TicketPageQueryDTO query) {
+    /**
+     * 分页查询工单。
+     */
+    public PageResult<Ticket> page工单(CurrentUser operator, TicketPageQueryDTO query) {
         PageQuery pageQuery = buildPageQuery(query);
         List<Ticket> records = loadPageRecords(operator, pageQuery);
         long total = countPageRecords(operator, pageQuery);
@@ -70,6 +88,9 @@ public class TicketQueryService {
                 .build();
     }
 
+    /**
+     * 加载Cached详情。
+     */
     private TicketDetailDTO loadCachedDetail(CurrentUser operator, Long ticketId) {
         TicketDetailDTO cached = ticketDetailCacheService.get(ticketId);
         if (cached == null || cached.getTicket() == null) {
@@ -80,6 +101,9 @@ public class TicketQueryService {
         return cached;
     }
 
+    /**
+     * 加载并缓存详情。
+     */
     private TicketDetailDTO loadAndCacheDetail(CurrentUser operator, Long ticketId) {
         Ticket ticket = support.requireVisibleTicket(operator, ticketId);
         ticketTypeProfileService.attachProfile(ticket);
@@ -90,12 +114,18 @@ public class TicketQueryService {
         return detail;
     }
 
+    /**
+     * 处理摘要列表。
+     */
     private void ensureSummaries(TicketDetailDTO detail) {
         if (detail.getSummaries() == null) {
             detail.setSummaries(ticketSummaryService.generateAll(detail));
         }
     }
 
+    /**
+     * 加载分页Records。
+     */
     private List<Ticket> loadPageRecords(CurrentUser operator, PageQuery pageQuery) {
         if (operator.isAdmin()) {
             return ticketRepository.pageAll(
@@ -118,6 +148,9 @@ public class TicketQueryService {
         );
     }
 
+    /**
+     * 统计分页Records。
+     */
     private long countPageRecords(CurrentUser operator, PageQuery pageQuery) {
         if (operator.isAdmin()) {
             return ticketRepository.countAll(
@@ -136,6 +169,9 @@ public class TicketQueryService {
         );
     }
 
+    /**
+     * 构建分页查询。
+     */
     private PageQuery buildPageQuery(TicketPageQueryDTO query) {
         int pageNo = Math.max(query.getPageNo(), 1);
         int pageSize = Math.min(Math.max(query.getPageSize(), 1), 100);
@@ -150,6 +186,9 @@ public class TicketQueryService {
         );
     }
 
+    /**
+     * 处理编码。
+     */
     private String enumCode(CodeInfoEnum value) {
         return value == null ? null : value.getCode();
     }

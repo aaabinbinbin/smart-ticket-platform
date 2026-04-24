@@ -28,8 +28,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class QueryTicketTool implements AgentTool {
+    // NAME
     private static final String NAME = "queryTicket";
+    // 编号
     private static final int DEFAULT_PAGE_NO = 1;
+    // SIZE
     private static final int DEFAULT_PAGE_SIZE = 5;
 
     /**
@@ -42,21 +45,33 @@ public class QueryTicketTool implements AgentTool {
      */
     private final SpringAiToolSupport springAiToolSupport;
 
+    /**
+     * 构造查询工单工具。
+     */
     public QueryTicketTool(TicketQueryService ticketQueryService, @Lazy SpringAiToolSupport springAiToolSupport) {
         this.ticketQueryService = ticketQueryService;
         this.springAiToolSupport = springAiToolSupport;
     }
 
+    /**
+     * 处理名称。
+     */
     @Override
     public String name() {
         return NAME;
     }
 
+    /**
+     * 处理支撑。
+     */
     @Override
     public boolean support(AgentIntent intent) {
         return intent == AgentIntent.QUERY_TICKET;
     }
 
+    /**
+     * 处理元数据。
+     */
     @Override
     public AgentToolMetadata metadata() {
         return AgentToolMetadata.builder()
@@ -68,6 +83,9 @@ public class QueryTicketTool implements AgentTool {
                 .build();
     }
 
+    /**
+     * 执行操作。
+     */
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
         if (summaryRequested(request)) {
@@ -80,17 +98,26 @@ public class QueryTicketTool implements AgentTool {
         return queryVisibleTicketPage(request);
     }
 
+    /**
+     * 处理请求状态。
+     */
     private boolean summaryRequested(AgentToolRequest request) {
         return Boolean.TRUE.equals(request.getParameters().getSummaryRequested());
     }
 
+    /**
+     * 查询工单详情。
+     */
     private AgentToolResult queryTicketDetail(AgentToolRequest request, Long ticketId) {
         TicketDetailDTO detail = ticketQueryService.getDetail(request.getCurrentUser(), ticketId);
         return AgentToolResults.success(NAME, "已查询工单详情。", detail, ticketId, null);
     }
 
+    /**
+     * 查询可见工单分页。
+     */
     private AgentToolResult queryVisibleTicketPage(AgentToolRequest request) {
-        PageResult<Ticket> page = ticketQueryService.pageTickets(
+        PageResult<Ticket> page = ticketQueryService.page工单(
                 request.getCurrentUser(),
                 TicketPageQueryDTO.builder()
                         .pageNo(DEFAULT_PAGE_NO)
@@ -100,6 +127,9 @@ public class QueryTicketTool implements AgentTool {
         return AgentToolResults.success(NAME, "已查询最近可见工单列表。", page);
     }
 
+    /**
+     * 处理工单。
+     */
     private AgentToolResult summarizeTicket(AgentToolRequest request) {
         Long ticketId = request.getParameters().getTicketId();
         if (ticketId == null) {
@@ -126,6 +156,9 @@ public class QueryTicketTool implements AgentTool {
             name = NAME,
             description = "查询当前工单事实数据，或按指定视角生成工单摘要。可按工单 ID 查详情；未提供 ID 时查询当前用户可见工单列表。该工具不检索历史知识库。"
     )
+    /**
+     * 查询工单。
+     */
     public AgentToolResult queryTicket(
             @ToolParam(required = false, description = "工单 ID，为空时查询当前用户可见工单列表") Long ticketId,
             @ToolParam(required = false, description = "是否返回工单摘要；true 时优先返回摘要") Boolean summaryRequested,
@@ -140,6 +173,9 @@ public class QueryTicketTool implements AgentTool {
         );
     }
 
+    /**
+     * 构建工具参数。
+     */
     private AgentToolParameters buildToolParameters(Long ticketId, Boolean summaryRequested, String summaryView) {
         return AgentToolParameters.builder()
                 .ticketId(ticketId)
@@ -148,6 +184,9 @@ public class QueryTicketTool implements AgentTool {
                 .build();
     }
 
+    /**
+     * 解析摘要View。
+     */
     private TicketSummaryViewEnum parseSummaryView(String summaryView) {
         if (summaryView == null || summaryView.isBlank()) {
             return null;
@@ -159,6 +198,9 @@ public class QueryTicketTool implements AgentTool {
         }
     }
 
+    /**
+     * 构建摘要Reply。
+     */
     private String buildSummaryReply(TicketSummaryDTO summary) {
         if (summary == null) {
             return "未生成摘要结果。";
@@ -166,6 +208,9 @@ public class QueryTicketTool implements AgentTool {
         return summary.getTitle() + "：" + summary.getSummary() + buildFirstHighlight(summary);
     }
 
+    /**
+     * 构建FirstHighlight。
+     */
     private String buildFirstHighlight(TicketSummaryDTO summary) {
         if (summary.getHighlights() == null || summary.getHighlights().isEmpty()) {
             return "";

@@ -14,13 +14,23 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * 工单队列成员服务。
+ */
 @Service
 public class TicketQueueMemberService {
+    // 工单队列成员仓储
     private final TicketQueueMemberRepository ticketQueueMemberRepository;
+    // 工单队列仓储
     private final TicketQueueRepository ticketQueueRepository;
+    // 权限服务
     private final TicketPermissionService permissionService;
+    // 工单用户目录服务
     private final TicketUserDirectoryService ticketUserDirectoryService;
 
+    /**
+     * 构造工单队列成员服务。
+     */
     public TicketQueueMemberService(
             TicketQueueMemberRepository ticketQueueMemberRepository,
             TicketQueueRepository ticketQueueRepository,
@@ -33,6 +43,9 @@ public class TicketQueueMemberService {
         this.ticketUserDirectoryService = ticketUserDirectoryService;
     }
 
+    /**
+     * 创建。
+     */
     @Transactional
     public TicketQueueMember create(CurrentUser operator, Long queueId, TicketQueueMemberCommandDTO command) {
         permissionService.requireAdmin(operator);
@@ -52,6 +65,9 @@ public class TicketQueueMemberService {
         return requireById(member.getId());
     }
 
+    /**
+     * 更新启用。
+     */
     @Transactional
     public TicketQueueMember updateEnabled(CurrentUser operator, Long queueId, Long memberId, boolean enabled) {
         permissionService.requireAdmin(operator);
@@ -63,15 +79,24 @@ public class TicketQueueMemberService {
         return requireById(memberId);
     }
 
+    /**
+     * 处理列表。
+     */
     public List<TicketQueueMember> list(Long queueId, Boolean enabled) {
         requireEnabledQueue(queueId);
         return ticketQueueMemberRepository.findByQueueId(queueId, enabled == null ? null : toEnabled(enabled));
     }
 
+    /**
+     * 查询启用成员。
+     */
     public List<TicketQueueMember> listEnabledMembers(Long queueId) {
         return ticketQueueMemberRepository.findByQueueId(queueId, 1);
     }
 
+    /**
+     * 处理启用成员。
+     */
     public boolean isEnabledMember(Long queueId, Long userId) {
         if (queueId == null || userId == null) {
             return false;
@@ -80,10 +105,16 @@ public class TicketQueueMemberService {
         return member != null && Integer.valueOf(1).equals(member.getEnabled());
     }
 
+    /**
+     * 处理Assigned。
+     */
     public void markAssigned(Long memberId) {
         ticketQueueMemberRepository.updateLastAssignedAt(memberId);
     }
 
+    /**
+     * 校验按ID。
+     */
     private TicketQueueMember requireById(Long memberId) {
         TicketQueueMember member = ticketQueueMemberRepository.findById(memberId);
         if (member == null) {
@@ -92,6 +123,9 @@ public class TicketQueueMemberService {
         return member;
     }
 
+    /**
+     * 校验启用队列。
+     */
     private TicketQueue requireEnabledQueue(Long queueId) {
         TicketQueue queue = ticketQueueRepository.findById(queueId);
         if (queue == null) {
@@ -103,6 +137,9 @@ public class TicketQueueMemberService {
         return queue;
     }
 
+    /**
+     * 转换为启用。
+     */
     private Integer toEnabled(Boolean enabled) {
         return enabled == null || enabled ? 1 : 0;
     }

@@ -15,6 +15,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TicketApprovalStepFactory {
 
+    /**
+     * 处理构建。
+     */
     public List<TicketApprovalStep> build(Long ticketId, TicketApprovalTemplate template, Long approverId) {
         if (template == null) {
             return List.of(TicketApprovalStep.builder()
@@ -36,6 +39,9 @@ public class TicketApprovalStepFactory {
                 .toList();
     }
 
+    /**
+     * 分派审批ID。
+     */
     public void assignApprovalId(List<TicketApprovalStep> steps, Long approvalId) {
         for (TicketApprovalStep step : steps) {
             step.setApprovalId(approvalId);

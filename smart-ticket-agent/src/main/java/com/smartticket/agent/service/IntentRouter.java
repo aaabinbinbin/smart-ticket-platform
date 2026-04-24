@@ -31,6 +31,9 @@ public class IntentRouter {
             "查询", "查看", "详情", "状态", "进度", "列表", "工单", "ticket", "status", "detail"
     );
 
+    /**
+     * 根据用户输入和会话上下文推断意图路由结果。
+     */
     public IntentRoute route(String message, AgentSessionContext context) {
         String normalized = normalize(message);
         boolean transfer = containsAny(normalized, TRANSFER_KEYWORDS);
@@ -75,6 +78,9 @@ public class IntentRouter {
         return route(AgentIntent.QUERY_TICKET, 0.25, "未命中明确意图规则，需要先澄清用户目标");
     }
 
+    /**
+     * 构造路由结果对象。
+     */
     private IntentRoute route(AgentIntent intent, double confidence, String reason) {
         return IntentRoute.builder()
                 .intent(intent)
@@ -83,10 +89,16 @@ public class IntentRouter {
                 .build();
     }
 
+    /**
+     * 判断消息中是否命中任一关键字。
+     */
     private boolean containsAny(String message, List<String> keywords) {
         return keywords.stream().anyMatch(message::contains);
     }
 
+    /**
+     * 判断消息中是否包含当前工单的指代表达。
+     */
     private boolean containsTicketReference(String message) {
         return message.contains("它")
                 || message.contains("这个")
@@ -96,6 +108,9 @@ public class IntentRouter {
                 || message.contains("刚刚那个工单");
     }
 
+    /**
+     * 统计命中的意图数量。
+     */
     private int countMatches(boolean... matches) {
         int count = 0;
         for (boolean match : matches) {
@@ -106,6 +121,9 @@ public class IntentRouter {
         return count;
     }
 
+    /**
+     * 规范化处理。
+     */
     private String normalize(String message) {
         return message == null ? "" : message.trim().toLowerCase(Locale.ROOT);
     }

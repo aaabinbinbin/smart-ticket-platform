@@ -34,6 +34,9 @@ public class ToolCallPlanValidationResult {
      */
     private String reason;
 
+    /**
+     * 处理valid。
+     */
     public static ToolCallPlanValidationResult valid(AgentTool tool) {
         return ToolCallPlanValidationResult.builder()
                 .valid(true)
@@ -41,6 +44,9 @@ public class ToolCallPlanValidationResult {
                 .build();
     }
 
+    /**
+     * 处理确认状态。
+     */
     public static ToolCallPlanValidationResult needConfirmation(AgentTool tool, String reason) {
         return ToolCallPlanValidationResult.builder()
                 .valid(true)
@@ -50,6 +56,9 @@ public class ToolCallPlanValidationResult {
                 .build();
     }
 
+    /**
+     * 处理invalid。
+     */
     public static ToolCallPlanValidationResult invalid(String reason) {
         return ToolCallPlanValidationResult.builder()
                 .valid(false)

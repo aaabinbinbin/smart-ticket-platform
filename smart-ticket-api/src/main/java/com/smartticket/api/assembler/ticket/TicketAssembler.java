@@ -18,8 +18,14 @@ import com.smartticket.domain.entity.TicketComment;
 import com.smartticket.domain.entity.TicketOperationLog;
 import org.springframework.stereotype.Component;
 
+/**
+ * 工单相关对象装配器。
+ */
 @Component
 public class TicketAssembler {
+    /**
+     * 将工单实体转换为工单视图对象。
+     */
     public TicketVO toVO(Ticket ticket) {
         if (ticket == null) {
             return null;
@@ -49,6 +55,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将审批实体转换为审批视图对象。
+     */
     public TicketApprovalVO toApprovalVO(TicketApproval approval) {
         if (approval == null) {
             return null;
@@ -72,6 +81,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将审批步骤实体转换为审批步骤视图对象。
+     */
     public TicketApprovalStepVO toApprovalStepVO(TicketApprovalStep step) {
         if (step == null) {
             return null;
@@ -90,6 +102,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将评论实体转换为评论视图对象。
+     */
     public TicketCommentVO toCommentVO(TicketComment comment) {
         if (comment == null) {
             return null;
@@ -104,6 +119,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将操作日志实体转换为操作日志视图对象。
+     */
     public TicketOperationLogVO toLogVO(TicketOperationLog log) {
         if (log == null) {
             return null;
@@ -121,6 +139,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将工单详情 DTO 转换为详情视图对象。
+     */
     public TicketDetailVO toDetailVO(TicketDetailDTO detail) {
         return TicketDetailVO.builder()
                 .ticket(toVO(detail.getTicket()))
@@ -131,6 +152,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将摘要 DTO 转换为摘要视图对象。
+     */
     public TicketSummaryVO toSummaryVO(TicketSummaryDTO summary) {
         if (summary == null) {
             return null;
@@ -146,6 +170,9 @@ public class TicketAssembler {
                 .build();
     }
 
+    /**
+     * 将摘要集合 DTO 转换为摘要集合视图对象。
+     */
     public TicketSummaryBundleVO toSummaryBundleVO(TicketSummaryBundleDTO bundle) {
         if (bundle == null) {
             return null;

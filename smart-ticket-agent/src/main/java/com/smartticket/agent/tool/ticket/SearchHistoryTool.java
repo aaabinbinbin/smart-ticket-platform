@@ -29,6 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class SearchHistoryTool implements AgentTool {
+    // NAME
     private static final String NAME = "searchHistory";
 
     /**
@@ -41,21 +42,33 @@ public class SearchHistoryTool implements AgentTool {
      */
     private final SpringAiToolSupport springAiToolSupport;
 
+    /**
+     * 构造搜索历史工具。
+     */
     public SearchHistoryTool(RetrievalService retrievalService, @Lazy SpringAiToolSupport springAiToolSupport) {
         this.retrievalService = retrievalService;
         this.springAiToolSupport = springAiToolSupport;
     }
 
+    /**
+     * 处理名称。
+     */
     @Override
     public String name() {
         return NAME;
     }
 
+    /**
+     * 处理支撑。
+     */
     @Override
     public boolean support(AgentIntent intent) {
         return intent == AgentIntent.SEARCH_HISTORY;
     }
 
+    /**
+     * 处理元数据。
+     */
     @Override
     public AgentToolMetadata metadata() {
         return AgentToolMetadata.builder()
@@ -67,6 +80,9 @@ public class SearchHistoryTool implements AgentTool {
                 .build();
     }
 
+    /**
+     * 执行操作。
+     */
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
         AgentSessionContext context = request.getContext();

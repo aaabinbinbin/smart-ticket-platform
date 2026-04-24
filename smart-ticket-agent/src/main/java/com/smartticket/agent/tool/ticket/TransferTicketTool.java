@@ -29,6 +29,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class TransferTicketTool implements AgentTool {
+    // NAME
     private static final String NAME = "transferTicket";
 
     /**
@@ -46,6 +47,9 @@ public class TransferTicketTool implements AgentTool {
      */
     private final SpringAiToolSupport springAiToolSupport;
 
+    /**
+     * 构造转派工单工具。
+     */
     public TransferTicketTool(
             TicketWorkflowService ticketWorkflowService,
             AgentToolRequestValidator validator,
@@ -56,16 +60,25 @@ public class TransferTicketTool implements AgentTool {
         this.springAiToolSupport = springAiToolSupport;
     }
 
+    /**
+     * 处理名称。
+     */
     @Override
     public String name() {
         return NAME;
     }
 
+    /**
+     * 处理支撑。
+     */
     @Override
     public boolean support(AgentIntent intent) {
         return intent == AgentIntent.TRANSFER_TICKET;
     }
 
+    /**
+     * 处理元数据。
+     */
     @Override
     public AgentToolMetadata metadata() {
         return AgentToolMetadata.builder()
@@ -81,6 +94,9 @@ public class TransferTicketTool implements AgentTool {
                 .build();
     }
 
+    /**
+     * 执行操作。
+     */
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
         normalizeSingleNumberTransfer(request);

@@ -22,14 +22,22 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 知识候选控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/agent/knowledge-candidates")
-@Tag(name = "Knowledge Candidates", description = "Knowledge candidate manual review")
+@Tag(name = "知识候选", description = "知识候选人工审核")
 public class KnowledgeCandidateController {
+    // 审核服务
     private final KnowledgeCandidateReviewService reviewService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
 
+    /**
+     * 构造知识候选控制器。
+     */
     public KnowledgeCandidateController(
             KnowledgeCandidateReviewService reviewService,
             CurrentUserResolver currentUserResolver
@@ -38,8 +46,11 @@ public class KnowledgeCandidateController {
         this.currentUserResolver = currentUserResolver;
     }
 
+    /**
+     * 处理列表。
+     */
     @GetMapping
-    @Operation(summary = "List knowledge candidates")
+    @Operation(summary = "查询知识候选列表")
     public ApiResponse<List<TicketKnowledgeCandidate>> list(
             @RequestParam(value = "status", required = false) String status,
             @Min(1) @Max(100) @RequestParam(value = "limit", defaultValue = "20") int limit
@@ -47,14 +58,20 @@ public class KnowledgeCandidateController {
         return ApiResponse.success(reviewService.list(status, limit));
     }
 
+    /**
+     * 处理详情。
+     */
     @GetMapping("/{candidateId}")
-    @Operation(summary = "Get knowledge candidate detail")
+    @Operation(summary = "获取知识候选详情")
     public ApiResponse<TicketKnowledgeCandidate> detail(@PathVariable("candidateId") Long candidateId) {
         return ApiResponse.success(reviewService.detail(candidateId));
     }
 
+    /**
+     * 处理approve。
+     */
     @PostMapping("/{candidateId}/approve")
-    @Operation(summary = "Approve candidate and build knowledge")
+    @Operation(summary = "审核通过候选并构建知识")
     public ApiResponse<KnowledgeCandidateReviewResult> approve(
             Authentication authentication,
             @PathVariable("candidateId") Long candidateId,
@@ -67,8 +84,11 @@ public class KnowledgeCandidateController {
         ));
     }
 
+    /**
+     * 处理reject。
+     */
     @PostMapping("/{candidateId}/reject")
-    @Operation(summary = "Reject knowledge candidate")
+    @Operation(summary = "拒绝知识候选")
     public ApiResponse<KnowledgeCandidateReviewResult> reject(
             Authentication authentication,
             @PathVariable("candidateId") Long candidateId,

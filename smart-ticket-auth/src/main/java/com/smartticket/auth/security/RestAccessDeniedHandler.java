@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class RestAccessDeniedHandler implements AccessDeniedHandler {
 
+    /**
+     * 处理请求。
+     */
     @Override
     public void handle(
             HttpServletRequest request,

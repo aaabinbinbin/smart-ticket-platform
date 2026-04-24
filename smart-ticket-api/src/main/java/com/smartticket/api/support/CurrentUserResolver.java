@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CurrentUserResolver {
+    /**
+     * 处理解析。
+     */
     public CurrentUser resolve(Authentication authentication) {
         if (authentication == null || !(authentication.getPrincipal() instanceof AuthUser authUser)) {
             throw new BusinessException(BusinessErrorCode.UNAUTHORIZED);

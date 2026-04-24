@@ -30,6 +30,9 @@ import org.springframework.stereotype.Service;
 public class TicketSummaryService {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    /**
+     * 处理全部。
+     */
     public TicketSummaryBundleDTO generateAll(TicketDetailDTO detail) {
         if (detail == null || detail.getTicket() == null) {
             return TicketSummaryBundleDTO.builder().build();
@@ -41,6 +44,9 @@ public class TicketSummaryService {
                 .build();
     }
 
+    /**
+     * 按视图处理。
+     */
     public TicketSummaryDTO generateForView(TicketDetailDTO detail, TicketSummaryViewEnum view) {
         if (view == null) {
             return null;
@@ -53,6 +59,9 @@ public class TicketSummaryService {
         };
     }
 
+    /**
+     * 解析View。
+     */
     public TicketSummaryViewEnum resolveView(CurrentUser operator, Ticket ticket, TicketSummaryViewEnum requestedView) {
         if (requestedView != null) {
             return requestedView;
@@ -66,6 +75,9 @@ public class TicketSummaryService {
         return TicketSummaryViewEnum.SUBMITTER;
     }
 
+    /**
+     * 构建Submitter摘要。
+     */
     private TicketSummaryDTO buildSubmitterSummary(TicketDetailDTO detail) {
         Ticket ticket = detail.getTicket();
         List<String> highlights = new ArrayList<>();
@@ -84,6 +96,9 @@ public class TicketSummaryService {
                 .build();
     }
 
+    /**
+     * 构建处理人摘要。
+     */
     private TicketSummaryDTO buildAssigneeSummary(TicketDetailDTO detail) {
         Ticket ticket = detail.getTicket();
         List<String> highlights = new ArrayList<>();
@@ -103,6 +118,9 @@ public class TicketSummaryService {
                 .build();
     }
 
+    /**
+     * 构建管理摘要。
+     */
     private TicketSummaryDTO buildAdminSummary(TicketDetailDTO detail) {
         Ticket ticket = detail.getTicket();
         RiskSummary riskSummary = evaluateRisk(detail);
@@ -117,6 +135,9 @@ public class TicketSummaryService {
                 .build();
     }
 
+    /**
+     * 处理Risk。
+     */
     private RiskSummary evaluateRisk(TicketDetailDTO detail) {
         Ticket ticket = detail.getTicket();
         List<String> risks = new ArrayList<>();
@@ -134,6 +155,9 @@ public class TicketSummaryService {
         return new RiskSummary(riskScore, risks);
     }
 
+    /**
+     * 处理优先级风险信息。
+     */
     private int appendPriorityRisk(List<String> risks, Ticket ticket) {
         if (ticket.getPriority() == null) {
             return 0;
@@ -149,6 +173,9 @@ public class TicketSummaryService {
         return 0;
     }
 
+    /**
+     * 处理状态风险信息。
+     */
     private int appendStatusRisk(List<String> risks, Ticket ticket) {
         if (ticket.getStatus() == TicketStatusEnum.PENDING_ASSIGN) {
             risks.add("工单仍处于待分配状态");
@@ -157,6 +184,9 @@ public class TicketSummaryService {
         return 0;
     }
 
+    /**
+     * 处理审批风险信息。
+     */
     private int appendApprovalRisk(List<String> risks, TicketApproval approval) {
         if (approval == null || approval.getApprovalStatus() == null) {
             return 0;
@@ -172,6 +202,9 @@ public class TicketSummaryService {
         return 0;
     }
 
+    /**
+     * 处理转派风险信息。
+     */
     private int appendTransferRisk(List<String> risks, TicketDetailDTO detail) {
         long transferCount = operationLogs(detail).stream()
                 .filter(log -> log.getOperationType() == OperationTypeEnum.TRANSFER)
@@ -183,6 +216,9 @@ public class TicketSummaryService {
         return 0;
     }
 
+    /**
+     * 处理过期风险。
+     */
     private int appendStaleRisk(List<String> risks, Ticket ticket) {
         if (isStale(ticket.getUpdatedAt())) {
             risks.add("最近 24 小时未见更新");
@@ -191,6 +227,9 @@ public class TicketSummaryService {
         return 0;
     }
 
+    /**
+     * 处理审批高亮信息。
+     */
     private void appendApprovalHighlight(List<String> highlights, TicketApproval approval) {
         if (approval == null || approval.getApprovalStatus() == null) {
             return;
@@ -198,6 +237,9 @@ public class TicketSummaryService {
         highlights.add("审批状态：" + approval.getApprovalStatus().getInfo());
     }
 
+    /**
+     * 处理类型画像高亮信息。
+     */
     private void appendTypeProfileHighlights(List<String> highlights, Map<String, Object> profile, int limit) {
         if (profile == null || profile.isEmpty()) {
             return;
@@ -211,6 +253,9 @@ public class TicketSummaryService {
         highlights.addAll(entries);
     }
 
+    /**
+     * 处理近期工作高亮信息。
+     */
     private void appendRecentWorkHighlights(List<String> highlights, TicketDetailDTO detail) {
         TicketComment latestComment = latestComment(detail);
         TicketOperationLog latestLog = latestLog(detail);
@@ -222,6 +267,9 @@ public class TicketSummaryService {
         }
     }
 
+    /**
+     * 处理评论。
+     */
     private TicketComment latestComment(TicketDetailDTO detail) {
         return comments(detail).stream()
                 .filter(comment -> comment.getCreatedAt() != null)
@@ -229,6 +277,9 @@ public class TicketSummaryService {
                 .orElse(null);
     }
 
+    /**
+     * 处理日志。
+     */
     private TicketOperationLog latestLog(TicketDetailDTO detail) {
         return operationLogs(detail).stream()
                 .filter(log -> log.getCreatedAt() != null)
@@ -236,6 +287,9 @@ public class TicketSummaryService {
                 .orElse(null);
     }
 
+    /**
+     * 处理提单人视角步骤。
+     */
     private String nextStepForSubmitter(Ticket ticket, TicketApproval approval) {
         if (approval != null && approval.getApprovalStatus() == TicketApprovalStatusEnum.PENDING) {
             return "等待审批人完成当前审批步骤。";
@@ -255,6 +309,9 @@ public class TicketSummaryService {
         return "当前流程已结束，如仍有问题可继续补充评论。";
     }
 
+    /**
+     * 处理Sentence。
+     */
     private String approvalSentence(TicketApproval approval) {
         if (approval == null || approval.getApprovalStatus() == null) {
             return "";
@@ -262,6 +319,9 @@ public class TicketSummaryService {
         return "审批状态为" + approval.getApprovalStatus().getInfo() + "。";
     }
 
+    /**
+     * 处理Sentence。
+     */
     private String assigneeSentence(Long assigneeId) {
         if (assigneeId == null) {
             return "当前尚未分配处理人，";
@@ -269,6 +329,9 @@ public class TicketSummaryService {
         return "当前由用户#" + assigneeId + " 跟进，";
     }
 
+    /**
+     * 处理Activity。
+     */
     private String latestActivity(TicketDetailDTO detail) {
         List<ActivityItem> activities = new ArrayList<>();
         comments(detail).stream()
@@ -285,10 +348,16 @@ public class TicketSummaryService {
                 .orElse("暂无协作记录");
     }
 
+    /**
+     * 处理过期状态。
+     */
     private boolean isStale(LocalDateTime updatedAt) {
         return updatedAt != null && updatedAt.isBefore(LocalDateTime.now().minusHours(24));
     }
 
+    /**
+     * 处理等级编码。
+     */
     private String riskLevelCode(int riskScore) {
         if (riskScore >= 4) {
             return "HIGH";
@@ -299,6 +368,9 @@ public class TicketSummaryService {
         return "LOW";
     }
 
+    /**
+     * 处理等级说明。
+     */
     private String riskLevelInfo(int riskScore) {
         return switch (riskLevelCode(riskScore)) {
             case "HIGH" -> "高";
@@ -307,6 +379,9 @@ public class TicketSummaryService {
         };
     }
 
+    /**
+     * 处理标签。
+     */
     private String profileLabel(String key) {
         return switch (key) {
             case "symptom" -> "故障现象";
@@ -327,6 +402,9 @@ public class TicketSummaryService {
         };
     }
 
+    /**
+     * 处理文本。
+     */
     private String summarizeText(String text, int maxLength) {
         if (text == null) {
             return "";
@@ -338,18 +416,30 @@ public class TicketSummaryService {
         return normalized.substring(0, Math.max(maxLength - 1, 1)) + "…";
     }
 
+    /**
+     * 处理标签。
+     */
     private String userLabel(Long userId, String fallback) {
         return userId == null ? fallback : "用户#" + userId;
     }
 
+    /**
+     * 处理时间。
+     */
     private String formatTime(LocalDateTime time) {
         return time == null ? "未知时间" : TIME_FORMATTER.format(time);
     }
 
+    /**
+     * 处理评论。
+     */
     private List<TicketComment> comments(TicketDetailDTO detail) {
         return detail.getComments() == null ? Collections.emptyList() : detail.getComments();
     }
 
+    /**
+     * 处理日志列表。
+     */
     private List<TicketOperationLog> operationLogs(TicketDetailDTO detail) {
         return detail.getOperationLogs() == null ? Collections.emptyList() : detail.getOperationLogs();
     }

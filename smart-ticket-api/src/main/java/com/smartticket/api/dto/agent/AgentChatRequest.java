@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Agent 对话请求。
+ * 智能体对话请求。
  *
  * <p>该对象只承载 HTTP 入参，不包含任何业务规则。具体意图识别、
  * Tool 编排和业务执行由 agent 与 biz 模块处理。</p>

@@ -15,6 +15,9 @@ public class TicketKnowledgeEmbeddingRepository {
     /** 工单知识切片 Mapper。 */
     private final TicketKnowledgeEmbeddingMapper mapper;
 
+    /**
+     * 构造工单知识向量仓储。
+     */
     public TicketKnowledgeEmbeddingRepository(TicketKnowledgeEmbeddingMapper mapper) {
         this.mapper = mapper;
     }

@@ -28,15 +28,24 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 工单队列控制器。
+ */
 @Validated
 @RestController
 @RequestMapping("/api/ticket-queues")
-@Tag(name = "Ticket Queues", description = "Ticket queue management")
+@Tag(name = "工单队列", description = "工单队列管理")
 public class TicketQueueController {
+    // 工单队列服务
     private final TicketQueueService ticketQueueService;
+    // 当前用户解析器
     private final CurrentUserResolver currentUserResolver;
+    // 装配器
     private final P1ConfigAssembler assembler;
 
+    /**
+     * 构造工单队列控制器。
+     */
     public TicketQueueController(
             TicketQueueService ticketQueueService,
             CurrentUserResolver currentUserResolver,
@@ -47,8 +56,11 @@ public class TicketQueueController {
         this.assembler = assembler;
     }
 
+    /**
+     * 创建。
+     */
     @PostMapping
-    @Operation(summary = "Create ticket queue", description = "Admin only")
+    @Operation(summary = "创建工单队列", description = "仅管理员可操作")
     public ApiResponse<TicketQueueVO> create(
             Authentication authentication,
             @Valid @RequestBody TicketQueueRequest request
@@ -57,8 +69,11 @@ public class TicketQueueController {
         return ApiResponse.success(assembler.toQueueVO(queue));
     }
 
+    /**
+     * 更新。
+     */
     @PutMapping("/{queueId}")
-    @Operation(summary = "Update ticket queue", description = "Admin only")
+    @Operation(summary = "更新工单队列", description = "仅管理员可操作")
     public ApiResponse<TicketQueueVO> update(
             Authentication authentication,
             @PathVariable("queueId") Long queueId,
@@ -68,8 +83,11 @@ public class TicketQueueController {
         return ApiResponse.success(assembler.toQueueVO(queue));
     }
 
+    /**
+     * 更新启用。
+     */
     @PatchMapping("/{queueId}/enabled")
-    @Operation(summary = "Enable or disable ticket queue", description = "Admin only")
+    @Operation(summary = "启用或停用工单队列", description = "仅管理员可操作")
     public ApiResponse<TicketQueueVO> updateEnabled(
             Authentication authentication,
             @PathVariable("queueId") Long queueId,
@@ -79,14 +97,20 @@ public class TicketQueueController {
         return ApiResponse.success(assembler.toQueueVO(queue));
     }
 
+    /**
+     * 获取详情。
+     */
     @GetMapping("/{queueId}")
-    @Operation(summary = "Get ticket queue")
+    @Operation(summary = "获取工单队列")
     public ApiResponse<TicketQueueVO> get(@PathVariable("queueId") Long queueId) {
         return ApiResponse.success(assembler.toQueueVO(ticketQueueService.get(queueId)));
     }
 
+    /**
+     * 分页查询。
+     */
     @GetMapping
-    @Operation(summary = "Page ticket queues")
+    @Operation(summary = "分页查询工单队列")
     public ApiResponse<PageResult<TicketQueueVO>> page(
             @Min(value = 1, message = "pageNo must be >= 1") @RequestParam(value = "pageNo", defaultValue = "1") int pageNo,
             @Min(value = 1, message = "pageSize must be >= 1")
@@ -111,6 +135,9 @@ public class TicketQueueController {
                 .build());
     }
 
+    /**
+     * 转换为命令。
+     */
     private TicketQueueCommandDTO toCommand(TicketQueueRequest request) {
         return TicketQueueCommandDTO.builder()
                 .queueName(request.getQueueName())

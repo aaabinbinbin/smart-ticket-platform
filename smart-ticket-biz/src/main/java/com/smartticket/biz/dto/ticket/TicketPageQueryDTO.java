@@ -17,11 +17,17 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketPageQueryDTO {
+    // 分页编号
     private int pageNo;
+    // 分页Size
     private int pageSize;
+    // 状态
     private TicketStatusEnum status;
+    // 类型
     private TicketTypeEnum type;
+    // 分类
     private TicketCategoryEnum category;
+    // 优先级
     private TicketPriorityEnum priority;
 }
 

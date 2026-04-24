@@ -2,6 +2,9 @@ package com.smartticket.domain.enums;
 
 import java.util.Arrays;
 
+/**
+ * 操作类型枚举定义。
+ */
 public enum OperationTypeEnum implements CodeInfoEnum {
     CREATE("CREATE", "创建工单"),
     ASSIGN("ASSIGN", "分配处理人"),
@@ -20,7 +23,9 @@ public enum OperationTypeEnum implements CodeInfoEnum {
     SLA_BREACH("SLA_BREACH", "SLA 违约"),
     SLA_ESCALATE("SLA_ESCALATE", "SLA 升级");
 
+    // 编码
     private final String code;
+    // info
     private final String info;
 
     OperationTypeEnum(String code, String info) {
@@ -28,16 +33,25 @@ public enum OperationTypeEnum implements CodeInfoEnum {
         this.info = info;
     }
 
+    /**
+     * 获取编码。
+     */
     @Override
     public String getCode() {
         return code;
     }
 
+    /**
+     * 获取Info。
+     */
     @Override
     public String getInfo() {
         return info;
     }
 
+    /**
+     * 处理编码。
+     */
     public static OperationTypeEnum fromCode(String code) {
         return Arrays.stream(values())
                 .filter(value -> value.code.equals(code))

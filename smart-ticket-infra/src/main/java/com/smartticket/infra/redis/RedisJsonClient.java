@@ -16,9 +16,14 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class RedisJsonClient {
+    // stringRedis模板
     private final StringRedisTemplate stringRedisTemplate;
+    // object映射接口
     private final ObjectMapper objectMapper;
 
+    /**
+     * 构造RedisJSON客户端。
+     */
     public RedisJsonClient(StringRedisTemplate stringRedisTemplate) {
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = new ObjectMapper()
@@ -39,6 +44,9 @@ public class RedisJsonClient {
         }
     }
 
+    /**
+     * 设置数据。
+     */
     public void set(String key, Object value, Duration ttl) {
         try {
             String json = objectMapper.writeValueAsString(value);
@@ -48,10 +56,16 @@ public class RedisJsonClient {
         }
     }
 
+    /**
+     * 按不存在时处理。
+     */
     public Boolean setIfAbsent(String key, String value, Duration ttl) {
         return stringRedisTemplate.opsForValue().setIfAbsent(key, value, ttl);
     }
 
+    /**
+     * 处理delete。
+     */
     public void delete(String key) {
         stringRedisTemplate.delete(key);
     }

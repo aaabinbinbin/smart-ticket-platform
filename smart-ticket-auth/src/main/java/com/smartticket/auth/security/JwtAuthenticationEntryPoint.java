@@ -16,6 +16,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
 
+    /**
+     * 处理认证入口响应。
+     */
     @Override
     public void commence(
             HttpServletRequest request,

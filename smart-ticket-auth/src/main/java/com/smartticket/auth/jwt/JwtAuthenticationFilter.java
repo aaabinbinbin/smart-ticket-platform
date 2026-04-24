@@ -21,17 +21,27 @@ import org.springframework.web.filter.OncePerRequestFilter;
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    // HEADER
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    // PREFIX
     private static final String BEARER_PREFIX = "Bearer ";
 
+    // JWT令牌提供器
     private final JwtTokenProvider jwtTokenProvider;
+    // 用户Details服务
     private final CustomUserDetailsService userDetailsService;
 
+    /**
+     * 构造JWTAuthenticationFilter。
+     */
     public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, CustomUserDetailsService userDetailsService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userDetailsService = userDetailsService;
     }
 
+    /**
+     * 执行FilterInternal。
+     */
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
@@ -62,6 +72,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    /**
+     * 解析令牌。
+     */
     private String resolveToken(HttpServletRequest request) {
         String bearerToken = request.getHeader(AUTHORIZATION_HEADER);
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith(BEARER_PREFIX)) {

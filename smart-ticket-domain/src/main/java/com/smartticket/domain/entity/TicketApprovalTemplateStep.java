@@ -6,16 +6,26 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 工单审批模板步骤类。
+ */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketApprovalTemplateStep {
+    // ID
     private Long id;
+    // 模板ID
     private Long templateId;
+    // 步骤Order
     private Integer stepOrder;
+    // 步骤Name
     private String stepName;
+    // 审批人ID
     private Long approverId;
+    // 创建时间
     private LocalDateTime createdAt;
+    // 更新时间
     private LocalDateTime updatedAt;
 }

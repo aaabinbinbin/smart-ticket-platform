@@ -26,6 +26,9 @@ public class ApiResponse<T> {
     /** 响应数据。 */
     private T data;
 
+    /**
+     * 处理成功状态。
+     */
     public static <T> ApiResponse<T> success(T data) {
         ApiResponse<T> response = new ApiResponse<>();
         response.setSuccess(true);
@@ -35,6 +38,9 @@ public class ApiResponse<T> {
         return response;
     }
 
+    /**
+     * 处理失败信息。
+     */
     public static <T> ApiResponse<T> failure(String code, String message) {
         ApiResponse<T> response = new ApiResponse<>();
         response.setSuccess(false);
