@@ -15,6 +15,7 @@ import com.smartticket.domain.entity.TicketKnowledgeBuildTask;
 import com.smartticket.domain.entity.TicketGroup;
 import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import com.smartticket.domain.enums.TicketStatusTransition;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -295,6 +296,8 @@ public class TicketWorkflowService {
 
     /**
      * 校验工单状态流转是否合法。
+     *
+     * <p>使用 TicketStatusTransition 枚举转换表校验，避免手写 if/else 链。</p>
      */
     private void validateStatusTransition(CurrentUser operator, Ticket ticket, TicketStatusEnum targetStatus) {
         TicketStatusEnum current = ticket.getStatus();
@@ -302,25 +305,22 @@ public class TicketWorkflowService {
             throw new BusinessException(BusinessErrorCode.TICKET_STATUS_UNCHANGED);
         }
 
-        if (current == TicketStatusEnum.PENDING_ASSIGN && targetStatus == TicketStatusEnum.PROCESSING) {
+        TicketStatusTransition.TransitionRule rule = TicketStatusTransition.INSTANCE
+                .findRule(current, targetStatus)
+                .orElseThrow(() -> new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS_TRANSITION));
+
+        if (rule.isRequiresAdmin()) {
             support.permissionService().requireAdmin(operator);
-            if (ticket.getAssigneeId() == null) {
-                throw new BusinessException(BusinessErrorCode.TICKET_ASSIGNEE_REQUIRED);
-            }
-            return;
         }
-
-        if (current == TicketStatusEnum.PROCESSING && targetStatus == TicketStatusEnum.RESOLVED) {
+        if (rule.isRequiresAssignee() && ticket.getAssigneeId() == null) {
+            throw new BusinessException(BusinessErrorCode.TICKET_ASSIGNEE_REQUIRED);
+        }
+        if (rule.isRequiresResolvePermission()) {
             support.permissionService().requireResolve(operator, ticket);
-            return;
         }
-
-        if (current == TicketStatusEnum.RESOLVED && targetStatus == TicketStatusEnum.CLOSED) {
+        if (rule.isRequiresClosePermission()) {
             support.permissionService().requireClose(operator, ticket);
-            return;
         }
-
-        throw new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS_TRANSITION);
     }
 
     /**

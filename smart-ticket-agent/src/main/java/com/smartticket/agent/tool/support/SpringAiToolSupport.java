@@ -11,6 +11,7 @@ import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolRequest;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
+import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.Map;
 import org.springframework.ai.chat.model.ToolContext;
@@ -83,6 +84,13 @@ public class SpringAiToolSupport {
             AgentIntent intent,
             AgentToolParameters parameters
     ) {
+        // 检查是否已达最大工具调用次数限制
+        SpringAiToolCallState state = get(toolContext, STATE_KEY, SpringAiToolCallState.class);
+        if (state != null && !state.canContinue()) {
+            return AgentToolResults.failed(tool.name(),
+                    "已达单次对话最大工具调用次数限制，请总结已有结果回复用户。", null);
+        }
+
         CurrentUser currentUser = require(toolContext, CURRENT_USER_KEY, CurrentUser.class);
         AgentSessionContext sessionContext = get(toolContext, SESSION_CONTEXT_KEY, AgentSessionContext.class);
         String message = get(toolContext, MESSAGE_KEY, String.class);
@@ -151,7 +159,7 @@ public class SpringAiToolSupport {
     }
 
     /**
-     * 捕获 Tool 执行结果，供 AgentFacade 更新上下文和组装响应。
+     * 捕获 Tool 执行结果，追加到调用历史记录中。
      */
     private void capture(ToolContext toolContext, String toolName, AgentToolResult result) {
         if (toolContext == null) {
@@ -163,8 +171,7 @@ public class SpringAiToolSupport {
         }
         Object stateValue = context.get(STATE_KEY);
         if (stateValue instanceof SpringAiToolCallState state) {
-            state.setToolName(toolName);
-            state.setResult(result);
+            state.record(toolName, result);
         }
     }
 }

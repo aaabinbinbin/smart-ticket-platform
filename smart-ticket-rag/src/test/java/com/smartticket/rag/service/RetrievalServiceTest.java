@@ -40,13 +40,14 @@ class RetrievalServiceTest {
                 false
         );
         when(embeddingModelClient.embed("历史工单 相似问题 处理经验 登录失败")).thenReturn(List.of(1.0d, 0.0d));
-        when(knowledgeRepository.findActive()).thenReturn(List.of(TicketKnowledge.builder()
+        TicketKnowledge activeKnowledge = TicketKnowledge.builder()
                 .id(1L)
                 .ticketId(1001L)
                 .contentSummary("登录失败处理方案")
                 .status("ACTIVE")
-                .build()));
-        when(embeddingRepository.findAll()).thenReturn(List.of(TicketKnowledgeEmbedding.builder()
+                .build();
+        when(knowledgeRepository.findActive()).thenReturn(List.of(activeKnowledge));
+        when(embeddingRepository.findByKnowledgeIds(List.of(1L))).thenReturn(List.of(TicketKnowledgeEmbedding.builder()
                 .id(10L)
                 .knowledgeId(1L)
                 .chunkIndex(0)
@@ -82,12 +83,12 @@ class RetrievalServiceTest {
         );
         when(embeddingModelClient.embed("历史工单 相似问题 处理经验 测试环境无法登录 登录时报 500")).thenReturn(List.of(1.0d));
         when(knowledgeRepository.findActive()).thenReturn(List.of());
-        when(embeddingRepository.findAll()).thenReturn(List.of());
 
         RetrievalResult result = retrievalService.checkSimilarCasesBeforeCreate("帮我创建一个测试环境无法登录", "登录时报 500", 3);
 
         assertTrue(result.getRewrittenQuery().contains("测试环境无法登录 登录时报 500"));
         assertFalse(result.getRewrittenQuery().contains("帮我创建一个"));
+        assertEquals(0, result.getHits().size());
     }
 
     private RagFeedbackService feedbackService() {

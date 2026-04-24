@@ -37,6 +37,14 @@ public class TicketKnowledgeEmbeddingRepository {
         return mapper.findAll();
     }
 
+    /** 根据知识 ID 列表批量查询切片，只加载需要的切片数据。 */
+    public List<TicketKnowledgeEmbedding> findByKnowledgeIds(List<Long> knowledgeIds) {
+        if (knowledgeIds == null || knowledgeIds.isEmpty()) {
+            return List.of();
+        }
+        return mapper.findByKnowledgeIds(knowledgeIds);
+    }
+
     /** 删除某条知识已有切片，用于重新构建时保持幂等。 */
     public int deleteByKnowledgeId(Long knowledgeId) {
         return mapper.deleteByKnowledgeId(knowledgeId);

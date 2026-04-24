@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 fix_userprompt.py)",
+      "Bash(python3 *)",
+      "Bash(py -c \"print\\('hello'\\)\")",
+      "Bash(/c/Python312/python -c \"print\\('hello'\\)\")",
+      "Bash(/c/Users/16850/AppData/Local/Programs/Python/Python312/python -c \"print\\('hello'\\)\")",
+      "Bash(python -c \"print\\('hello'\\)\")",
+      "Bash(python fix_userprompt2.py)",
+      "Bash(python -c ' *)",
+      "Bash(mvn compile *)",
+      "Bash(mvn test *)",
+      "Bash(grep -rn '\\\\\\\\u00' --include=\"*.java\" smart-ticket-agent/src/main/java/com/smartticket/agent/ smart-ticket-api/src/main/java/com/smartticket/api/ smart-ticket-domain/src/)",
+      "Bash(grep -rn '\\\\\\\\\\\\\\\\u00[0-9a-fA-F]\\\\{2\\\\}' --include=\"*.java\" smart-ticket-rag/ smart-ticket-biz/ smart-ticket-domain/ smart-ticket-auth/ smart-ticket-api/ smart-ticket-agent/)",
+      "Bash(grep -rn \"\\\\\\\\\\\\\\\\u00\" --include=\"*.java\" src/)",
+      "Bash(grep -rn \"\\\\\\\\\\\\\\\\u00[0-9a-fA-F]\\\\\\\\{4\\\\\\\\}\" --include=\"*.java\" smart-ticket-*/ smart-ticket-*/src/)",
+      "Bash(grep -rn '\\\\\\\\u[0-9a-fA-F]\\\\{4\\\\}' --include=\"*.java\" smart-ticket-*/src/main/)",
+      "Bash(python fix_unicode.py)",
+      "Bash(grep -n \"//.*\" smart-ticket-domain/src/test/java/com/smartticket/domain/enums/TicketStatusTransitionTest.java)",
+      "Bash(grep -v \"//$\")",
+      "Bash(grep -n \"//.*\" smart-ticket-agent/src/main/java/com/smartticket/agent/service/IntentRouter.java)",
+      "Bash(grep -rn '\\\\\\\\u00[0-9a-fA-F]\\\\{4\\\\}' --include=\"*.java\" smart-ticket-*/src/)",
+      "Bash(git stash *)"
+    ]
+  }
+}

@@ -9,5 +9,7 @@ public enum AgentPlanStage {
     CHECK_CONTEXT,
     EXECUTE_SKILL,
     SUMMARIZE_RESULT,
-    WAIT_USER
+    WAIT_USER,
+    /** LLM 驱动的多步推理执行阶段（ReAct 循环）。 */
+    AGENT_THINKING
 }

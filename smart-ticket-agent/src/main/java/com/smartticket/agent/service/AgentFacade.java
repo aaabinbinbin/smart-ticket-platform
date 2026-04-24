@@ -23,6 +23,7 @@ import com.smartticket.agent.tool.parameter.AgentToolParameterField;
 import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.agent.tool.support.SpringAiToolCallState;
+import com.smartticket.agent.tool.support.SpringAiToolCallState.AgentToolCallRecord;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.agent.trace.AgentTraceContext;
 import com.smartticket.agent.trace.AgentTraceService;
@@ -42,39 +43,26 @@ import org.springframework.stereotype.Service;
 /**
  * 智能体对话门面服务。
  *
- * <p>负责串联意图路由、执行守卫、计划编排、参数提取、工具调用、记忆更新和轨迹记录。
- * 当 Spring AI 工具调用可用时优先走自动编排，否则回退到确定性工具执行流程。</p>
+ * <p>负责串联意图路由、ReAct 智能体循环、执行守卫、工具调用、记忆更新和轨迹记录。
+ * 当 Spring AI 可用时优先走 LLM 驱动的多步推理循环（ReAct），让 LLM 自主决定
+ * 调用哪些工具、以什么顺序调用；否则回退到确定性工具执行流程。</p>
  */
 @Service
 public class AgentFacade {
     private static final Logger log = LoggerFactory.getLogger(AgentFacade.class);
 
-    // 对话客户端提供器
     private final ObjectProvider<ChatClient> chatClientProvider;
-    // 对话启用
     private final boolean chatEnabled;
-    // 意图路由器
     private final IntentRouter intentRouter;
-    // 会话服务
     private final AgentSessionService sessionService;
-    // 执行守卫
     private final AgentExecutionGuard executionGuard;
-    // 智能体规划器
     private final AgentPlanner agentPlanner;
-    // 技能注册表
     private final SkillRegistry skillRegistry;
-    // 记忆服务
     private final AgentMemoryService memoryService;
-    // 轨迹服务
     private final AgentTraceService traceService;
-    // 提示词模板服务
     private final PromptTemplateService promptTemplateService;
-    // 参数提取器
     private final AgentToolParameterExtractor parameterExtractor;
 
-    /**
-     * 构造智能体门面。
-     */
     public AgentFacade(
             ObjectProvider<ChatClient> chatClientProvider,
             @Value("${smart-ticket.ai.chat.enabled:false}") boolean chatEnabled,
@@ -101,14 +89,19 @@ public class AgentFacade {
         this.parameterExtractor = parameterExtractor;
     }
 
+    /* ==========================================================
+     * 入口
+     * ========================================================== */
+
     /**
-     * 处理对话。
+     * 处理用户对话消息。
      */
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
         boolean springAiReady = isSpringAiChatReady();
         AgentTraceContext trace = traceService.start(currentUser, sessionId, message);
         AgentSessionContext context = sessionService.load(sessionId);
         memoryService.hydrate(currentUser, context);
+
         if (hasPendingConfirmation(context)) {
             return continuePendingConfirmation(currentUser, sessionId, message, context, springAiReady, trace);
         }
@@ -129,18 +122,155 @@ public class AgentFacade {
             return clarifyLowConfidenceIntent(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
         }
 
+        // ReAct 智能体循环：LLM 自主决定工具调用序列
         if (springAiReady) {
-            Optional<AgentChatResult> springAiResult = trySpringAiToolCalling(currentUser, sessionId, message, context, route, plan, trace);
-            if (springAiResult.isPresent()) {
-                return springAiResult.get();
+            Optional<AgentChatResult> reactResult = agentReActLoop(
+                    currentUser, sessionId, message, context, route, plan, trace);
+            if (reactResult.isPresent()) {
+                return reactResult.get();
             }
         }
+
+        // 回退：确定性单步执行
         return executeDeterministicFallback(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
     }
 
+    /* ==========================================================
+     * ReAct 智能体循环（核心改造）
+     * ========================================================== */
+
     /**
-     * 处理低置信度意图。
+     * ReAct 智能体循环：注册全部工具，让 LLM 自主推理决策，Spring AI 内部处理多步工具调用。
      */
+    private Optional<AgentChatResult> agentReActLoop(
+            CurrentUser currentUser,
+            String sessionId,
+            String message,
+            AgentSessionContext context,
+            IntentRoute route,
+            AgentPlan plan,
+            AgentTraceContext trace
+    ) {
+        ChatClient chatClient = chatClientProvider.getIfAvailable();
+        if (chatClient == null) {
+            return Optional.empty();
+        }
+
+        SpringAiToolCallState callState = new SpringAiToolCallState();
+        Map<String, Object> toolContext = new HashMap<>();
+        toolContext.put(SpringAiToolSupport.CURRENT_USER_KEY, currentUser);
+        toolContext.put(SpringAiToolSupport.SESSION_CONTEXT_KEY, context);
+        toolContext.put(SpringAiToolSupport.MESSAGE_KEY, message);
+        toolContext.put(SpringAiToolSupport.ROUTE_KEY, route);
+        toolContext.put(SpringAiToolSupport.STATE_KEY, callState);
+
+        try {
+            agentPlanner.beforeExecute(plan);
+            traceService.step(trace, "agent", "react-loop", null, "START", route.getIntent().name());
+
+            String fullContext = buildConversationContext(context, message, route);
+            String system = agentSystemPrompt();
+
+            String content = chatClient.prompt()
+                    .system(system)
+                    .user(fullContext)
+                    .tools(allTools())
+                    .toolContext(toolContext)
+                    .call()
+                    .content();
+
+            // 处理多步工具调用结果
+            List<AgentToolCallRecord> allCalls = callState.getAllCalls();
+            for (AgentToolCallRecord call : allCalls) {
+                traceService.step(trace, "agent", "tool-call", call.getToolName(),
+                        call.getResult() != null ? call.getResult().getStatus().name() : "UNKNOWN", "react-step");
+            }
+            agentPlanner.recordToolCalls(plan, allCalls);
+
+            // 更新会话和记忆
+            AgentToolResult lastResult = callState.getResult();
+            for (AgentToolCallRecord call : allCalls) {
+                updateSessionAfterTool(currentUser, sessionId, context, route, message, null, call.getResult());
+            }
+
+            String finalReply = hasText(content) ? content : (lastResult != null ? lastResult.getReply() : "");
+            traceService.finish(trace, route, plan, null, lastResult, finalReply, true, false);
+            return Optional.of(toChatResult(sessionId, route, context, lastResult, finalReply, true, plan, trace));
+
+        } catch (RuntimeException ex) {
+            log.warn("Agent ReAct 循环失败，使用确定性回退流程：sessionId={}, reason={}", sessionId, ex.getMessage());
+            traceService.step(trace, "agent", "react-loop", null, "FAILED", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 返回全部 LLM 可调用的工具对象数组。Spring AI 据此向 LLM 展示全部函数定义。
+     */
+    private Object[] allTools() {
+        return skillRegistry.allSkills().stream()
+                .map(AgentSkill::tool)
+                .toArray(Object[]::new);
+    }
+
+    /**
+     * 构建系统提示词：基于 v2 智能体 prompt，描述完整能力空间。
+     */
+    private String agentSystemPrompt() {
+        String base = promptTemplateService.content("agent-user-prompt",
+                "你是一个企业智能工单平台的 AI 智能体。你可以使用以下工具："
+                + "queryTicket（查询工单）、createTicket（创建工单）、"
+                + "transferTicket（转派工单，高风险操作）、searchHistory（检索历史案例）。");
+        // 附加工具详细说明
+        String createRef = promptTemplateService.content("create-ticket-completion", "");
+        String historyRef = promptTemplateService.content("history-summary", "");
+        String resultGuide = promptTemplateService.content("result-explanation", "");
+        StringBuilder sb = new StringBuilder(base);
+        if (hasText(createRef)) sb.append("\n\n【createTicket 工具说明】\n").append(createRef);
+        if (hasText(historyRef)) sb.append("\n\n【searchHistory 工具说明】\n").append(historyRef);
+        if (hasText(resultGuide)) sb.append("\n\n【回复风格】\n").append(resultGuide);
+        return sb.toString();
+    }
+
+    /**
+     * 构建用户上下文：包含对话历史、当前消息、系统路由信息。
+     */
+    private String buildConversationContext(AgentSessionContext context, String message, IntentRoute route) {
+        StringBuilder sb = new StringBuilder();
+
+        // 对话历史
+        List<String> recentMessages = context != null ? context.getRecentMessages() : null;
+        if (recentMessages != null && !recentMessages.isEmpty()) {
+            sb.append("## 对话历史\n");
+            for (String msg : recentMessages) {
+                sb.append(msg).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        // 当前消息
+        sb.append("## 当前用户消息\n").append(message).append("\n\n");
+
+        // 系统已识别的上下文
+        sb.append("## 系统上下文\n");
+        sb.append("系统识别意图：").append(route.getIntent().name());
+        sb.append("（置信度：").append(String.format("%.0f%%", route.getConfidence() * 100)).append("）\n");
+        sb.append("识别依据：").append(route.getReason()).append("\n");
+        if (context != null && context.getActiveTicketId() != null) {
+            sb.append("当前活跃工单 ID：").append(context.getActiveTicketId()).append("\n");
+        }
+
+        // 工作记忆摘要
+        if (context != null && context.getWorkingMemory() != null && context.getWorkingMemory().getLastToolSummary() != null) {
+            sb.append("上次操作摘要：").append(context.getWorkingMemory().getLastToolSummary()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /* ==========================================================
+     * 低置信度澄清
+     * ========================================================== */
+
     private AgentChatResult clarifyLowConfidenceIntent(
             CurrentUser currentUser,
             String sessionId,
@@ -155,7 +285,7 @@ public class AgentFacade {
         AgentToolResult toolResult = AgentToolResult.builder()
                 .invoked(false)
                 .toolName("clarifyIntent")
-                .reply("\u6211\u6682\u65f6\u65e0\u6cd5\u5224\u65ad\u4f60\u7684\u76ee\u6807\u3002\u8bf7\u660e\u786e\u8bf4\u660e\u4f60\u662f\u60f3\u67e5\u8be2\u5de5\u5355\u3001\u521b\u5efa\u5de5\u5355\u3001\u8f6c\u6d3e\u5de5\u5355\uff0c\u8fd8\u662f\u68c0\u7d22\u5386\u53f2\u6848\u4f8b\u3002")
+                .reply("我暂时无法判断你的目标。请明确说明你是想查询工单、创建工单、转派工单，还是检索历史案例。")
                 .build();
         traceService.step(trace, "clarify", "reply", null, "NEED_USER", route.getReason());
         updateSessionAfterTool(currentUser, sessionId, context, route, message, null, toolResult);
@@ -163,76 +293,10 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
-    /**
-     * 处理 Spring AI 工具调用。
-     */
-    private Optional<AgentChatResult> trySpringAiToolCalling(
-            CurrentUser currentUser,
-            String sessionId,
-            String message,
-            AgentSessionContext context,
-            IntentRoute route,
-            AgentPlan plan,
-            AgentTraceContext trace
-    ) {
-        ChatClient chatClient = chatClientProvider.getIfAvailable();
-        if (chatClient == null) {
-            return Optional.empty();
-        }
+    /* ==========================================================
+     * 确定性回退流程（Spring AI 不可用时）
+     * ========================================================== */
 
-        SpringAiToolCallState state = new SpringAiToolCallState();
-        Map<String, Object> toolContext = new HashMap<>();
-        toolContext.put(SpringAiToolSupport.CURRENT_USER_KEY, currentUser);
-        toolContext.put(SpringAiToolSupport.SESSION_CONTEXT_KEY, context);
-        toolContext.put(SpringAiToolSupport.MESSAGE_KEY, message);
-        toolContext.put(SpringAiToolSupport.ROUTE_KEY, route);
-        toolContext.put(SpringAiToolSupport.STATE_KEY, state);
-
-        try {
-            agentPlanner.beforeExecute(plan);
-            traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "START", route.getIntent().name());
-            String promptCode = promptCodeFor(route.getIntent());
-            trace.setPromptVersion(promptCode + ":" + promptTemplateService.version(promptCode));
-            traceService.step(trace, "prompt", "load", promptCode, trace.getPromptVersion(), "system prompt");
-            String content = chatClient.prompt()
-                    .system(systemPrompt(route.getIntent()))
-                    .user(userPrompt(message, route))
-                    .tools(springAiToolFor(route.getIntent()))
-                    .toolContext(toolContext)
-                    .call()
-                    .content();
-            AgentToolResult toolResult = state.getResult();
-            if (toolResult == null) {
-                log.info("Spring AI 工具调用未产出工具结果，使用确定性回退流程：sessionId={}", sessionId);
-                traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "NO_TOOL_RESULT", null);
-                return Optional.empty();
-            }
-            syncCreatePendingAction(context, route, null, message, toolResult);
-            agentPlanner.afterTool(plan, toolResult);
-            updateSessionAfterTool(currentUser, sessionId, context, route, message, null, toolResult);
-            traceService.step(trace, "spring-ai", "tool-call", toolResult.getToolName(), toolResult.getStatus().name(), "success");
-            String finalReply = hasText(content) ? content : toolResult.getReply();
-            traceService.finish(trace, route, plan, null, toolResult, finalReply, true, false);
-            return Optional.of(toChatResult(
-                    sessionId,
-                    route,
-                    context,
-                    toolResult,
-                    finalReply,
-                    true,
-                    plan,
-                    trace
-            ));
-        } catch (RuntimeException ex) {
-            log.warn("Spring AI 工具调用失败，使用确定性回退流程：sessionId={}, reason={}", sessionId, ex.getMessage());
-            traceService.step(trace, "spring-ai", "tool-call", plan.getNextSkillCode(), "FAILED", ex.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    /**
-     * 执行确定性回退流程。
-     */
     private AgentChatResult executeDeterministicFallback(
             CurrentUser currentUser,
             String sessionId,
@@ -291,9 +355,10 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
-    /**
-     * 处理待确认状态。
-     */
+    /* ==========================================================
+     * 待确认 / 待创建处理（保持不变）
+     * ========================================================== */
+
     private AgentChatResult continuePendingConfirmation(
             CurrentUser currentUser,
             String sessionId,
@@ -306,7 +371,7 @@ public class AgentFacade {
         IntentRoute route = IntentRoute.builder()
                 .intent(pendingAction.getPendingIntent())
                 .confidence(0.99d)
-                .reason("\u7ee7\u7eed\u7b49\u5f85\u9ad8\u98ce\u9669\u64cd\u4f5c\u786e\u8ba4")
+                .reason("继续等待高风险操作确认")
                 .build();
         AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
         context.setPlanState(plan);
@@ -318,7 +383,7 @@ public class AgentFacade {
                     .invoked(false)
                     .status(AgentToolStatus.FAILED)
                     .toolName(pendingAction.getPendingToolName())
-                    .reply("\u5df2\u53d6\u6d88\u672c\u6b21\u9ad8\u98ce\u9669\u64cd\u4f5c\uff0c\u672a\u6267\u884c\u4efb\u4f55\u53d8\u66f4\u3002")
+                    .reply("已取消本次高风险操作，未执行任何变更。")
                     .build();
             updateSessionAfterTool(currentUser, sessionId, context, route, message, pendingAction.getPendingParameters(), toolResult);
             agentPlanner.afterTool(plan, toolResult);
@@ -331,7 +396,7 @@ public class AgentFacade {
                     .invoked(false)
                     .status(AgentToolStatus.NEED_MORE_INFO)
                     .toolName(pendingAction.getPendingToolName())
-                    .reply(pendingAction.getConfirmationSummary() + "\n\n\u8bf7\u56de\u590d\u201c\u786e\u8ba4\u6267\u884c\u201d\u7ee7\u7eed\uff0c\u6216\u56de\u590d\u201c\u53d6\u6d88\u201d\u653e\u5f03\u3002")
+                    .reply(pendingAction.getConfirmationSummary() + "\n\n请回复「确认执行」继续，或回复「取消」放弃。")
                     .build();
             updateSessionAfterTool(currentUser, sessionId, context, route, message, pendingAction.getPendingParameters(), toolResult);
             traceService.finish(trace, route, plan, pendingAction.getPendingParameters(), toolResult, toolResult.getReply(), false, false);
@@ -355,9 +420,6 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
-    /**
-     * 处理待创建状态。
-     */
     private AgentChatResult continuePendingCreate(
             CurrentUser currentUser,
             String sessionId,
@@ -369,7 +431,7 @@ public class AgentFacade {
         IntentRoute route = IntentRoute.builder()
                 .intent(AgentIntent.CREATE_TICKET)
                 .confidence(0.99d)
-                .reason("\u7ee7\u7eed\u8865\u5168\u5f85\u521b\u5efa\u5de5\u5355\u8349\u7a3f")
+                .reason("继续补全待创建工单草稿")
                 .build();
         AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
         context.setPlanState(plan);
@@ -380,7 +442,7 @@ public class AgentFacade {
                     .invoked(false)
                     .status(AgentToolStatus.FAILED)
                     .toolName(toolForIntent(AgentIntent.CREATE_TICKET).name())
-                    .reply("\u5df2\u53d6\u6d88\u672c\u6b21\u5de5\u5355\u521b\u5efa\u3002\u4f60\u53ef\u4ee5\u968f\u65f6\u91cd\u65b0\u53d1\u8d77\u65b0\u7684\u521b\u5efa\u8bf7\u6c42\u3002")
+                    .reply("已取消本次工单创建。你可以随时重新发起新的创建请求。")
                     .build();
             updateSessionAfterTool(currentUser, sessionId, context, route, message, null, toolResult);
             agentPlanner.afterTool(plan, toolResult);
@@ -410,9 +472,10 @@ public class AgentFacade {
         return toChatResult(sessionId, route, context, toolResult, toolResult.getReply(), springAiReady, plan, trace);
     }
 
-    /**
-     * 在工具执行后更新会话。
-     */
+    /* ==========================================================
+     * 通用工具方法
+     * ========================================================== */
+
     private void updateSessionAfterTool(
             CurrentUser currentUser,
             String sessionId,
@@ -427,9 +490,6 @@ public class AgentFacade {
         sessionService.save(sessionId, context);
     }
 
-    /**
-     * 处理待创建草稿。
-     */
     private boolean hasPendingCreateDraft(AgentSessionContext context) {
         return context != null
                 && context.getPendingAction() != null
@@ -437,18 +497,12 @@ public class AgentFacade {
                 && !context.getPendingAction().isAwaitingConfirmation();
     }
 
-    /**
-     * 处理待确认状态。
-     */
     private boolean hasPendingConfirmation(AgentSessionContext context) {
         return context != null
                 && context.getPendingAction() != null
                 && context.getPendingAction().isAwaitingConfirmation();
     }
 
-    /**
-     * 构建Confirmation结果。
-     */
     private AgentToolResult buildConfirmationResult(
             String toolName,
             IntentRoute route,
@@ -456,13 +510,13 @@ public class AgentFacade {
             String reason
     ) {
         String summary = switch (route.getIntent()) {
-            case TRANSFER_TICKET -> "\u9ad8\u98ce\u9669\u64cd\u4f5c\u9700\u8981\u786e\u8ba4\u3002\n"
-                    + "\u64cd\u4f5c\uff1a\u8f6c\u6d3e\u5de5\u5355\n"
-                    + "\u5de5\u5355 ID\uff1a" + valueOrUnknown(parameters == null ? null : parameters.getTicketId()) + "\n"
-                    + "\u76ee\u6807\u5904\u7406\u4eba ID\uff1a" + valueOrUnknown(parameters == null ? null : parameters.getAssigneeId()) + "\n"
-                    + "\u539f\u56e0\uff1a" + reason + "\n"
-                    + "\u8bf7\u56de\u590d\u201c\u786e\u8ba4\u6267\u884c\u201d\u7ee7\u7eed\uff0c\u6216\u56de\u590d\u201c\u53d6\u6d88\u201d\u653e\u5f03\u3002";
-            default -> "\u8be5\u64cd\u4f5c\u98ce\u9669\u8f83\u9ad8\uff0c\u9700\u8981\u4e8c\u6b21\u786e\u8ba4\u540e\u624d\u80fd\u6267\u884c\u3002\u8bf7\u56de\u590d\u201c\u786e\u8ba4\u6267\u884c\u201d\u7ee7\u7eed\uff0c\u6216\u56de\u590d\u201c\u53d6\u6d88\u201d\u653e\u5f03\u3002";
+            case TRANSFER_TICKET -> "高风险操作需要确认。\n"
+                    + "操作：转派工单\n"
+                    + "工单 ID：" + valueOrUnknown(parameters == null ? null : parameters.getTicketId()) + "\n"
+                    + "目标处理人 ID：" + valueOrUnknown(parameters == null ? null : parameters.getAssigneeId()) + "\n"
+                    + "原因：" + reason + "\n"
+                    + "请回复「确认执行」继续，或回复「取消」放弃。";
+            default -> "该操作风险较高，需要二次确认后才能执行。请回复「确认执行」继续，或回复「取消」放弃。";
         };
         return AgentToolResult.builder()
                 .invoked(false)
@@ -475,9 +529,6 @@ public class AgentFacade {
                 .build();
     }
 
-    /**
-     * 处理待确认的创建动作。
-     */
     private void syncCreatePendingAction(
             AgentSessionContext context,
             IntentRoute route,
@@ -507,25 +558,15 @@ public class AgentFacade {
         toolResult.setReply(buildCreateClarificationReply(missingFields, draft, message));
     }
 
-    /**
-     * 处理缺失字段。
-     */
     private List<AgentToolParameterField> extractMissingFields(Object data) {
-        if (!(data instanceof List<?> rawList)) {
-            return List.of();
-        }
+        if (!(data instanceof List<?> rawList)) return List.of();
         List<AgentToolParameterField> fields = new ArrayList<>();
         for (Object item : rawList) {
-            if (item instanceof AgentToolParameterField field) {
-                fields.add(field);
-            }
+            if (item instanceof AgentToolParameterField field) fields.add(field);
         }
         return fields;
     }
 
-    /**
-     * 处理创建草稿参数。
-     */
     private AgentToolParameters mergeCreateDraftParameters(
             AgentToolParameters draft,
             AgentToolParameters extracted,
@@ -533,15 +574,9 @@ public class AgentFacade {
             List<AgentToolParameterField> awaitingFields
     ) {
         AgentToolParameters merged = copyParameters(draft == null ? AgentToolParameters.builder().build() : draft);
-        if (extracted.getType() != null) {
-            merged.setType(extracted.getType());
-        }
-        if (extracted.getCategory() != null) {
-            merged.setCategory(extracted.getCategory());
-        }
-        if (extracted.getPriority() != null) {
-            merged.setPriority(extracted.getPriority());
-        }
+        if (extracted.getType() != null) merged.setType(extracted.getType());
+        if (extracted.getCategory() != null) merged.setCategory(extracted.getCategory());
+        if (extracted.getPriority() != null) merged.setPriority(extracted.getPriority());
         boolean metadataOnly = isLikelyMetadataOnlyMessage(extracted, message);
         if (!metadataOnly && shouldFillTitle(merged, awaitingFields, extracted)) {
             merged.setTitle(extracted.getTitle());
@@ -556,9 +591,6 @@ public class AgentFacade {
         return merged;
     }
 
-    /**
-     * 补全标题。
-     */
     private boolean shouldFillTitle(
             AgentToolParameters merged,
             List<AgentToolParameterField> awaitingFields,
@@ -568,9 +600,6 @@ public class AgentFacade {
                 && (!hasText(merged.getTitle()) || awaitingFields.contains(AgentToolParameterField.TITLE));
     }
 
-    /**
-     * 补全描述。
-     */
     private boolean shouldFillDescription(
             AgentToolParameters merged,
             List<AgentToolParameterField> awaitingFields,
@@ -583,71 +612,53 @@ public class AgentFacade {
                 || extracted.getDescription() != null);
     }
 
-    /**
-     * 处理LikelyMetadataOnly消息。
-     */
     private boolean isLikelyMetadataOnlyMessage(AgentToolParameters extracted, String message) {
-        if (!hasText(message)) {
-            return false;
-        }
+        if (!hasText(message)) return false;
         String trimmed = message.trim();
         return trimmed.length() <= 20
                 && (extracted.getType() != null || extracted.getCategory() != null || extracted.getPriority() != null)
                 && !containsProblemNarrative(trimmed);
     }
 
-    /**
-     * 处理问题描述。
-     */
     private boolean containsProblemNarrative(String message) {
-        return message.contains("\u65e0\u6cd5")
-                || message.contains("\u5931\u8d25")
-                || message.contains("\u5f02\u5e38")
-                || message.contains("\u62a5\u9519")
-                || message.contains("\u95ee\u9898")
-                || message.contains("\u5f71\u54cd")
+        return message.contains("无法")
+                || message.contains("失败")
+                || message.contains("异常")
+                || message.contains("报错")
+                || message.contains("问题")
+                || message.contains("影响")
                 || message.toLowerCase().contains("error");
     }
 
-    /**
-     * 构建创建ClarificationReply。
-     */
     private String buildCreateClarificationReply(
             List<AgentToolParameterField> missingFields,
             AgentToolParameters draft,
             String message
     ) {
-        if (missingFields.isEmpty()) {
-            return "\u8bf7\u7ee7\u7eed\u8865\u5145\u521b\u5efa\u5de5\u5355\u6240\u9700\u7684\u4fe1\u606f\u3002";
-        }
+        if (missingFields.isEmpty()) return "请继续补充创建工单所需的信息。";
         if (missingFields.size() == 1) {
             AgentToolParameterField field = missingFields.get(0);
             return switch (field) {
-                case TITLE -> "\u8bf7\u8865\u5145\u5de5\u5355\u6807\u9898\uff0c\u5c3d\u91cf\u7528\u4e00\u53e5\u8bdd\u8bf4\u660e\u6838\u5fc3\u95ee\u9898\u3002";
-                case DESCRIPTION -> "\u8bf7\u8865\u5145\u66f4\u5b8c\u6574\u7684\u95ee\u9898\u63cf\u8ff0\uff0c\u4f8b\u5982\u73b0\u8c61\u3001\u5f71\u54cd\u8303\u56f4\u548c\u4f60\u5df2\u5c1d\u8bd5\u8fc7\u7684\u64cd\u4f5c\u3002";
-                case CATEGORY -> "\u8bf7\u8865\u5145\u5de5\u5355\u5206\u7c7b\uff1aACCOUNT\u3001SYSTEM\u3001ENVIRONMENT\u3001OTHER\u3002";
-                case PRIORITY -> "\u8bf7\u8865\u5145\u5de5\u5355\u4f18\u5148\u7ea7\uff1aLOW\u3001MEDIUM\u3001HIGH\u3001URGENT\u3002";
-                default -> "\u8bf7\u8865\u5145" + field.getLabel() + "\u3002";
+                case TITLE -> "请补充工单标题，尽量用一句话说明核心问题。";
+                case DESCRIPTION -> "请补充更完整的问题描述，例如现象、影响范围和你已尝试过的操作。";
+                case CATEGORY -> "请补充工单分类：ACCOUNT、SYSTEM、ENVIRONMENT、OTHER。";
+                case PRIORITY -> "请补充工单优先级：LOW、MEDIUM、HIGH、URGENT。";
+                default -> "请补充" + field.getLabel() + "。";
             };
         }
-        StringBuilder reply = new StringBuilder("\u6211\u5148\u8bb0\u5f55\u4e86\u5f53\u524d\u5de5\u5355\u8349\u7a3f");
+        StringBuilder reply = new StringBuilder("我先记录了当前工单草稿");
         if (hasText(draft.getTitle())) {
-            reply.append("\uff08\u6807\u9898\uff1a").append(draft.getTitle()).append("\uff09");
+            reply.append("（标题：").append(draft.getTitle()).append("）");
         }
-        reply.append("\u3002\u8fd8\u9700\u8981\u8865\u5145\uff1a");
+        reply.append("。还需要补充：");
         for (int i = 0; i < missingFields.size(); i++) {
-            if (i > 0) {
-                reply.append("\u3001");
-            }
+            if (i > 0) reply.append("、");
             reply.append(missingFields.get(i).getLabel());
         }
-        reply.append("\u3002\u6d88\u606f\u5185\u5bb9\uff1a").append(message == null ? "" : message.trim());
+        reply.append("。消息内容：").append(message == null ? "" : message.trim());
         return reply.toString();
     }
 
-    /**
-     * 处理参数。
-     */
     private AgentToolParameters copyParameters(AgentToolParameters source) {
         return AgentToolParameters.builder()
                 .ticketId(source.getTicketId())
@@ -664,66 +675,37 @@ public class AgentFacade {
                 .build();
     }
 
-    /**
-     * 处理取消消息。
-     */
     private boolean isCancelMessage(String message) {
-        if (!hasText(message)) {
-            return false;
-        }
+        if (!hasText(message)) return false;
         String normalized = message.trim().toLowerCase();
-        return normalized.contains("\u53d6\u6d88")
-                || normalized.contains("\u4e0d\u7528\u4e86")
-                || normalized.contains("\u7b97\u4e86")
+        return normalized.contains("取消")
+                || normalized.contains("不用了")
+                || normalized.contains("算了")
                 || normalized.equals("cancel");
     }
 
-    /**
-     * 处理确认消息。
-     */
     private boolean isConfirmMessage(String message) {
-        if (!hasText(message)) {
-            return false;
-        }
+        if (!hasText(message)) return false;
         String normalized = message.trim().toLowerCase();
-        return normalized.contains("\u786e\u8ba4")
-                || normalized.contains("\u540c\u610f")
-                || normalized.contains("\u6267\u884c")
+        return normalized.contains("确认")
+                || normalized.contains("同意")
+                || normalized.contains("执行")
                 || normalized.contains("confirm")
                 || normalized.equals("yes");
     }
 
-    /**
-     * 处理未知兜底值。
-     */
     private String valueOrUnknown(Object value) {
-        return value == null ? "\u672a\u8bc6\u522b" : String.valueOf(value);
+        return value == null ? "未识别" : String.valueOf(value);
     }
 
-    /**
-     * 处理AI工具For。
-     */
-    private Object springAiToolFor(AgentIntent intent) {
-        return toolForIntent(intent);
-    }
-
-    /**
-     * 按意图处理。
-     */
     private AgentTool toolForIntent(AgentIntent intent) {
         return skillRegistry.requireByIntent(intent).tool();
     }
 
-    /**
-     * 按名称处理。
-     */
     private AgentTool toolForName(String toolName) {
         return skillRegistry.requireByToolName(toolName).tool();
     }
 
-    /**
-     * 转换为对话结果。
-     */
     private AgentChatResult toChatResult(
             String sessionId,
             IntentRoute route,
@@ -737,62 +719,20 @@ public class AgentFacade {
         return AgentChatResult.builder()
                 .sessionId(sessionId)
                 .intent(route.getIntent().name())
-                .reply(hasText(reply) ? reply : toolResult.getReply())
+                .reply(hasText(reply) ? reply : (toolResult != null ? toolResult.getReply() : ""))
                 .route(route)
                 .context(context)
-                .result(toolResult.getData())
+                .result(toolResult != null ? toolResult.getData() : null)
                 .springAiChatReady(springAiReady)
                 .plan(plan)
                 .traceId(trace == null ? null : trace.getTraceId())
                 .build();
     }
 
-    /**
-     * 处理提示词。
-     */
-    private String systemPrompt(AgentIntent intent) {
-        String fallback = switch (intent) {
-            case QUERY_TICKET -> "\u4f60\u662f\u5de5\u5355\u67e5\u8be2\u52a9\u624b\u3002\u672c\u8f6e\u53ea\u5141\u8bb8\u8c03\u7528 queryTicket\uff0c\u7528\u4e8e\u67e5\u8be2\u5f53\u524d\u5de5\u5355\u4e8b\u5b9e\uff0c\u4e0d\u5f97\u68c0\u7d22\u5386\u53f2\u77e5\u8bc6\u5e93\u3002";
-            case CREATE_TICKET -> "\u4f60\u662f\u5de5\u5355\u521b\u5efa\u52a9\u624b\u3002\u672c\u8f6e\u53ea\u5141\u8bb8\u8c03\u7528 createTicket\u3002\u521b\u5efa\u52a8\u4f5c\u5fc5\u987b\u901a\u8fc7\u5de5\u5177\u5b8c\u6210\uff0c\u4e0d\u80fd\u7f16\u9020\u521b\u5efa\u7ed3\u679c\u3002";
-            case TRANSFER_TICKET -> "\u4f60\u662f\u5de5\u5355\u8f6c\u6d3e\u52a9\u624b\u3002\u672c\u8f6e\u53ea\u5141\u8bb8\u8c03\u7528 transferTicket\u3002\u8f6c\u6d3e\u662f\u9ad8\u98ce\u9669\u5199\u64cd\u4f5c\uff0c\u5fc5\u987b\u9075\u5b88\u5de5\u5177\u8fd4\u56de\u7684\u786e\u8ba4\u6216\u5931\u8d25\u4fe1\u606f\u3002";
-            case SEARCH_HISTORY -> "\u4f60\u662f\u5386\u53f2\u7ecf\u9a8c\u68c0\u7d22\u52a9\u624b\u3002\u672c\u8f6e\u53ea\u5141\u8bb8\u8c03\u7528 searchHistory\u3002\u68c0\u7d22\u7ed3\u679c\u53ea\u4f5c\u53c2\u8003\uff0c\u4e0d\u4ee3\u8868\u5f53\u524d\u5de5\u5355\u4e8b\u5b9e\u3002";
-        };
-        return promptTemplateService.content(promptCodeFor(intent), fallback);
-    }
-
-    /**
-     * 按编码处理。
-     */
-    private String promptCodeFor(AgentIntent intent) {
-        return switch (intent) {
-            case CREATE_TICKET -> "create-ticket-completion";
-            case SEARCH_HISTORY -> "history-summary";
-            default -> "result-explanation";
-        };
-    }
-
-    /**
-     * 处理提示词。
-     */
-    private String userPrompt(String message, IntentRoute route) {
-        return """
-                闂佸搫鐗滈崜婵嬫偪閸℃稑绠涢煫鍥ㄦ尰缁傚牓鏌?s
-                闁荤姳璀﹂崹鎶藉极闁秴鍌ㄩ柣鏃堟敱缁€鍫ユ煥?s
-                闂佹椿娼块崝宥夊春濞戞ǚ妲堥柛顐ゅ枍缁辨牠鏌?s
-
-                闁荤姴娲弨閬嶆偋閹绢喖绠叉い鏃傚亾閺嗗繘鏌熼幘顔芥暠缂佸鍏橀獮渚€顢涘☉妯煎€掗梺鍛婄懄閻楁洘瀵奸幇鏉跨鐎瑰嫭婢樺Λ姗€鏌℃担瑙勭凡闁艰崵鍠撻幏顐﹀礃椤忓懏娈㈤梺鍝勭墱閸撴繈鎮块崱娑樼闁归偊浜炴潻鏃堟煟閵娿儱顏╁ù鍏煎姍瀹曟寮搁鐔蜂壕闁稿本鐟ч悷婵嬫偡閺囨碍绁伴柣銊у枛閹粙濡搁敂钘夌处闂佸湱绮崝鎺旀閻㈠憡鍎嶉柛鏇ㄥ亗缁憋綁鏌涜箛鏃備粵闁?                """.formatted(route.getIntent().name(), route.getReason(), message);
-    }
-
-    /**
-     * 判断 Spring AI 对话是否就绪。
-     */
     private boolean isSpringAiChatReady() {
         return chatEnabled && chatClientProvider.getIfAvailable() != null;
     }
 
-    /**
-     * 处理文本。
-     */
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

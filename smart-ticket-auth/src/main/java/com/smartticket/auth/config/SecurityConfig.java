@@ -65,7 +65,13 @@ public class SecurityConfig {
                 )
                 // 白名单
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/login", "/error").permitAll()
+                        .requestMatchers(
+                                "/api/auth/login",
+                                "/error",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html",
+                                "/v3/api-docs/**"
+                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 // 注册 JWT 过滤器

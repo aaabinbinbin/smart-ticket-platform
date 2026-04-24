@@ -8,5 +8,7 @@ public enum AgentPlanAction {
     COLLECT_SLOTS,
     EXECUTE_TOOL,
     CONFIRM_HIGH_RISK,
-    RETURN_RESULT
+    RETURN_RESULT,
+    /** LLM 主动调用多个工具完成复杂任务。 */
+    REACT_REASONING
 }

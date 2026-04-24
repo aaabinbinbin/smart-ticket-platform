@@ -3,18 +3,24 @@ package com.smartticket.agent.service;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.router.LlmIntentClassifier;
 import java.util.List;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * 当前版本的规则意图路由器。
+ * 意图路由器：优先使用 LLM 做意图分类，不可用时回退到关键词匹配。
  *
- * <p>优先使用可解释规则完成基础路由，并在置信度过低时交由上层先做澄清，
- * 避免默认把模糊请求硬路由到 QUERY_TICKET。</p>
+ * <p>在 ReAct 模式下，路由结果作为系统上下文提供给 LLM 参考（非约束），
+ * LLM 可以自主选择不同于路由结果的工具组合。
+ * 在确定性回退路径中，路由仍直接决定执行的工具。
+ * LLM 不可用时由可解释的关键词规则兜底，确保 P0 闭环。</p>
  */
 @Service
 public class IntentRouter {
+    private static final Logger log = LoggerFactory.getLogger(IntentRouter.class);
     private static final List<String> HISTORY_KEYWORDS = List.of(
             "历史", "历史案例", "类似案例", "经验", "方案", "记录", "history", "previous"
     );
@@ -31,10 +37,37 @@ public class IntentRouter {
             "查询", "查看", "详情", "状态", "进度", "列表", "工单", "ticket", "status", "detail"
     );
 
+    private final LlmIntentClassifier llmClassifier;
+
+    public IntentRouter(LlmIntentClassifier llmClassifier) {
+        this.llmClassifier = llmClassifier;
+    }
+
     /**
      * 根据用户输入和会话上下文推断意图路由结果。
      */
     public IntentRoute route(String message, AgentSessionContext context) {
+        String trimmed = normalize(message);
+        if (!hasText(trimmed)) {
+            return route(AgentIntent.QUERY_TICKET, 0.25, "用户消息为空");
+        }
+
+        // 优先使用 LLM 意图分类
+        IntentRoute llmRoute = llmClassifier.classify(trimmed);
+        if (llmRoute != null) {
+            log.info("LLM 意图路由：intent={}, confidence={}, reason={}",
+                    llmRoute.getIntent(), llmRoute.getConfidence(), llmRoute.getReason());
+            return llmRoute;
+        }
+
+        // LLM 不可用时回退到关键词匹配
+        return keywordRoute(trimmed, context);
+    }
+
+    /**
+     * 关键词匹配路由（原始 fallback 逻辑）。
+     */
+    private IntentRoute keywordRoute(String message, AgentSessionContext context) {
         String normalized = normalize(message);
         boolean transfer = containsAny(normalized, TRANSFER_KEYWORDS);
         boolean create = containsAny(normalized, CREATE_KEYWORDS);
@@ -126,5 +159,12 @@ public class IntentRouter {
      */
     private String normalize(String message) {
         return message == null ? "" : message.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 判断字符串不为空。
+     */
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
     }
 }

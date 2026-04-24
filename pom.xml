@@ -30,6 +30,7 @@
         <mybatis-spring-boot.version>3.0.4</mybatis-spring-boot.version>
         <jjwt.version>0.12.6</jjwt.version>
         <swagger-annotations.version>2.2.22</swagger-annotations.version>
+        <springdoc-openapi.version>2.8.6</springdoc-openapi.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.release>${java.version}</maven.compiler.release>
@@ -75,6 +76,11 @@
                 <groupId>io.swagger.core.v3</groupId>
                 <artifactId>swagger-annotations-jakarta</artifactId>
                 <version>${swagger-annotations.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc-openapi.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

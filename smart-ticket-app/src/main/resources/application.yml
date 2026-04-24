@@ -74,5 +74,13 @@ smart-ticket:
       username: postgres
       password: 123456
   jwt:
-    secret: smart-ticket-platform-local-jwt-secret-change-me-please-20260417
-    expiration-minutes: 120
+    secret: ${SMART_TICKET_JWT_SECRET:smart-ticket-platform-local-jwt-secret-change-me}
+    expiration-minutes: ${SMART_TICKET_JWT_EXPIRATION:120}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method

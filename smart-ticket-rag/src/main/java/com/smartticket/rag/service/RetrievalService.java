@@ -167,10 +167,19 @@ public class RetrievalService {
     private RetrievalResult retrieveFromMysqlFallback(String queryText, String rewrittenQuery, int topK) {
         List<Double> queryVector = embeddingModelClient.embed(rewrittenQuery);
         Map<Long, TicketKnowledge> knowledgeMap = activeKnowledgeMap();
-        List<RetrievalHit> hits = embeddingRepository.findAll()
+        if (knowledgeMap.isEmpty()) {
+            log.warn("RAG 检索路径=MYSQL_FALLBACK，无可用知识记录，query='{}'", rewrittenQuery);
+            return RetrievalResult.builder()
+                    .queryText(queryText)
+                    .rewrittenQuery(rewrittenQuery)
+                    .topK(topK)
+                    .retrievalPath("MYSQL_FALLBACK")
+                    .fallbackUsed(true)
+                    .hits(List.of())
+                    .build();
+        }
+        List<RetrievalHit> hits = embeddingRepository.findByKnowledgeIds(List.copyOf(knowledgeMap.keySet()))
                 .stream()
-                .filter(embedding -> embedding.getKnowledgeId() != null)
-                .filter(embedding -> knowledgeMap.containsKey(embedding.getKnowledgeId()))
                 .filter(embedding -> hasText(embedding.getEmbeddingVector()))
                 .map(embedding -> toHit(embedding, knowledgeMap.get(embedding.getKnowledgeId()), queryVector))
                 .filter(hit -> hit.getScore() != null)

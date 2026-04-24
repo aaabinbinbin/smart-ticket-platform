@@ -5,6 +5,7 @@ import com.smartticket.agent.tool.core.ToolRiskLevel;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
@@ -13,14 +14,22 @@ import org.springframework.stereotype.Component;
 @Component
 public class SkillRegistry {
     /**
-     * 当前 Spring 容器中注册的全部技能，按技能编码排序以保证选择结果稳定。
+     * 当前注册的全部技能，按技能编码排序以保证选择结果稳定。
      */
     private final List<AgentSkill> skills;
 
     /**
-     * 初始化技能注册表。
-     *
-     * @param skills Spring 注入的技能实现列表
+     * 生产环境构造：通过 SkillDefinitionLoader 从 markdown 文件加载技能。
+     */
+    @Autowired
+    public SkillRegistry(SkillDefinitionLoader loader) {
+        this.skills = loader.loadSkills().stream()
+                .sorted(Comparator.comparing(AgentSkill::skillCode))
+                .toList();
+    }
+
+    /**
+     * 测试环境构造：直接传入技能列表。
      */
     public SkillRegistry(List<AgentSkill> skills) {
         this.skills = skills.stream()

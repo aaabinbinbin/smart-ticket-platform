@@ -32,6 +32,11 @@ public interface TicketKnowledgeEmbeddingMapper {
     List<TicketKnowledgeEmbedding> findAll();
 
     /**
+     * 根据知识 ID 列表批量查询切片。
+     */
+    List<TicketKnowledgeEmbedding> findByKnowledgeIds(@Param("knowledgeIds") List<Long> knowledgeIds);
+
+    /**
      * 删除按知识ID。
      */
     int deleteByKnowledgeId(@Param("knowledgeId") Long knowledgeId);

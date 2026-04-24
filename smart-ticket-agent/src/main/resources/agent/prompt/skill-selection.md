@@ -1,4 +1,12 @@
-version: v1
-purpose: 从已注册能力中选择一个业务 Skill。
+version: v2
+purpose: 工具选择辅助参考
 
-根据路由意图和当前计划阶段，只选择一个可用 Skill。除非用户明确要求写操作，否则优先选择只读能力。
+## 意图与工具映射参考
+
+以下映射仅供参考，最终工具选择由你根据上下文判断：
+- QUERY_TICKET → queryTicket
+- CREATE_TICKET → createTicket
+- TRANSFER_TICKET → transferTicket
+- SEARCH_HISTORY → searchHistory
+
+你可以根据实际需要调用多个工具的组合。
