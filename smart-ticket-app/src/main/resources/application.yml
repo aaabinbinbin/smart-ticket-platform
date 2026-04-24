@@ -26,18 +26,19 @@ spring:
           max-attempts: 3
   ai:
     model:
-      chat: none
-      embedding: none
+      chat: openai
+      embedding: openai
     openai:
       api-key: ${MY_API_KEY:}
-      base-url: ${MY_BASE_URL:https://api.openai.com}
+      base-url: ${MY_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
       chat:
         options:
           model: kimi-k2.5
           temperature: 0.1
       embedding:
         options:
-          model: multimodal-embedding-v1
+          model: text-embedding-v4
+          dimensions: 1536
     vectorstore:
       pgvector:
         initialize-schema: true
