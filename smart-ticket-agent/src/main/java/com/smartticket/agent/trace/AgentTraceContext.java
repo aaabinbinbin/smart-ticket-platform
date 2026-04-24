@@ -10,23 +10,17 @@ import lombok.Setter;
  */
 @Getter
 public class AgentTraceContext {
-    // 轨迹ID
     private final String traceId;
-    // 会话ID
     private final String sessionId;
-    // 用户ID
     private final Long userId;
-    // rawInput
     private final String rawInput;
     private final long startedAtMillis = System.currentTimeMillis();
     private final List<AgentTraceStep> steps = new ArrayList<>();
-    // 提示词Version
+    /** LLM 在 ReAct 循环中的完整推理链，每个元素是一次工具调用前的思考过程。 */
+    private final List<String> reasoningChain = new ArrayList<>();
     @Setter
     private String promptVersion;
 
-    /**
-     * 构造智能体轨迹上下文。
-     */
     public AgentTraceContext(String traceId, String sessionId, Long userId, String rawInput) {
         this.traceId = traceId;
         this.sessionId = sessionId;

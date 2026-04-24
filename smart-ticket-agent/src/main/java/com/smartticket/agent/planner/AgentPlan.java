@@ -42,6 +42,4 @@ public class AgentPlan {
     @Builder.Default
     private List<AgentPlanStep> completedSteps = new ArrayList<>();
 
-    @Builder.Default
-    private List<AgentPlanStep> plannedSteps = new ArrayList<>();
 }

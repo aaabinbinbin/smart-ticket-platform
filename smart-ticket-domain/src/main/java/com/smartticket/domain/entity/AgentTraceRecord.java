@@ -100,6 +100,11 @@ public class AgentTraceRecord {
     private String stepJson;
 
     /**
+     * LLM 推理链 JSON，记录 ReAct 循环中 LLM 中间思考过程。
+     */
+    private String reasoningJson;
+
+    /**
      * 创建时间。
      */
     private LocalDateTime createdAt;

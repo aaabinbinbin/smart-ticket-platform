@@ -52,7 +52,6 @@ load session context
 - `riskLevel`
 - `requiredSlots`
 - `completedSteps`
-- `plannedSteps`
 
 典型状态：
 

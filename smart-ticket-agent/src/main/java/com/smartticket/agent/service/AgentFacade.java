@@ -11,6 +11,8 @@ import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.orchestration.ToolCallPlan;
 import com.smartticket.agent.planner.AgentPlan;
+import com.smartticket.agent.planner.AgentPlanAction;
+import com.smartticket.agent.planner.AgentPlanStage;
 import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.prompt.PromptTemplateService;
 import com.smartticket.agent.skill.AgentSkill;
@@ -28,6 +30,7 @@ import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.agent.trace.AgentTraceContext;
 import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -36,9 +39,11 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 /**
  * 智能体对话门面服务。
@@ -140,7 +145,9 @@ public class AgentFacade {
      * ========================================================== */
 
     /**
-     * ReAct 智能体循环：注册全部工具，让 LLM 自主推理决策，Spring AI 内部处理多步工具调用。
+     * ReAct 智能体循环：使用 streaming 捕获 LLM 全部中间推理过程。
+     * 注册全部工具让 LLM 自主决策，Spring AI 内部处理多步工具调用，
+     * streaming flux 包含每轮工具调用前 LLM 的思考文本。
      */
     private Optional<AgentChatResult> agentReActLoop(
             CurrentUser currentUser,
@@ -166,20 +173,43 @@ public class AgentFacade {
 
         try {
             agentPlanner.beforeExecute(plan);
+            // 标记进入 LLM 多步推理阶段，与确定性执行路径区分
+            plan.setCurrentStage(AgentPlanStage.AGENT_THINKING);
+            plan.setNextAction(AgentPlanAction.REACT_REASONING);
             traceService.step(trace, "agent", "react-loop", null, "START", route.getIntent().name());
 
             String fullContext = buildConversationContext(context, message, route);
             String system = agentSystemPrompt();
 
-            String content = chatClient.prompt()
+            // 第 1 步：使用 streaming 捕获完整 LLM 输出（含中间推理）
+            Flux<ChatResponse> responseFlux = chatClient.prompt()
                     .system(system)
                     .user(fullContext)
                     .tools(allTools())
                     .toolContext(toolContext)
-                    .call()
-                    .content();
+                    .stream()
+                    .chatResponse();
 
-            // 处理多步工具调用结果
+            List<ChatResponse> allResponses = responseFlux
+                    .collectList()
+                    .block(Duration.ofSeconds(120));
+
+            // 第 2 步：从所有 streaming chunk 中提取推理链
+            StringBuilder reasoningBuffer = new StringBuilder();
+            for (ChatResponse response : allResponses) {
+                if (response.getResult() != null && response.getResult().getOutput() != null) {
+                    String text = response.getResult().getOutput().getText();
+                    if (hasText(text)) {
+                        reasoningBuffer.append(text);
+                    }
+                }
+            }
+            String llmOutput = reasoningBuffer.toString().trim();
+            if (hasText(llmOutput)) {
+                traceService.recordReasoning(trace, llmOutput);
+            }
+
+            // 第 3 步：处理工具调用结果
             List<AgentToolCallRecord> allCalls = callState.getAllCalls();
             for (AgentToolCallRecord call : allCalls) {
                 traceService.step(trace, "agent", "tool-call", call.getToolName(),
@@ -187,7 +217,70 @@ public class AgentFacade {
             }
             agentPlanner.recordToolCalls(plan, allCalls);
 
-            // 更新会话和记忆
+            // 第 4 步：更新会话和记忆
+            AgentToolResult lastResult = callState.getResult();
+            for (AgentToolCallRecord call : allCalls) {
+                updateSessionAfterTool(currentUser, sessionId, context, route, message, null, call.getResult());
+            }
+
+            String finalReply = hasText(llmOutput) ? llmOutput : (lastResult != null ? lastResult.getReply() : "");
+            traceService.finish(trace, route, plan, null, lastResult, finalReply, true, false);
+            return Optional.of(toChatResult(sessionId, route, context, lastResult, finalReply, true, plan, trace));
+
+        } catch (RuntimeException ex) {
+            log.warn("Agent ReAct 循环失败(sessionId={}), 降级到非流式调用: {}", sessionId, ex.getMessage());
+            traceService.step(trace, "agent", "react-loop", null, "RETRY_CALL", ex.getMessage());
+
+            // 降级到非流式调用
+            return tryNonStreamingAgentCall(currentUser, sessionId, message,
+                    context, route, plan, trace, callState);
+        }
+    }
+
+    /**
+     * 非流式降级调用：当 streaming 不可用时使用普通的 call()。
+     */
+    private Optional<AgentChatResult> tryNonStreamingAgentCall(
+            CurrentUser currentUser,
+            String sessionId,
+            String message,
+            AgentSessionContext context,
+            IntentRoute route,
+            AgentPlan plan,
+            AgentTraceContext trace,
+            SpringAiToolCallState callState
+    ) {
+        ChatClient chatClient = chatClientProvider.getIfAvailable();
+        if (chatClient == null) return Optional.empty();
+
+        Map<String, Object> toolContext = new HashMap<>();
+        toolContext.put(SpringAiToolSupport.CURRENT_USER_KEY, currentUser);
+        toolContext.put(SpringAiToolSupport.SESSION_CONTEXT_KEY, context);
+        toolContext.put(SpringAiToolSupport.MESSAGE_KEY, message);
+        toolContext.put(SpringAiToolSupport.ROUTE_KEY, route);
+        toolContext.put(SpringAiToolSupport.STATE_KEY, callState);
+
+        try {
+            plan.setCurrentStage(AgentPlanStage.AGENT_THINKING);
+            plan.setNextAction(AgentPlanAction.REACT_REASONING);
+            String content = chatClient.prompt()
+                    .system(agentSystemPrompt())
+                    .user(buildConversationContext(context, message, route))
+                    .tools(allTools())
+                    .toolContext(toolContext)
+                    .call()
+                    .content();
+
+            // 非流式无法捕获中间推理，记录一个简要说明
+            traceService.recordReasoning(trace, "[非流式模式，中间推理过程未记录]");
+
+            List<AgentToolCallRecord> allCalls = callState.getAllCalls();
+            for (AgentToolCallRecord call : allCalls) {
+                traceService.step(trace, "agent", "tool-call", call.getToolName(),
+                        call.getResult() != null ? call.getResult().getStatus().name() : "UNKNOWN", "react-step");
+            }
+            agentPlanner.recordToolCalls(plan, allCalls);
+
             AgentToolResult lastResult = callState.getResult();
             for (AgentToolCallRecord call : allCalls) {
                 updateSessionAfterTool(currentUser, sessionId, context, route, message, null, call.getResult());
@@ -198,7 +291,7 @@ public class AgentFacade {
             return Optional.of(toChatResult(sessionId, route, context, lastResult, finalReply, true, plan, trace));
 
         } catch (RuntimeException ex) {
-            log.warn("Agent ReAct 循环失败，使用确定性回退流程：sessionId={}, reason={}", sessionId, ex.getMessage());
+            log.warn("非流式 Agent 调用也失败，使用确定性回退：sessionId={}, reason={}", sessionId, ex.getMessage());
             traceService.step(trace, "agent", "react-loop", null, "FAILED", ex.getMessage());
             return Optional.empty();
         }

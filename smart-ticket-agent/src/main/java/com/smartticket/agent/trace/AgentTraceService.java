@@ -67,6 +67,24 @@ public class AgentTraceService {
     }
 
     /**
+     * 添加推理链记录到轨迹上下文。
+     */
+    public void recordReasoning(AgentTraceContext context, String reasoningSegment) {
+        if (context == null || reasoningSegment == null || reasoningSegment.isBlank()) {
+            return;
+        }
+        context.getReasoningChain().add(reasoningSegment.trim());
+        context.getSteps().add(AgentTraceStep.builder()
+                .stage("agent")
+                .action("reasoning")
+                .skillOrTool(null)
+                .status("THOUGHT")
+                .detail(limit(reasoningSegment.trim(), 500))
+                .occurredAt(LocalDateTime.now())
+                .build());
+    }
+
+    /**
      * 处理finish。
      */
     public void finish(
@@ -101,6 +119,7 @@ public class AgentTraceService {
                 .status(toolResult == null || toolResult.getStatus() == null ? "UNKNOWN" : toolResult.getStatus().name())
                 .failureType(fallbackUsed ? "FALLBACK" : null)
                 .stepJson(toStepJson(context.getSteps()))
+                .reasoningJson(toReasoningJson(context.getReasoningChain()))
                 .createdAt(LocalDateTime.now())
                 .build();
         persist(record);
@@ -192,5 +211,26 @@ public class AgentTraceService {
         } catch (JsonProcessingException ex) {
             return "[]";
         }
+    }
+
+    /**
+     * 将推理链转换为 JSON 数组字符串。
+     */
+    private String toReasoningJson(List<String> reasoningChain) {
+        if (reasoningChain == null || reasoningChain.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(reasoningChain);
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private static String limit(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "...";
     }
 }
