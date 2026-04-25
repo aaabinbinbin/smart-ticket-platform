@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -105,6 +106,50 @@ class TicketCommandServiceTest {
         BusinessException ex = assertThrows(BusinessException.class, () -> service.createTicket(operator(), command));
 
         assertEquals("INVALID_TICKET_TYPE_REQUIREMENT", ex.getCode());
+    }
+
+    @Test
+    void createTicketShouldReuseExistingIdempotentResultWithoutInsert() {
+        TicketCreateCommandDTO command = TicketCreateCommandDTO.builder()
+                .title("测试环境登录失败")
+                .description("登录时报 500，影响研发自测")
+                .idempotencyKey(" create-1 ")
+                .build();
+        Ticket existing = Ticket.builder()
+                .id(101L)
+                .title("测试环境登录失败")
+                .status(TicketStatusEnum.PENDING_ASSIGN)
+                .build();
+        when(ticketIdempotencyService.normalize(" create-1 ")).thenReturn("create-1");
+        when(ticketIdempotencyService.enabled("create-1")).thenReturn(true);
+        when(ticketIdempotencyService.getCreatedTicketId(1L, "create-1")).thenReturn(101L);
+        when(support.requireTicket(101L)).thenReturn(existing);
+
+        Ticket result = service.createTicket(operator(), command);
+
+        assertEquals(101L, result.getId());
+        assertEquals("create-1", command.getIdempotencyKey());
+        verify(ticketRepository, never()).insert(any(Ticket.class));
+        verify(ticketIdempotencyService, never()).acquireCreateLock(1L, "create-1");
+        verify(ticketTypeProfileService).attachProfile(existing);
+    }
+
+    @Test
+    void createTicketShouldRejectDuplicateIdempotentRequestWhenLockIsHeld() {
+        TicketCreateCommandDTO command = TicketCreateCommandDTO.builder()
+                .title("测试环境登录失败")
+                .description("登录时报 500，影响研发自测")
+                .idempotencyKey("create-1")
+                .build();
+        when(ticketIdempotencyService.normalize("create-1")).thenReturn("create-1");
+        when(ticketIdempotencyService.enabled("create-1")).thenReturn(true);
+        when(ticketIdempotencyService.getCreatedTicketId(1L, "create-1")).thenReturn(null);
+        when(ticketIdempotencyService.acquireCreateLock(1L, "create-1")).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.createTicket(operator(), command));
+
+        assertEquals("IDEMPOTENT_REQUEST_PROCESSING", ex.getCode());
+        verify(ticketRepository, never()).insert(any(Ticket.class));
     }
 
     private CurrentUser operator() {

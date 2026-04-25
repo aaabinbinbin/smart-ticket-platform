@@ -18,6 +18,10 @@ import com.smartticket.rag.repository.TicketKnowledgeReadRepository;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
+import org.springframework.ai.document.Document;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.pgvector.PgVectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 
 class RetrievalServiceTest {
@@ -89,6 +93,77 @@ class RetrievalServiceTest {
         assertTrue(result.getRewrittenQuery().contains("测试环境无法登录 登录时报 500"));
         assertFalse(result.getRewrittenQuery().contains("帮我创建一个"));
         assertEquals(0, result.getHits().size());
+    }
+
+    @Test
+    void retrieveShouldUsePgvectorWhenVectorStoreReady() {
+        EmbeddingModelClient embeddingModelClient = mock(EmbeddingModelClient.class);
+        TicketKnowledgeEmbeddingRepository embeddingRepository = mock(TicketKnowledgeEmbeddingRepository.class);
+        TicketKnowledgeReadRepository knowledgeRepository = mock(TicketKnowledgeReadRepository.class);
+        ObjectProvider<SpringAiVectorStoreHolder> vectorStoreProvider = mock(ObjectProvider.class);
+        PgVectorStore vectorStore = mock(PgVectorStore.class);
+        when(vectorStoreProvider.getIfAvailable()).thenReturn(new SpringAiVectorStoreHolder(vectorStore));
+        when(vectorStore.similaritySearch(ArgumentMatchers.any(SearchRequest.class))).thenReturn(List.of(Document.builder()
+                .id("ticket-knowledge-1-0")
+                .text("登录失败处理方案")
+                .metadata(Map.of(
+                        "knowledgeId", 1L,
+                        "ticketId", 1001L,
+                        "chunkIndex", 0,
+                        "chunkType", "RESOLUTION",
+                        "sourceField", "resolutionSteps",
+                        "contentSummary", "登录失败处理方案"
+                ))
+                .score(0.9d)
+                .build()));
+        RetrievalService retrievalService = new RetrievalService(
+                embeddingModelClient,
+                embeddingRepository,
+                knowledgeRepository,
+                new QueryRewriteService(),
+                new RetrievalRerankService(feedbackService()),
+                vectorStoreProvider,
+                true
+        );
+
+        RetrievalResult result = retrievalService.retrieve(RetrievalRequest.builder()
+                .queryText("登录失败")
+                .topK(3)
+                .rewrite(false)
+                .build());
+
+        assertEquals("PGVECTOR", result.getRetrievalPath());
+        assertFalse(result.isFallbackUsed());
+        assertEquals(1, result.getHits().size());
+    }
+
+    @Test
+    void retrieveShouldFallbackToMysqlWhenVectorStoreEnabledButNotReady() {
+        EmbeddingModelClient embeddingModelClient = mock(EmbeddingModelClient.class);
+        TicketKnowledgeEmbeddingRepository embeddingRepository = mock(TicketKnowledgeEmbeddingRepository.class);
+        TicketKnowledgeReadRepository knowledgeRepository = mock(TicketKnowledgeReadRepository.class);
+        ObjectProvider<SpringAiVectorStoreHolder> vectorStoreProvider = mock(ObjectProvider.class);
+        when(vectorStoreProvider.getIfAvailable()).thenReturn(new SpringAiVectorStoreHolder(null));
+        when(embeddingModelClient.embed("登录失败")).thenReturn(List.of(1.0d));
+        when(knowledgeRepository.findActive()).thenReturn(List.of());
+        RetrievalService retrievalService = new RetrievalService(
+                embeddingModelClient,
+                embeddingRepository,
+                knowledgeRepository,
+                new QueryRewriteService(),
+                new RetrievalRerankService(feedbackService()),
+                vectorStoreProvider,
+                true
+        );
+
+        RetrievalResult result = retrievalService.retrieve(RetrievalRequest.builder()
+                .queryText("登录失败")
+                .topK(3)
+                .rewrite(false)
+                .build());
+
+        assertEquals("MYSQL_FALLBACK", result.getRetrievalPath());
+        assertTrue(result.isFallbackUsed());
     }
 
     private RagFeedbackService feedbackService() {

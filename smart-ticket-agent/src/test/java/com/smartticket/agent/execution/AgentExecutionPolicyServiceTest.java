@@ -59,6 +59,60 @@ class AgentExecutionPolicyServiceTest {
     }
 
     @Test
+    void resolveShouldSafeFailWhenUserHasNoRequiredPermission() {
+        AgentSkill querySkill = skill(
+                "queryTicket",
+                AgentIntent.QUERY_TICKET,
+                ToolRiskLevel.READ_ONLY,
+                true,
+                false,
+                List.of("AGENT_QUERY")
+        );
+        AgentExecutionPolicyService service = new AgentExecutionPolicyService(new SkillRegistry(List.of(querySkill)));
+
+        AgentExecutionPolicy policy = service.resolve(currentUser(), IntentRoute.builder()
+                .intent(AgentIntent.QUERY_TICKET)
+                .confidence(0.95d)
+                .reason("查询")
+                .build());
+
+        assertSafeFailure(policy, ToolRiskLevel.READ_ONLY);
+    }
+
+    @Test
+    void resolveShouldSafeFailWhenSkillRiskExceedsPolicyLimit() {
+        AgentSkill riskyCreateSkill = skill(
+                "createTicket",
+                AgentIntent.CREATE_TICKET,
+                ToolRiskLevel.HIGH_RISK_WRITE,
+                true,
+                false
+        );
+        AgentExecutionPolicyService service = new AgentExecutionPolicyService(new SkillRegistry(List.of(riskyCreateSkill)));
+
+        AgentExecutionPolicy policy = service.resolve(currentUser(), IntentRoute.builder()
+                .intent(AgentIntent.CREATE_TICKET)
+                .confidence(0.95d)
+                .reason("创建")
+                .build());
+
+        assertSafeFailure(policy, ToolRiskLevel.LOW_RISK_WRITE);
+    }
+
+    @Test
+    void resolveShouldSafeFailWhenNoAvailableSkillExists() {
+        AgentExecutionPolicyService service = new AgentExecutionPolicyService(new SkillRegistry(List.of()));
+
+        AgentExecutionPolicy policy = service.resolve(currentUser(), IntentRoute.builder()
+                .intent(AgentIntent.SEARCH_HISTORY)
+                .confidence(0.96d)
+                .reason("检索")
+                .build());
+
+        assertSafeFailure(policy, ToolRiskLevel.READ_ONLY);
+    }
+
+    @Test
     void resolveShouldUseWriteCommandExecuteForCreateTicket() {
         AgentSkill createSkill = skill("createTicket", AgentIntent.CREATE_TICKET, ToolRiskLevel.LOW_RISK_WRITE, true, false);
         AgentExecutionPolicyService service = new AgentExecutionPolicyService(new SkillRegistry(List.of(createSkill)));
@@ -103,6 +157,17 @@ class AgentExecutionPolicyServiceTest {
             boolean canAutoExecute,
             boolean requireConfirmation
     ) {
+        return skill(toolName, intent, riskLevel, canAutoExecute, requireConfirmation, List.of());
+    }
+
+    private AgentSkill skill(
+            String toolName,
+            AgentIntent intent,
+            ToolRiskLevel riskLevel,
+            boolean canAutoExecute,
+            boolean requireConfirmation,
+            List<String> requiredPermissions
+    ) {
         AgentSkill skill = mock(AgentSkill.class);
         AgentTool tool = mock(AgentTool.class);
         when(tool.name()).thenReturn(toolName);
@@ -116,10 +181,21 @@ class AgentExecutionPolicyServiceTest {
         when(skill.tool()).thenReturn(tool);
         when(skill.supportedIntents()).thenReturn(List.of(intent));
         when(skill.supports(intent)).thenReturn(true);
-        when(skill.requiredPermissions()).thenReturn(List.of());
+        when(skill.requiredPermissions()).thenReturn(requiredPermissions);
         when(skill.riskLevel()).thenReturn(riskLevel);
         when(skill.canAutoExecute()).thenReturn(canAutoExecute);
         return skill;
+    }
+
+    private void assertSafeFailure(AgentExecutionPolicy policy, ToolRiskLevel maxRiskLevel) {
+        assertEquals(AgentExecutionMode.SAFE_FAILURE, policy.getMode());
+        assertTrue(policy.getAllowedSkills().isEmpty());
+        assertTrue(policy.getAllowedToolNames().isEmpty());
+        assertFalse(policy.isAllowReact());
+        assertFalse(policy.isAllowAutoExecute());
+        assertFalse(policy.isRequireConfirmation());
+        assertEquals(maxRiskLevel, policy.getMaxRiskLevel());
+        assertEquals(0, policy.getMaxToolCalls());
     }
 
     private CurrentUser currentUser() {

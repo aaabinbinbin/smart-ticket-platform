@@ -594,6 +594,10 @@ class AgentFacadeTest {
         when(querySkill.tool()).thenReturn(queryTicketTool);
         when(transferSkill.tool()).thenReturn(transferTicketTool);
         when(searchSkill.tool()).thenReturn(searchHistoryTool);
+        stubSkill(createSkill, "create-ticket", AgentIntent.CREATE_TICKET, ToolRiskLevel.LOW_RISK_WRITE, true);
+        stubSkill(querySkill, "query-ticket", AgentIntent.QUERY_TICKET, ToolRiskLevel.READ_ONLY, true);
+        stubSkill(transferSkill, "transfer-ticket", AgentIntent.TRANSFER_TICKET, ToolRiskLevel.HIGH_RISK_WRITE, false);
+        stubSkill(searchSkill, "search-history", AgentIntent.SEARCH_HISTORY, ToolRiskLevel.READ_ONLY, true);
         when(skillRegistry.requireByIntent(AgentIntent.CREATE_TICKET)).thenReturn(createSkill);
         when(skillRegistry.requireByIntent(AgentIntent.QUERY_TICKET)).thenReturn(querySkill);
         when(skillRegistry.requireByIntent(AgentIntent.TRANSFER_TICKET)).thenReturn(transferSkill);
@@ -602,6 +606,14 @@ class AgentFacadeTest {
         when(skillRegistry.requireByToolName("queryTicket")).thenReturn(querySkill);
         when(skillRegistry.requireByToolName("transferTicket")).thenReturn(transferSkill);
         when(skillRegistry.requireByToolName("searchHistory")).thenReturn(searchSkill);
+        when(skillRegistry.findAvailable(eq(AgentIntent.CREATE_TICKET), any(), eq(ToolRiskLevel.LOW_RISK_WRITE)))
+                .thenReturn(List.of(createSkill));
+        when(skillRegistry.findAvailable(eq(AgentIntent.QUERY_TICKET), any(), eq(ToolRiskLevel.READ_ONLY)))
+                .thenReturn(List.of(querySkill));
+        when(skillRegistry.findAvailable(eq(AgentIntent.TRANSFER_TICKET), any(), eq(ToolRiskLevel.HIGH_RISK_WRITE)))
+                .thenReturn(List.of(transferSkill));
+        when(skillRegistry.findAvailable(eq(AgentIntent.SEARCH_HISTORY), any(), eq(ToolRiskLevel.READ_ONLY)))
+                .thenReturn(List.of(searchSkill));
         when(promptTemplateService.content(any(), any())).thenAnswer(invocation -> invocation.getArgument(1));
         when(traceService.start(any(), any(), any())).thenReturn(new AgentTraceContext("trace-1", "session", 1L, "message"));
         when(((ObjectProvider<ChatClient>) chatClientProvider).getIfAvailable()).thenReturn(chatEnabled ? chatClient : null);
@@ -680,8 +692,22 @@ class AgentFacadeTest {
         return CurrentUser.builder()
                 .userId(1L)
                 .username("user1")
-                .roles(List.of("USER"))
+                .roles(List.of("USER", "STAFF"))
                 .build();
+    }
+
+    private void stubSkill(
+            AgentSkill skill,
+            String skillCode,
+            AgentIntent intent,
+            ToolRiskLevel riskLevel,
+            boolean canAutoExecute
+    ) {
+        when(skill.skillCode()).thenReturn(skillCode);
+        when(skill.supportedIntents()).thenReturn(List.of(intent));
+        when(skill.requiredPermissions()).thenReturn(List.of());
+        when(skill.riskLevel()).thenReturn(riskLevel);
+        when(skill.canAutoExecute()).thenReturn(canAutoExecute);
     }
 
     private static class CapturingSink implements AgentEventSink {

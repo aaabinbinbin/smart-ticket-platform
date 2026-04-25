@@ -5,6 +5,7 @@ import com.smartticket.domain.entity.TicketKnowledgeEmbedding;
 import com.smartticket.infra.ai.VectorStoreConfig.SpringAiVectorStoreHolder;
 import com.smartticket.rag.embedding.EmbeddingModelClient;
 import com.smartticket.rag.repository.TicketKnowledgeEmbeddingRepository;
+import com.smartticket.rag.security.SensitiveInfoMasker;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -45,6 +46,9 @@ public class EmbeddingService {
     /** Spring AI VectorStore 持有对象，启用 PGvector 后用于向量库写入。 */
     private final ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider;
 
+    /** 敏感信息脱敏器，确保 embedding 和向量库不会保存原始凭证或个人敏感信息。 */
+    private final SensitiveInfoMasker sensitiveInfoMasker;
+
     /** 是否启用 Spring AI VectorStore。 */
     private final boolean vectorStoreEnabled;
 
@@ -58,11 +62,13 @@ public class EmbeddingService {
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
             ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider,
+            SensitiveInfoMasker sensitiveInfoMasker,
             @Value("${smart-ticket.ai.vector-store.enabled:false}") boolean vectorStoreEnabled
     ) {
         this.embeddingModelClient = embeddingModelClient;
         this.embeddingRepository = embeddingRepository;
         this.vectorStoreHolderProvider = vectorStoreHolderProvider;
+        this.sensitiveInfoMasker = sensitiveInfoMasker;
         this.vectorStoreEnabled = vectorStoreEnabled;
     }
 
@@ -87,18 +93,20 @@ public class EmbeddingService {
         List<Document> vectorDocuments = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             KnowledgeChunk chunk = chunks.get(i);
-            List<Double> vector = embedWithRetry(knowledge.getId(), i, chunk.text());
+            String maskedText = sensitiveInfoMasker.mask(chunk.text());
+            // embedding 与持久化统一使用脱敏文本，避免向量库和 MySQL fallback 表保留原始敏感信息。
+            List<Double> vector = embedWithRetry(knowledge.getId(), i, maskedText);
             TicketKnowledgeEmbedding embedding = TicketKnowledgeEmbedding.builder()
                     .knowledgeId(knowledge.getId())
                     .chunkIndex(i)
                     .chunkType(chunk.type())
                     .sourceField(chunk.sourceField())
-                    .chunkText(chunk.text())
+                    .chunkText(maskedText)
                     .embeddingVector(toJsonArray(vector))
                     .build();
             embeddingRepository.insert(embedding);
             saved.add(embedding);
-            vectorDocuments.add(toVectorDocument(knowledge, chunk, i));
+            vectorDocuments.add(toVectorDocument(knowledge, chunk, maskedText, i));
         }
         writeVectorStore(knowledge.getId(), vectorDocuments);
         log.info("向量构建完成：knowledgeId={}, mysqlChunks={}", knowledge.getId(), saved.size());
@@ -199,7 +207,7 @@ public class EmbeddingService {
     }
 
     /** 将一段知识文本转换为 Spring AI Document，并附加业务元数据。 */
-    private Document toVectorDocument(TicketKnowledge knowledge, KnowledgeChunk chunk, int chunkIndex) {
+    private Document toVectorDocument(TicketKnowledge knowledge, KnowledgeChunk chunk, String maskedText, int chunkIndex) {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("knowledgeId", knowledge.getId());
         metadata.put("ticketId", knowledge.getTicketId());
@@ -209,7 +217,7 @@ public class EmbeddingService {
         metadata.put("contentSummary", knowledge.getContentSummary());
         return Document.builder()
                 .id(vectorDocumentId(knowledge.getId(), chunkIndex))
-                .text(chunk.text())
+                .text(maskedText)
                 .metadata(metadata)
                 .build();
     }

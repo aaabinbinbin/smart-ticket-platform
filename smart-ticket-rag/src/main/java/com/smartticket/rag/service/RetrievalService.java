@@ -135,6 +135,7 @@ public class RetrievalService {
         }
         SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
         if (holder == null || holder.vectorStore() == null) {
+            log.warn("RAG 检索路径=MYSQL_FALLBACK，fallbackUsed=true，reason=vector-store-not-ready，query='{}'", rewrittenQuery);
             return Optional.empty();
         }
         try {

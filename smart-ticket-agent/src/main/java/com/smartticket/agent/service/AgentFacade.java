@@ -229,6 +229,11 @@ public class AgentFacade {
             return clarifyLowConfidenceIntent(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
         }
 
+        if (policy.getMode() == AgentExecutionMode.SAFE_FAILURE) {
+            sink.status("当前没有可安全执行的技能");
+            return failNoAvailableSkill(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
+        }
+
         if (isWritePolicy(policy)) {
             sink.status("正在执行确定性写命令");
             return executeWriteCommand(currentUser, sessionId, message, context, route, plan, springAiReady, trace, budget);
@@ -267,6 +272,46 @@ public class AgentFacade {
     /* ==========================================================
      * 低置信度澄清
      * ========================================================== */
+
+    /**
+     * 处理策略层安全失败。
+     *
+     * <p>当当前用户没有任何通过权限和风险过滤的 Skill 时，主链必须在这里停止，
+     * 不能继续走只读 fallback 或写命令执行器，否则会重新暴露未授权 tool。该方法只提交失败态
+     * session/memory/trace，不执行任何写操作，也不会创建 pendingAction。</p>
+     */
+    private AgentChatResult failNoAvailableSkill(
+            CurrentUser currentUser,
+            String sessionId,
+            String message,
+            AgentSessionContext context,
+            IntentRoute route,
+            AgentPlan plan,
+            boolean springAiReady,
+            AgentTraceContext trace
+    ) {
+        AgentToolResult toolResult = AgentToolResult.builder()
+                .invoked(false)
+                .status(AgentToolStatus.FAILED)
+                .reply("当前用户没有可安全执行该请求的技能，请确认权限或调整请求后重试。")
+                .build();
+        AgentExecutionSummary summary = summarizeExecution(
+                AgentTurnStatus.FAILED,
+                AgentExecutionMode.SAFE_FAILURE,
+                route.getIntent(),
+                null,
+                toolResult,
+                context == null ? null : context.getPendingAction(),
+                null,
+                false,
+                false
+        );
+        traceService.step(trace, "policy", "safe-failure", null, "NO_AVAILABLE_SKILL", route.getIntent().name());
+        updateSessionAfterTool(currentUser, sessionId, context, route, message, null, toolResult);
+        String finalReply = renderReply(route, plan, context, summary);
+        traceService.finish(trace, route, plan, summary);
+        return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
+    }
 
     private AgentChatResult clarifyLowConfidenceIntent(
             CurrentUser currentUser,

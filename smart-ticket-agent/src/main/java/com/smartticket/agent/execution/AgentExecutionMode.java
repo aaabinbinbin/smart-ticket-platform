@@ -49,5 +49,13 @@ public enum AgentExecutionMode {
     /**
      * 当前消息是在继续处理上一轮 pendingAction。
      */
-    PENDING_CONTINUATION
+    PENDING_CONTINUATION,
+
+    /**
+     * 当前意图没有任何通过权限和风险过滤的可用 Skill。
+     *
+     * <p>该模式用于安全失败：不能暴露 toolName，不能自动执行，也不能再通过旧的 intent fallback
+     * 绕过 SkillRegistry.findAvailable 的运行时过滤。</p>
+     */
+    SAFE_FAILURE
 }

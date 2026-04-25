@@ -33,6 +33,7 @@ import com.smartticket.agent.tool.ticket.TransferTicketTool;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
+import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -213,6 +214,56 @@ class PendingActionCoordinatorTest {
         verify(fixture.transferTicketTool).execute(any());
     }
 
+    @Test
+    void continuePendingActionShouldCancelTransferWithoutExecuting() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = transferPendingContext(null);
+
+        PendingActionCoordinator.PendingContinuation continuation = fixture.coordinator.continuePendingAction(
+                currentUser(),
+                "取消",
+                context
+        );
+
+        assertEquals(AgentTurnStatus.CANCELLED, continuation.getSummary().getStatus());
+        assertNull(context.getPendingAction());
+        verify(fixture.transferTicketTool, never()).execute(any());
+    }
+
+    @Test
+    void continuePendingActionShouldRejectTransferWhenUserHasNoHighRiskRole() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = transferPendingContext(null);
+
+        PendingActionCoordinator.PendingContinuation continuation = fixture.coordinator.continuePendingAction(
+                regularUser(),
+                "确认执行",
+                context
+        );
+
+        assertEquals(AgentTurnStatus.FAILED, continuation.getSummary().getStatus());
+        assertEquals("当前用户无权执行该高风险操作，未执行任何变更。", continuation.getSummary().getPrimaryResult().getReply());
+        assertNull(context.getPendingAction());
+        verify(fixture.transferTicketTool, never()).execute(any());
+    }
+
+    @Test
+    void continuePendingActionShouldExpireOldTransferPendingWithoutExecuting() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = transferPendingContext(LocalDateTime.now().minusMinutes(1));
+
+        PendingActionCoordinator.PendingContinuation continuation = fixture.coordinator.continuePendingAction(
+                currentUser(),
+                "确认执行",
+                context
+        );
+
+        assertEquals(AgentTurnStatus.CANCELLED, continuation.getSummary().getStatus());
+        assertEquals("上一轮待确认操作已过期，未执行任何变更。请重新发起请求。", continuation.getSummary().getPrimaryResult().getReply());
+        assertNull(context.getPendingAction());
+        verify(fixture.transferTicketTool, never()).execute(any());
+    }
+
     private TestFixture fixture() {
         AgentPlanner agentPlanner = mock(AgentPlanner.class);
         AgentToolParameterExtractor parameterExtractor = mock(AgentToolParameterExtractor.class);
@@ -247,10 +298,34 @@ class PendingActionCoordinatorTest {
     ) {
     }
 
+    private AgentSessionContext transferPendingContext(LocalDateTime expiresAt) {
+        return AgentSessionContext.builder()
+                .pendingAction(AgentPendingAction.builder()
+                        .pendingIntent(AgentIntent.TRANSFER_TICKET)
+                        .pendingToolName("transferTicket")
+                        .pendingParameters(AgentToolParameters.builder()
+                                .ticketId(1001L)
+                                .assigneeId(3L)
+                                .build())
+                        .awaitingConfirmation(true)
+                        .confirmationSummary("请确认")
+                        .expiresAt(expiresAt)
+                        .build())
+                .build();
+    }
+
     private static CurrentUser currentUser() {
         return CurrentUser.builder()
                 .userId(1L)
                 .username("user1")
+                .roles(List.of("STAFF"))
+                .build();
+    }
+
+    private static CurrentUser regularUser() {
+        return CurrentUser.builder()
+                .userId(2L)
+                .username("user2")
                 .roles(List.of("USER"))
                 .build();
     }

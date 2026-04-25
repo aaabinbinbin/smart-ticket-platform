@@ -72,6 +72,9 @@ public class AgentExecutionPolicyService {
 
     private AgentExecutionPolicy readOnlyPolicy(CurrentUser currentUser, IntentRoute route) {
         List<AgentSkill> allowedSkills = loadAllowedSkills(currentUser, route.getIntent(), ToolRiskLevel.READ_ONLY);
+        if (allowedSkills.isEmpty()) {
+            return safeFailurePolicy(ToolRiskLevel.READ_ONLY);
+        }
         return AgentExecutionPolicy.builder()
                 .mode(AgentExecutionMode.READ_ONLY_REACT)
                 .allowedSkills(allowedSkills)
@@ -89,14 +92,17 @@ public class AgentExecutionPolicyService {
 
     private AgentExecutionPolicy createTicketPolicy(CurrentUser currentUser, IntentRoute route) {
         List<AgentSkill> allowedSkills = loadAllowedSkills(currentUser, route.getIntent(), ToolRiskLevel.LOW_RISK_WRITE);
-        AgentSkill skill = resolvePrimarySkill(route.getIntent(), allowedSkills);
+        AgentSkill skill = resolvePrimarySkill(allowedSkills);
+        if (skill == null) {
+            return safeFailurePolicy(ToolRiskLevel.LOW_RISK_WRITE);
+        }
         return AgentExecutionPolicy.builder()
                 .mode(AgentExecutionMode.WRITE_COMMAND_EXECUTE)
                 .allowedSkills(allowedSkills)
-                .allowedToolNames(skill == null ? List.of() : List.of(skill.tool().name()))
+                .allowedToolNames(List.of(skill.tool().name()))
                 .allowReact(false)
-                .allowAutoExecute(skill != null && skill.canAutoExecute())
-                .requireConfirmation(skill != null && skill.tool().metadata().isRequireConfirmation())
+                .allowAutoExecute(skill.canAutoExecute())
+                .requireConfirmation(skill.tool().metadata().isRequireConfirmation())
                 .maxRiskLevel(ToolRiskLevel.LOW_RISK_WRITE)
                 .timeout(WRITE_TIMEOUT)
                 .maxLlmCalls(0)
@@ -107,16 +113,19 @@ public class AgentExecutionPolicyService {
 
     private AgentExecutionPolicy transferTicketPolicy(CurrentUser currentUser, IntentRoute route) {
         List<AgentSkill> allowedSkills = loadAllowedSkills(currentUser, route.getIntent(), ToolRiskLevel.HIGH_RISK_WRITE);
-        AgentSkill skill = resolvePrimarySkill(route.getIntent(), allowedSkills);
-        boolean requireConfirmation = skill == null || skill.tool().metadata().isRequireConfirmation();
+        AgentSkill skill = resolvePrimarySkill(allowedSkills);
+        if (skill == null) {
+            return safeFailurePolicy(ToolRiskLevel.HIGH_RISK_WRITE);
+        }
+        boolean requireConfirmation = skill.tool().metadata().isRequireConfirmation();
         return AgentExecutionPolicy.builder()
                 .mode(requireConfirmation
                         ? AgentExecutionMode.HIGH_RISK_CONFIRMATION
                         : AgentExecutionMode.WRITE_COMMAND_EXECUTE)
                 .allowedSkills(allowedSkills)
-                .allowedToolNames(skill == null ? List.of() : List.of(skill.tool().name()))
+                .allowedToolNames(List.of(skill.tool().name()))
                 .allowReact(false)
-                .allowAutoExecute(skill != null && skill.canAutoExecute() && !requireConfirmation)
+                .allowAutoExecute(skill.canAutoExecute() && !requireConfirmation)
                 .requireConfirmation(requireConfirmation)
                 .maxRiskLevel(ToolRiskLevel.HIGH_RISK_WRITE)
                 .timeout(WRITE_TIMEOUT)
@@ -132,18 +141,33 @@ public class AgentExecutionPolicyService {
             ToolRiskLevel maxRisk
     ) {
         List<String> permissions = currentUser == null ? null : currentUser.getRoles();
+        // 运行期 Skill 白名单只能来自 findAvailable，确保权限和风险过滤不会被旧的 intent fallback 绕过。
         List<AgentSkill> available = skillRegistry.findAvailable(intent, permissions, maxRisk);
-        if (!available.isEmpty()) {
-            return available;
-        }
-        return skillRegistry.findByIntent(intent).map(List::of).orElse(List.of());
+        return available == null ? List.of() : available;
     }
 
-    private AgentSkill resolvePrimarySkill(AgentIntent intent, List<AgentSkill> allowedSkills) {
+    private AgentSkill resolvePrimarySkill(List<AgentSkill> allowedSkills) {
         if (allowedSkills != null && !allowedSkills.isEmpty()) {
             return allowedSkills.get(0);
         }
-        return skillRegistry.findByIntent(intent).orElse(null);
+        // 没有可用 Skill 时必须安全失败，不能再通过 findByIntent 暴露未授权工具。
+        return null;
+    }
+
+    private AgentExecutionPolicy safeFailurePolicy(ToolRiskLevel maxRiskLevel) {
+        return AgentExecutionPolicy.builder()
+                .mode(AgentExecutionMode.SAFE_FAILURE)
+                .allowedSkills(List.of())
+                .allowedToolNames(List.of())
+                .allowReact(false)
+                .allowAutoExecute(false)
+                .requireConfirmation(false)
+                .maxRiskLevel(maxRiskLevel)
+                .timeout(Duration.ofSeconds(10))
+                .maxLlmCalls(0)
+                .maxToolCalls(0)
+                .maxRagCalls(0)
+                .build();
     }
 
     private List<String> toToolNames(List<AgentSkill> allowedSkills) {

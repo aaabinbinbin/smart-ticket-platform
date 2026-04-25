@@ -15,6 +15,8 @@ import com.smartticket.agent.tool.parameter.AgentToolParameterField;
 import com.smartticket.agent.tool.parameter.AgentToolParameterExtractor;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.biz.model.CurrentUser;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +36,12 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class PendingActionCoordinator {
+    /**
+     * pendingAction 默认有效期。
+     *
+     * <p>高风险确认和补参草稿都不应长期有效，避免用户隔很久后确认旧命令导致误写库。</p>
+     */
+    private static final Duration PENDING_ACTION_TTL = Duration.ofMinutes(30);
 
     private final AgentPlanner agentPlanner;
     private final AgentToolParameterExtractor parameterExtractor;
@@ -81,6 +89,9 @@ public class PendingActionCoordinator {
             throw new IllegalStateException("当前会话不存在 pendingAction，不能继续恢复");
         }
         AgentPendingAction pendingAction = context.getPendingAction();
+        if (pendingAction.isExpired(LocalDateTime.now())) {
+            return expirePendingAction(message, context, pendingAction);
+        }
         if (pendingAction.isAwaitingConfirmation()) {
             return continuePendingConfirmation(currentUser, message, context, pendingAction);
         }
@@ -216,10 +227,43 @@ public class PendingActionCoordinator {
                     .build());
         }
 
+        if (!canConfirmHighRiskAction(currentUser, route.getIntent())) {
+            clearPendingAction(context);
+            AgentToolResult toolResult = AgentToolResult.builder()
+                    .invoked(false)
+                    .status(AgentToolStatus.FAILED)
+                    .toolName(pendingAction.getPendingToolName())
+                    .reply("当前用户无权执行该高风险操作，未执行任何变更。")
+                    .build();
+            agentPlanner.afterTool(plan, toolResult);
+            return buildContinuation(route, plan, AgentExecutionSummary.builder()
+                    .status(AgentTurnStatus.FAILED)
+                    .mode(AgentExecutionMode.PENDING_CONTINUATION)
+                    .intent(route.getIntent())
+                    .parameters(pendingAction.getPendingParameters())
+                    .primaryResult(toolResult)
+                    .springAiUsed(false)
+                    .fallbackUsed(false)
+                    .toolInvoked(false)
+                    .build());
+        }
+
         AgentCommandHandler handler = requireHandler(route.getIntent());
         AgentToolParameters parameters = copyParameters(pendingAction.getPendingParameters());
         clearPendingAction(context);
-        AgentToolResult toolResult = handler.execute(currentUser, message, context, route, parameters);
+        AgentToolResult toolResult;
+        try {
+            toolResult = handler.execute(currentUser, message, context, route, parameters);
+        } catch (RuntimeException ex) {
+            // 确认后仍要服从底层业务权限和状态校验；任何拒绝都转成失败摘要，避免旧 pending 被误认为已执行。
+            toolResult = AgentToolResult.builder()
+                    .invoked(false)
+                    .status(AgentToolStatus.FAILED)
+                    .toolName(pendingAction.getPendingToolName())
+                    .reply("当前用户无权或当前状态不允许执行该操作，未执行任何变更。")
+                    .data(ex.getMessage())
+                    .build();
+        }
         agentPlanner.afterTool(plan, toolResult);
         return buildContinuation(route, plan, AgentExecutionSummary.builder()
                 .status(summarizeToolStatus(toolResult))
@@ -230,6 +274,45 @@ public class PendingActionCoordinator {
                 .springAiUsed(false)
                 .fallbackUsed(false)
                 .toolInvoked(toolResult.isInvoked())
+                .build());
+    }
+
+    /**
+     * 清理并返回过期 pendingAction 的安全结果。
+     *
+     * <p>过期待办不能继续执行，即使用户发送确认消息也必须停止，避免旧的高风险写命令在上下文变化后被误触发。</p>
+     */
+    private PendingContinuation expirePendingAction(
+            String message,
+            AgentSessionContext context,
+            AgentPendingAction pendingAction
+    ) {
+        IntentRoute route = IntentRoute.builder()
+                .intent(pendingAction.getPendingIntent())
+                .confidence(0.99d)
+                .reason("pendingAction 已过期")
+                .build();
+        AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
+        context.setPlanState(plan);
+        // 过期 pending 必须先清理再返回，防止用户连续发送“确认”时复用旧写命令。
+        clearPendingAction(context);
+        AgentToolResult toolResult = AgentToolResult.builder()
+                .invoked(false)
+                .status(AgentToolStatus.FAILED)
+                .toolName(pendingAction.getPendingToolName())
+                .reply("上一轮待确认操作已过期，未执行任何变更。请重新发起请求。")
+                .data(message)
+                .build();
+        agentPlanner.afterTool(plan, toolResult);
+        return buildContinuation(route, plan, AgentExecutionSummary.builder()
+                .status(AgentTurnStatus.CANCELLED)
+                .mode(AgentExecutionMode.PENDING_CONTINUATION)
+                .intent(route.getIntent())
+                .parameters(pendingAction.getPendingParameters())
+                .primaryResult(toolResult)
+                .springAiUsed(false)
+                .fallbackUsed(false)
+                .toolInvoked(false)
                 .build());
     }
 
@@ -308,6 +391,7 @@ public class PendingActionCoordinator {
             String toolName,
             AgentToolResult toolResult
     ) {
+        LocalDateTime now = LocalDateTime.now();
         return AgentPendingAction.builder()
                 .pendingIntent(route.getIntent())
                 .pendingToolName(toolName)
@@ -315,6 +399,8 @@ public class PendingActionCoordinator {
                 .awaitingConfirmation(true)
                 .confirmationSummary(toolResult.getReply())
                 .lastToolResult(toolResult)
+                .createdAt(now)
+                .expiresAt(now.plus(PENDING_ACTION_TTL))
                 .build();
     }
 
@@ -324,12 +410,15 @@ public class PendingActionCoordinator {
             List<AgentToolParameterField> missingFields
     ) {
         AgentToolParameters draft = parameters == null ? AgentToolParameters.builder().build() : copyParameters(parameters);
+        LocalDateTime now = LocalDateTime.now();
         return AgentPendingAction.builder()
                 .pendingIntent(AgentIntent.CREATE_TICKET)
                 .pendingToolName(requireHandler(AgentIntent.CREATE_TICKET).toolName())
                 .pendingParameters(draft)
                 .awaitingFields(missingFields)
                 .lastToolResult(toolResult)
+                .createdAt(now)
+                .expiresAt(now.plus(PENDING_ACTION_TTL))
                 .build();
     }
 
@@ -556,6 +645,23 @@ public class PendingActionCoordinator {
                 || normalized.contains("执行")
                 || normalized.contains("confirm")
                 || normalized.equals("yes");
+    }
+
+    /**
+     * 对高风险确认做最小角色闸门。
+     *
+     * <p>这里不是替代 biz 层的数据权限校验，只是避免普通 USER 通过旧 pendingAction 进入写工具。
+     * 真正的工单关系权限仍由 TicketWorkflowService 在执行时二次校验。</p>
+     */
+    private boolean canConfirmHighRiskAction(CurrentUser currentUser, AgentIntent intent) {
+        if (intent != AgentIntent.TRANSFER_TICKET) {
+            return true;
+        }
+        if (currentUser == null || currentUser.getRoles() == null) {
+            return false;
+        }
+        // 转派是高风险写操作，确认环节先做最小角色闸门，后续仍由 biz 层按工单关系做精确权限判断。
+        return currentUser.getRoles().contains("ADMIN") || currentUser.getRoles().contains("STAFF");
     }
 
     private String valueOrUnknown(Object value) {
