@@ -108,4 +108,34 @@ class IntentRouterTest {
         IntentRoute result = router.route("有没有解决方案参考？", null);
         assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
     }
+
+    @Test
+    void shouldRouteToSearchHistoryWhenQueryContainsPreviousSimilarIssue() {
+        IntentRoute result = router.route("之前有没有类似问题，支付回调签名失败是怎么处理的？", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    void shouldRouteToSearchHistoryWhenQueryContainsSimilarTicketRedis() {
+        IntentRoute result = router.route("相似工单里有没有 redis 连接超时的处理方案？", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    void shouldRouteToSearchHistoryForEnglishE2eQuery() {
+        IntentRoute result = router.route("How to handle login token expired in test environment? Please refer to historical ticket experience.", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    void shouldKeepExplicitTicketIdQueryAsQueryTicket() {
+        IntentRoute result = router.route("查询 123 号工单的详情", null);
+        assertEquals(AgentIntent.QUERY_TICKET, result.getIntent());
+    }
+
+    @Test
+    void shouldKeepExplicitTicketNumberAsQueryTicket() {
+        IntentRoute result = router.route("看一下工单 456 的状态", null);
+        assertEquals(AgentIntent.QUERY_TICKET, result.getIntent());
+    }
 }

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.smartticket.domain.mapper.DashboardMapper">
+
+    <select id="countTicketByStatus" resultType="java.util.LinkedHashMap">
+        SELECT status, COUNT(*) AS cnt
+        FROM ticket
+        GROUP BY status
+        ORDER BY status
+    </select>
+
+    <select id="countTicketCreatedToday" resultType="long">
+        SELECT COUNT(*)
+        FROM ticket
+        WHERE created_at &gt;= CURDATE()
+    </select>
+
+    <select id="countKnowledgeBuildTaskByStatus" resultType="java.util.LinkedHashMap">
+        SELECT status, COUNT(*) AS cnt
+        FROM ticket_knowledge_build_task
+        GROUP BY status
+        ORDER BY status
+    </select>
+
+    <select id="countKnowledgeEmbedding" resultType="long">
+        SELECT COUNT(*)
+        FROM ticket_knowledge_embedding
+    </select>
+
+    <select id="findLatestKnowledgeBuildTime" resultType="java.time.LocalDateTime">
+        SELECT MAX(created_at)
+        FROM ticket_knowledge_build_task
+    </select>
+
+    <select id="countAgentTraceRecent" resultType="long">
+        SELECT COUNT(*)
+        FROM agent_trace_record
+        WHERE created_at &gt;= #{since}
+    </select>
+
+    <select id="countAgentTraceSuccessRecent" resultType="long">
+        SELECT COUNT(*)
+        FROM agent_trace_record
+        WHERE created_at &gt;= #{since}
+          AND status = 'COMPLETED'
+    </select>
+
+    <select id="avgAgentTraceElapsedRecent" resultType="double">
+        SELECT COALESCE(AVG(elapsed_millis), 0)
+        FROM agent_trace_record
+        WHERE created_at &gt;= #{since}
+    </select>
+
+</mapper>
