@@ -7,6 +7,7 @@ import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketComment;
 import com.smartticket.domain.entity.TicketKnowledgeCandidate;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import com.smartticket.rag.security.SensitiveInfoDetector;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,8 @@ public class KnowledgeAdmissionService {
     private final TicketCommentRepository ticketCommentRepository;
     // 候选仓储
     private final TicketKnowledgeCandidateRepository candidateRepository;
+    // 敏感信息检测器，复用 SensitiveInfoDetector 的正则规则确保准入与脱敏阶段规则一致
+    private final SensitiveInfoDetector sensitiveInfoDetector;
 
     /**
      * 构造知识准入服务。
@@ -29,11 +32,13 @@ public class KnowledgeAdmissionService {
     public KnowledgeAdmissionService(
             TicketRepository ticketRepository,
             TicketCommentRepository ticketCommentRepository,
-            TicketKnowledgeCandidateRepository candidateRepository
+            TicketKnowledgeCandidateRepository candidateRepository,
+            SensitiveInfoDetector sensitiveInfoDetector
     ) {
         this.ticketRepository = ticketRepository;
         this.ticketCommentRepository = ticketCommentRepository;
         this.candidateRepository = candidateRepository;
+        this.sensitiveInfoDetector = sensitiveInfoDetector;
     }
 
     /**
@@ -111,7 +116,8 @@ public class KnowledgeAdmissionService {
     }
 
     /**
-     * 处理敏感信息。
+     * 使用 SensitiveInfoDetector 检测文本是否包含敏感信息。
+     * 复用统一正则规则，确保准入阶段和脱敏阶段规则一致。
      */
     private boolean containsSensitiveInfo(Ticket ticket, List<TicketComment> comments) {
         StringBuilder text = new StringBuilder();
@@ -123,13 +129,7 @@ public class KnowledgeAdmissionService {
         if (comments != null) {
             comments.forEach(comment -> text.append(comment.getContent()).append(' '));
         }
-        String normalized = text.toString().toLowerCase();
-        return normalized.contains("password")
-                || normalized.contains("token")
-                || normalized.contains("secret")
-                || normalized.contains("身份证")
-                || normalized.contains("手机号")
-                || normalized.contains("密码");
+        return sensitiveInfoDetector.containsSensitiveInfo(text.toString());
     }
 
     /**

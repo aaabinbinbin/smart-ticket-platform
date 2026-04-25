@@ -2,9 +2,12 @@ package com.smartticket.biz.service.ticket;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.doThrow;
 
 import com.smartticket.biz.dto.ticket.TicketUpdateStatusCommandDTO;
 import com.smartticket.biz.model.CurrentUser;
@@ -14,6 +17,7 @@ import com.smartticket.biz.service.assignment.TicketGroupService;
 import com.smartticket.biz.service.assignment.TicketQueueMemberService;
 import com.smartticket.biz.service.knowledge.TicketKnowledgeBuildTaskService;
 import com.smartticket.biz.service.sla.TicketSlaService;
+import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.entity.TicketKnowledgeBuildTask;
@@ -186,6 +190,109 @@ class TicketWorkflowServiceTest {
         verify(knowledgeBuildTaskService).createPending(1005L);
         verify(support).publishTicketClosedAfterCommit(1005L, 9001L);
         verify(support).writeLog(1005L, 1L, OperationTypeEnum.CLOSE, "关闭工单", "before", "after");
+    }
+
+    @Test
+    void closeTicketShouldRejectNonResolvedTicket() {
+        Ticket before = Ticket.builder()
+                .id(1006L)
+                .status(TicketStatusEnum.PENDING_ASSIGN)
+                .creatorId(1L)
+                .build();
+        when(support.requireTicket(1006L)).thenReturn(before);
+        when(support.permissionService()).thenReturn(new TicketPermissionService());
+        // requireResolved 校验不通过：工单状态不是 RESOLVED
+        doThrow(new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS, "只有已解决工单可以关闭"))
+                .when(support).requireStatus(before, TicketStatusEnum.RESOLVED, "只有已解决工单可以关闭");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.closeTicket(operator(), 1006L));
+
+        assertEquals("INVALID_TICKET_STATUS", ex.getCode());
+    }
+
+    @Test
+    void updateStatusShouldRejectInvalidTransition() {
+        Ticket ticket = Ticket.builder()
+                .id(1007L)
+                .status(TicketStatusEnum.PENDING_ASSIGN)
+                .creatorId(1L)
+                .build();
+        when(support.requireTicket(1007L)).thenReturn(ticket);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.updateStatus(
+                adminUser(),
+                1007L,
+                TicketUpdateStatusCommandDTO.builder().targetStatus(TicketStatusEnum.RESOLVED).build()
+        ));
+
+        // PENDING_ASSIGN -> RESOLVED 跳过 PROCESSING，非法流转
+        assertEquals("INVALID_TICKET_STATUS_TRANSITION", ex.getCode());
+    }
+
+    @Test
+    void claimTicketShouldRejectProcessingTicket() {
+        Ticket ticket = Ticket.builder()
+                .id(1008L)
+                .status(TicketStatusEnum.PROCESSING)
+                .build();
+        when(support.requireTicket(1008L)).thenReturn(ticket);
+        // requirePendingAssign 校验不通过：工单不是 PENDING_ASSIGN
+        doThrow(new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS, "只有待分配工单可以认领"))
+                .when(support).requireStatus(ticket, TicketStatusEnum.PENDING_ASSIGN, "只有待分配工单可以认领");
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.claimTicket(staffUser(), 1008L));
+
+        assertEquals("INVALID_TICKET_STATUS", ex.getCode());
+    }
+
+    @Test
+    void claimTicketShouldRejectNonQueueMember() {
+        Ticket ticket = Ticket.builder()
+                .id(1009L)
+                .status(TicketStatusEnum.PENDING_ASSIGN)
+                .creatorId(1L)
+                .queueId(20L)
+                .build();
+        when(support.requireTicket(1009L)).thenReturn(ticket);
+        // 非队列成员且非分组负责人
+        when(ticketQueueMemberService.isEnabledMember(20L, 2L)).thenReturn(false);
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> service.claimTicket(staffUser(), 1009L));
+
+        assertEquals("TICKET_CLAIM_FORBIDDEN", ex.getCode());
+    }
+
+    @Test
+    void closedTicketShouldRejectAllOperations() {
+        Ticket ticket = Ticket.builder()
+                .id(1010L)
+                .status(TicketStatusEnum.CLOSED)
+                .creatorId(1L)
+                .build();
+        when(support.requireTicket(1010L)).thenReturn(ticket);
+
+        // 关闭工单不能再次关闭
+        doThrow(new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS, "只有已解决工单可以关闭"))
+                .when(support).requireStatus(ticket, TicketStatusEnum.RESOLVED, "只有已解决工单可以关闭");
+        when(support.permissionService()).thenReturn(new TicketPermissionService());
+
+        BusinessException closeEx = assertThrows(BusinessException.class, () -> service.closeTicket(operator(), 1010L));
+        assertEquals("INVALID_TICKET_STATUS", closeEx.getCode());
+
+        // 关闭工单不能认领
+        doThrow(new BusinessException(BusinessErrorCode.INVALID_TICKET_STATUS, "只有待分配工单可以认领"))
+                .when(support).requireStatus(ticket, TicketStatusEnum.PENDING_ASSIGN, "只有待分配工单可以认领");
+
+        BusinessException claimEx = assertThrows(BusinessException.class, () -> service.claimTicket(staffUser(), 1010L));
+        assertEquals("INVALID_TICKET_STATUS", claimEx.getCode());
+
+        // 关闭工单不能更新状态（非法流转）
+        BusinessException updateEx = assertThrows(BusinessException.class, () -> service.updateStatus(
+                adminUser(),
+                1010L,
+                TicketUpdateStatusCommandDTO.builder().targetStatus(TicketStatusEnum.PROCESSING).build()
+        ));
+        assertEquals("INVALID_TICKET_STATUS_TRANSITION", updateEx.getCode());
     }
 
     private CurrentUser adminUser() {
