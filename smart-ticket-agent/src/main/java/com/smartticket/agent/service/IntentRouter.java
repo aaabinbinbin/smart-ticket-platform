@@ -22,7 +22,8 @@ import org.springframework.stereotype.Service;
 public class IntentRouter {
     private static final Logger log = LoggerFactory.getLogger(IntentRouter.class);
     private static final List<String> HISTORY_KEYWORDS = List.of(
-            "历史", "历史案例", "类似案例", "经验", "方案", "记录", "history", "previous"
+            "历史", "历史案例", "类似案例", "经验", "方案", "记录", "history", "previous",
+            "类似", "相似", "知识库", "解决方案", "怎么处理"
     );
     private static final List<String> CONTEXT_KEYWORDS = List.of(
             "刚才", "之前", "上次", "前面", "这个", "它"
@@ -34,7 +35,8 @@ public class IntentRouter {
             "创建", "新建", "提交", "发起", "报修", "开单", "create", "new ticket"
     );
     private static final List<String> QUERY_KEYWORDS = List.of(
-            "查询", "查看", "详情", "状态", "进度", "列表", "工单", "ticket", "status", "detail"
+            "查询", "查看", "详情", "状态", "进度", "列表", "工单", "ticket", "status", "detail",
+            "查"
     );
 
     private final LlmIntentClassifier llmClassifier;
