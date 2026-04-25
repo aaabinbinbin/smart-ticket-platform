@@ -8,8 +8,9 @@
 
 - 工单主流程：创建、查询、详情、分配、认领、转派、状态流转、评论、关闭、操作日志。
 - 认证与权限：JWT 登录、RBAC、接口鉴权。
-- Agent 主链：`route -> plan -> skill -> guard -> tool/fallback -> memory/context/trace -> response`。
-- 受控型 Agent：支持意图路由、计划推进、Skill 注册、Tool 执行边界、高风险操作二次确认。
+- Agent 主链：`route -> policy -> plan -> pending/command/react -> reply -> memory/context/trace -> response`。
+- 受控型 Agent：支持意图路由、执行策略、Skill 注册、Tool 白名单、确定性写命令、高风险操作二次确认。
+- Agent 稳定性：支持 session lock、rate limit、单轮预算、降级策略、同步/SSE 双接口和 trace metrics。
 - RAG 工程化：知识构建、Embedding、query rewrite、轻量 rerank、MySQL fallback、pgvector 可选主路径。
 - 知识闭环：工单关闭后通过 RabbitMQ 异步触发知识构建，并使用数据库 task 保证失败可补偿。
 - 人工审核：知识候选支持管理员审核，通过后进入正式知识构建链路。
@@ -49,15 +50,26 @@ smart-ticket-platform
 主链能力：
 
 - `POST /api/agent/chat`
+- `POST /api/agent/chat/stream`
 - 意图路由：查询工单、创建工单、转派工单、检索历史案例
 - Planner：生成并推进当前执行计划
-- SkillRegistry：统一选择可用能力
-- ExecutionGuard：参数完整性、Tool 合法性、高风险确认
-- Tool fallback：Spring AI 不可用时走确定性后端链路
+- ExecutionPolicy：按 intent、风险、权限和预算决定执行模式
+- SkillRegistry：统一选择可用能力，ReAct 只暴露只读工具
+- DeterministicCommandExecutor：创建、转派等写操作走确定性链路
+- PendingActionCoordinator：统一处理补参、确认、取消
+- Tool fallback：Spring AI 不可用时，查询类场景走确定性后端链路
 - Memory：工作记忆、工单领域记忆、用户偏好记忆
-- Trace：记录 route、plan、skill/tool、fallback、最终结果
+- Trace & Metrics：记录 route、policy、plan、skill/tool、fallback、degrade、最终结果和耗时
 
 更多说明见 [docs/agent-architecture.md](docs/agent-architecture.md)。
+
+稳定性验收见 [docs/agent-stability-acceptance.md](docs/agent-stability-acceptance.md)，压测脚本见 [scripts/agent-smoke-load.ps1](scripts/agent-smoke-load.ps1)。
+
+简历表达参考：
+
+```text
+设计并重构智能工单平台中的受控型业务 Agent 模块，构建 IntentRouter -> ExecutionPolicy -> PendingAction/CommandExecutor/ReadOnlyReact -> ReplyRenderer -> TraceMetrics 的可审计执行链路；将创建、转派等写操作从 LLM Tool Calling 中解耦为确定性 Command 执行，支持多轮补槽、高风险确认、只读 ReAct 检索、工具白名单、Session/Memory 单次提交、同步/SSE 双接口、会话互斥、限流、预算、降级和压测验收。
+```
 
 ## RAG 与知识闭环
 
@@ -87,6 +99,7 @@ mvn -pl smart-ticket-app -am spring-boot:run
 - [项目概览](docs/project-overview.md)
 - [快速启动](docs/quick-start.md)
 - [Agent 架构说明](docs/agent-architecture.md)
+- [Agent 稳定性验收](docs/agent-stability-acceptance.md)
 - [详细设计说明](docs/project-deep-dive.md)
 - [接口说明](docs/ticket-api.md)
 - [演示脚本](docs/demo-playbook.md)
