@@ -104,7 +104,7 @@ class RetrievalServiceTest {
         PgVectorStore vectorStore = mock(PgVectorStore.class);
         when(vectorStoreProvider.getIfAvailable()).thenReturn(new SpringAiVectorStoreHolder(vectorStore));
         when(vectorStore.similaritySearch(ArgumentMatchers.any(SearchRequest.class))).thenReturn(List.of(Document.builder()
-                .id("ticket-knowledge-1-0")
+                .id("00000000-0000-0000-0000-000000000001")
                 .text("登录失败处理方案")
                 .metadata(Map.of(
                         "knowledgeId", 1L,

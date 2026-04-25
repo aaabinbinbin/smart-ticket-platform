@@ -310,6 +310,9 @@ if ($UseSshPgCheck) {
     Warn "Skipped pgvector polling. Please run this on CentOS after a few seconds:"
     Write-Host "docker exec -it $PgContainer psql -U $PgUser -d $PgDb -c `"SELECT COUNT(*) FROM vector_store;`""
     Write-Host "docker exec -it $PgContainer psql -U $PgUser -d $PgDb -c `"SELECT id, LEFT(content, 100) AS content_preview, metadata, vector_dims(embedding) AS dims FROM vector_store LIMIT 5;`""
+    Write-Host ""
+    Warn "Sleep 30 seconds to wait for async knowledge build to complete..."
+    Start-Sleep -Seconds 30
 }
 
 Step "9. Trigger Agent/RAG retrieval"
