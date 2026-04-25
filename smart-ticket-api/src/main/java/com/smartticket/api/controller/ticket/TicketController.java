@@ -19,7 +19,10 @@ import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
 import com.smartticket.biz.dto.ticket.TicketPageQueryDTO;
 import com.smartticket.biz.dto.ticket.TicketSummaryDTO;
 import com.smartticket.biz.dto.ticket.TicketUpdateStatusCommandDTO;
+import com.smartticket.biz.service.ticket.TicketCreateEnrichmentService;
 import com.smartticket.biz.service.ticket.TicketService;
+import com.smartticket.common.exception.BusinessErrorCode;
+import com.smartticket.common.exception.BusinessException;
 import com.smartticket.common.response.ApiResponse;
 import com.smartticket.common.response.PageResult;
 import com.smartticket.domain.entity.Ticket;
@@ -61,6 +64,8 @@ public class TicketController {
     private final TicketRequestParser ticketRequestParser;
     // 工单装配器
     private final TicketAssembler ticketAssembler;
+    // 工单创建字段补全服务
+    private final TicketCreateEnrichmentService ticketCreateEnrichmentService;
 
     /**
      * 构造工单控制器。
@@ -69,25 +74,32 @@ public class TicketController {
             TicketService ticketService,
             CurrentUserResolver currentUserResolver,
             TicketRequestParser ticketRequestParser,
-            TicketAssembler ticketAssembler
+            TicketAssembler ticketAssembler,
+            TicketCreateEnrichmentService ticketCreateEnrichmentService
     ) {
         this.ticketService = ticketService;
         this.currentUserResolver = currentUserResolver;
         this.ticketRequestParser = ticketRequestParser;
         this.ticketAssembler = ticketAssembler;
+        this.ticketCreateEnrichmentService = ticketCreateEnrichmentService;
     }
 
     /**
      * 创建工单。
+     *
+     * <p>用户只需传 title + description，type/category/priority/typeProfile
+     * 等结构化字段由 {@link TicketCreateEnrichmentService} 自动补全。
+     * 如果用户显式传了这些字段，不会覆盖。</p>
      */
     @PostMapping
-    @Operation(summary = "创建工单", description = "创建一张处于待分配状态的工单")
+    @Operation(summary = "创建工单", description = "创建一张处于待分配状态的工单，只有 title 和 description 为必填")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateTicketRequestDTO request
     ) {
-        Ticket ticket = ticketService.createTicket(currentUserResolver.resolve(authentication), TicketCreateCommandDTO.builder()
+        // 先构建部分命令（用户可能只传了 title + description）
+        TicketCreateCommandDTO partial = TicketCreateCommandDTO.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .type(ticketRequestParser.parseType(request.getType()))
@@ -95,7 +107,10 @@ public class TicketController {
                 .category(ticketRequestParser.parseCategory(request.getCategory()))
                 .priority(ticketRequestParser.parsePriority(request.getPriority()))
                 .idempotencyKey(resolveIdempotencyKey(idempotencyKey, request.getIdempotencyKey()))
-                .build());
+                .build();
+        // enrichment 自动补全缺失的结构化字段
+        TicketCreateCommandDTO enriched = ticketCreateEnrichmentService.enrich(partial);
+        Ticket ticket = ticketService.createTicket(currentUserResolver.resolve(authentication), enriched);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 
@@ -326,11 +341,30 @@ public class TicketController {
 
     /**
      * 解析幂等键。
+     *
+     * <p>推荐使用 HTTP 头 {@code Idempotency-Key} 传幂等键。
+     * body 中的 idempotencyKey 字段仍然兼容但标记为 deprecated。</p>
+     *
+     * <p>如果 header 和 body 都有值但不一致，返回 400 Bad Request。
+     * 这种情况说明客户端存在混淆，不应自动选择其中一个。</p>
      */
     private String resolveIdempotencyKey(String headerValue, String bodyValue) {
-        if (headerValue != null && !headerValue.isBlank()) {
-            return headerValue;
+        boolean hasHeader = headerValue != null && !headerValue.isBlank();
+        boolean hasBody = bodyValue != null && !bodyValue.isBlank();
+
+        if (hasHeader && hasBody && !headerValue.trim().equals(bodyValue.trim())) {
+            throw new BusinessException(BusinessErrorCode.INVALID_ARGUMENT,
+                    "Idempotency-Key 请求头和请求体不一致，请确保二者相同或只传其一");
         }
-        return bodyValue;
+
+        if (hasHeader) {
+            return headerValue.trim();
+        }
+
+        if (hasBody) {
+            return bodyValue.trim();
+        }
+
+        return null;
     }
 }

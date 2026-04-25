@@ -11,13 +11,17 @@
         <result property="commonPriority" column="common_priority"/>
         <result property="commonTerms" column="common_terms"/>
         <result property="responseStyle" column="response_style"/>
+        <result property="source" column="source"/>
+        <result property="confidence" column="confidence"/>
+        <result property="expiresAt" column="expires_at"/>
         <result property="createdAt" column="created_at"/>
         <result property="updatedAt" column="updated_at"/>
     </resultMap>
 
     <select id="findByUserId" resultMap="agentUserPreferenceMemoryResultMap">
         SELECT user_id, common_ticket_type, common_category, common_priority,
-               common_terms, response_style, created_at, updated_at
+               common_terms, response_style, source, confidence, expires_at,
+               created_at, updated_at
         FROM agent_user_preference_memory
         WHERE user_id = #{userId}
     </select>
@@ -25,11 +29,13 @@
     <insert id="upsert" parameterType="com.smartticket.domain.entity.AgentUserPreferenceMemory">
         INSERT INTO agent_user_preference_memory (
             user_id, common_ticket_type, common_category, common_priority,
-            common_terms, response_style, created_at, updated_at
+            common_terms, response_style, source, confidence, expires_at,
+            created_at, updated_at
         )
         VALUES (
             #{userId}, #{commonTicketType}, #{commonCategory}, #{commonPriority},
-            #{commonTerms}, #{responseStyle}, NOW(), NOW()
+            #{commonTerms}, #{responseStyle}, #{source}, #{confidence}, #{expiresAt},
+            NOW(), NOW()
         )
         ON DUPLICATE KEY UPDATE
             common_ticket_type = VALUES(common_ticket_type),
@@ -37,6 +43,9 @@
             common_priority = VALUES(common_priority),
             common_terms = VALUES(common_terms),
             response_style = VALUES(response_style),
+            source = VALUES(source),
+            confidence = VALUES(confidence),
+            expires_at = VALUES(expires_at),
             updated_at = NOW()
     </insert>
 </mapper>

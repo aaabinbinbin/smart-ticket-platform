@@ -20,7 +20,9 @@ import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.ticket.TicketDetailDTO;
 import com.smartticket.biz.dto.ticket.TicketSummaryDTO;
 import com.smartticket.biz.model.CurrentUser;
+import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
 import com.smartticket.biz.service.ticket.TicketCommandService;
+import com.smartticket.biz.service.ticket.TicketCreateEnrichmentService;
 import com.smartticket.biz.service.ticket.TicketQueryService;
 import com.smartticket.biz.service.ticket.TicketWorkflowService;
 import com.smartticket.common.response.PageResult;
@@ -55,6 +57,8 @@ class TicketToolsTest {
     private RetrievalService retrievalService;
     @Mock
     private SpringAiToolSupport springAiToolSupport;
+    @Mock
+    private TicketCreateEnrichmentService ticketCreateEnrichmentService;
 
     @Test
     void queryTicketToolShouldReadDetailInsteadOfListingWhenTicketIdExists() {
@@ -76,7 +80,7 @@ class TicketToolsTest {
 
     @Test
     void createTicketToolShouldReturnNeedMoreInfoWhenRequiredFieldsMissing() {
-        CreateTicketTool tool = new CreateTicketTool(ticketCommandService, validator, retrievalService, springAiToolSupport, 0.72d);
+        CreateTicketTool tool = new CreateTicketTool(ticketCommandService, validator, retrievalService, springAiToolSupport, ticketCreateEnrichmentService, 0.72d);
         when(validator.validate(eq(tool), any())).thenReturn(AgentToolValidationResult.builder()
                 .valid(false)
                 .missingFields(List.of(AgentToolParameterField.TITLE))
@@ -113,13 +117,14 @@ class TicketToolsTest {
 
     @Test
     void createTicketToolShouldRecordAlreadyTriedBranch() {
-        CreateTicketTool tool = new CreateTicketTool(ticketCommandService, validator, retrievalService, springAiToolSupport, 0.72d);
+        CreateTicketTool tool = new CreateTicketTool(ticketCommandService, validator, retrievalService, springAiToolSupport, ticketCreateEnrichmentService, 0.72d);
         when(validator.validate(eq(tool), any())).thenReturn(AgentToolValidationResult.builder().valid(true).build());
         when(retrievalService.checkSimilarCasesBeforeCreate(any(), any(), eq(3))).thenReturn(RetrievalResult.builder()
                 .retrievalPath("MYSQL_FALLBACK")
                 .fallbackUsed(true)
                 .hits(List.of(RetrievalHit.builder().score(0.88d).build()))
                 .build());
+        when(ticketCreateEnrichmentService.enrich(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(ticketCommandService.createTicket(any(), any())).thenReturn(ticket(1003L));
 
         AgentToolResult result = tool.execute(AgentToolRequest.builder()

@@ -30,6 +30,9 @@ public class RetrievalResult {
     /** 是否走了 fallback 路径。 */
     private boolean fallbackUsed;
 
+    /** 是否启用双路召回（originalQuery + rewrittenQuery）。 */
+    private boolean dualPathUsed;
+
     /** 命中的历史知识列表。 */
     @Builder.Default
     private List<RetrievalHit> hits = new ArrayList<>();

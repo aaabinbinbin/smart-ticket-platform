@@ -130,11 +130,20 @@ Tool 是实际执行业务动作的后端能力。
 当前已有：
 
 - 查询工单
-- 创建工单
+- 创建工单（自动经 enrichment 补全 type/category/priority/typeProfile）
 - 转派工单
 - 检索历史案例
 
 Tool 不负责规划，也不负责风险决策；它只执行已经被放行的业务动作。
+
+### TicketCreateEnrichmentService
+
+工单创建字段自动补全服务，用于简化用户输入。
+
+- 用户只需传 title + description，系统根据规则自动推断 type、category、priority、typeProfile。
+- 如果用户显式传了某个字段，优先尊重用户输入，不覆盖。
+- 当前采用规则实现（关键词匹配），后续可扩展 LLM enrichment 分支（需超时和降级设计）。
+- Agent 创建工单和 HTTP 创建工单均经过同一 enrichment 流程。
 
 写操作禁止让 LLM 直接修改业务数据。创建、转派等动作必须走：
 
@@ -153,11 +162,21 @@ intent route
 
 当前实现三类记忆：
 
-- 工作记忆：保存在会话上下文中，用于多轮补槽和当前活跃工单。
-- 工单领域记忆：记录当前会话与工单相关的上下文。
-- 用户偏好记忆：持久化用户偏好，例如常用摘要视角。
+- **工作记忆**：保存在会话上下文中，用于多轮补槽和当前活跃工单。
+- **工单领域记忆**：记录当前会话与工单相关的上下文，存储在 Redis（TTL 30 分钟）。
+- **用户偏好记忆**：持久化用户偏好，例如常用摘要视角，存储在数据库。
 
-主链入口会 hydrate memory，Tool 执行后会 remember。
+三类记忆均包含可靠性元数据：
+
+| 字段 | 说明 |
+|---|---|
+| `source` | 记忆来源：USER_EXPLICIT / TOOL_RESULT / INFERRED / LLM_EXTRACTED |
+| `confidence` | 置信度（0-1），越低越只能用于推荐，不能自动执行 |
+| `expiresAt` | 过期时间，过期后不再使用 |
+
+> **记忆不是权威事实源。** 数据库 / Tool 实时查询结果 = 权威事实。Agent memory = 上下文缓存和偏好线索。低置信度记忆只能用于推荐，不能自动执行。涉及工单状态、处理人、审批状态时必须实时查数据库。
+
+主链入口会 hydrate memory（跳过过期记忆），Tool 执行后会 remember（附带 source/confidence/expiresAt）。
 
 ### Trace
 
@@ -251,10 +270,11 @@ Agent 检索历史案例时会进入 RAG 能力。
 
 RAG 侧已经实现：
 
-- query rewrite
+- **双路召回**：originalQuery + rewrittenQuery 各自检索，合并后去重再 rerank。rewrite 被安全规则判定为不安全时降级为仅使用 originalQuery。
+- **query rewrite 安全规则**：禁止删除否定词和核心故障词，改写后长度不少于原文 50%。
 - MySQL fallback 检索
 - pgvector 可选主路径
-- rerank
+- rerank（基于词覆盖 + 用户反馈）
 - 用户反馈
 - 知识候选审核
 - 工单关闭后可靠入库

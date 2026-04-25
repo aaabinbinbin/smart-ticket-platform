@@ -112,6 +112,12 @@ RAG 主链路：
 → MySQL fallback → pgvector.vector_store → /api/rag/search 检索
 ```
 
+检索默认使用双路召回：originalQuery + rewrittenQuery 各自检索，结果合并后去重再统一 rerank。rewrite 的安全性由规则保护（否定词、核心故障词、最小长度），不安全时降级为仅使用原始查询。
+
+### 创建工单简化
+
+普通用户创建工单只需要传 title + description，type/category/priority/typeProfile 由 `TicketCreateEnrichmentService` 根据规则自动补全。用户显式传入的字段不会被覆盖。Agent 创建工单也经过同一 enrichment 流程。
+
 ### RAG 直接检索
 
 `GET /api/rag/search` 绕过 Agent 路由，直接调用 RetrievalService 执行向量检索，方便验证 PGVECTOR 路径是否正常工作：
@@ -205,6 +211,7 @@ mvn -pl smart-ticket-app -am spring-boot:run
 
 - [P0 验收记录](docs/p0-acceptance-record.md) — 包含单元测试、RAG 主路径、知识构建链路、pgvector 表数据验证、RAG 检索验证
 - [RAG 评估说明](docs/rag-evaluation.md) — 当前 RAG 评估集用于本地测试和指标计算验证，覆盖 Recall@3、Recall@5、MRR
+- [pgvector 性能边界](docs/pgvector-performance-boundary.md) — pgvector 适用场景、性能保障和演进路线
 - [Agent 稳定性验收](docs/agent-stability-acceptance.md) — 请求限流、session 锁、预算超限、降级策略、异常恢复等稳定性场景
 - [压测脚本](scripts/agent-smoke-load.ps1) — Agent 接口轻量压测
 - [E2E 验收脚本](scripts/run_rag_pgvector_e2e.ps1) — 完整端到端 RAG + pgvector 验收流程：创建工单 -> 关闭 -> 等待知识构建 -> Agent 检索 -> 直接 RAG 检索
@@ -215,3 +222,9 @@ mvn -pl smart-ticket-app -am spring-boot:run
 - P0 Agent 对话（同步 + SSE）、意图路由、确定性写命令、只读 ReAct、Session/Memory、Trace/Metrics
 - P0 RAG 知识构建链（MySQL + pgvector）、query rewrite、rerank、直接检索接口
 - P1 Dashboard 管理端指标、限流降级、SSE done 事件、专用线程池、历史检索关键词优化、知识指标语义修复
+- P0 创建工单只需 title + description，系统自动补全 type/category/priority/typeProfile（TicketCreateEnrichmentService）
+- P0 Idempotency-Key 规范：header/body 冲突返回 400
+- P1 Agent 创建工单自动补全 typeProfile（CreateTicketTool 经 enrichment 流程）
+- P1 RAG 双路召回：originalQuery + rewrittenQuery，安全规则保护否定词和核心故障词，不安全时降级
+- P2 Agent Memory source/confidence/expiresAt 可靠性元数据
+- P2 pgvector 性能边界与演进路线文档

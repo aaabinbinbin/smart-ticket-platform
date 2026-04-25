@@ -123,10 +123,39 @@ hits count=5
 - E2E 验收脚本已完成（scripts/run_rag_pgvector_e2e.ps1，覆盖完整链路）
 - Controller 层测试：RagControllerWebMvcTest、AdminDashboardControllerTest、AgentStreamControllerTest
 
-## 10. 后续可优化方向
+## 10. 新增能力（2026-04 改造）
+
+以下能力在第四次集中改造中新增：
+
+### P0：创建工单体验与幂等键规范化
+
+- **TicketCreateEnrichmentService**：用户只需传 title + description，系统自动补全 type/category/priority/typeProfile
+- **Idempotency-Key 规范化**：header 和 body 都有值但不同时返回 400，header 优先，body deprecated
+- **Agent 创建工单 enrichment**：CreateTicketTool 经过统一 enrichment 流程，不再缺 typeProfile
+
+### P1：RAG 双路召回与评估
+
+- **双路召回**：originalQuery + rewrittenQuery 各自检索，合并后去重再 rerank
+- **rewrite 安全规则**：保护否定词和核心故障词，不安全时降级为单路
+- **RewriteResult**：结构化返回 original/rewritten/safeToUse
+
+### P2：Agent Memory 可靠性增强
+
+- **MemorySource 枚举**：USER_EXPLICIT / TOOL_RESULT / INFERRED / LLM_EXTRACTED
+- **source / confidence / expiresAt**：AgentTicketDomainMemory 和 AgentUserPreferenceMemory 均增加可靠性元数据
+- **过期记忆跳过**：加载时检查 expiresAt，过期记忆不被使用
+
+### 文档补充
+
+- docs/pgvector-performance-boundary.md：pgvector 适用边界和演进路线
+- docs/rag-evaluation.md：补充双路召回策略说明
+- docs/agent-architecture.md：补充 Memory 可靠性、Enrichment 服务说明
+
+## 11. 后续可优化方向
 
 - Agent 历史检索路由继续优化
 - RAG 检索结果展示优化
 - SSE 后续可升级为 token 级流式
 - RAG Recall@K / MRR 可扩展为真实数据集评估 runner
 - Dashboard 指标可继续扩展
+- TicketCreateEnrichmentService 接入 LLM enrichment 扩展点（需超时和降级设计）

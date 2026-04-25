@@ -1,0 +1,26 @@
+[
+  {
+    "query": "登录系统时报 500",
+    "expectedKnowledgeIds": [101, 102],
+    "expectedTicketIds": [],
+    "topK": 3
+  },
+  {
+    "query": "申请访问测试环境数据库",
+    "expectedKnowledgeIds": [201],
+    "expectedTicketIds": [2001],
+    "topK": 5
+  },
+  {
+    "query": "生产环境部署失败",
+    "expectedKnowledgeIds": [301, 302, 303],
+    "expectedTicketIds": [],
+    "topK": 3
+  },
+  {
+    "query": "账号权限不足，无法访问资源",
+    "expectedKnowledgeIds": [401],
+    "expectedTicketIds": [4001, 4002],
+    "topK": 5
+  }
+]

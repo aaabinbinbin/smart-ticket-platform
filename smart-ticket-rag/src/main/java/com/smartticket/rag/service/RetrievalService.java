@@ -9,11 +9,15 @@ import com.smartticket.rag.model.RetrievalRequest;
 import com.smartticket.rag.model.RetrievalResult;
 import com.smartticket.rag.repository.TicketKnowledgeEmbeddingRepository;
 import com.smartticket.rag.repository.TicketKnowledgeReadRepository;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
@@ -27,6 +31,10 @@ import org.springframework.stereotype.Service;
  *
  * <p>启用 PGvector 时优先使用 Spring AI VectorStore 做相似度检索；默认本地开发仍使用
  * MySQL JSON 向量 + 内存 TopK 兜底，避免没有 PostgreSQL/模型密钥时影响 P0 闭环。</p>
+ *
+ * <p>检索策略：默认采用 originalQuery + rewrittenQuery 双路召回，
+ * 合并结果后去重，最后统一 rerank。如果 rewrite 被安全规则判定为不安全（safeToUse=false），
+ * 则降级为仅使用 originalQuery 单路检索。</p>
  */
 @Service
 public class RetrievalService {
@@ -81,31 +89,99 @@ public class RetrievalService {
     /**
      * 执行历史知识检索。
      *
+     * <p>默认双路召回：originalQuery + rewrittenQuery 各自检索，合并结果后去重再 rerank。
+     * 如果 rewrite 被安全规则判定为不安全，降级为仅使用 originalQuery。</p>
+     *
      * @param request 检索请求
      * @return 结构化检索结果
      */
     public RetrievalResult retrieve(RetrievalRequest request) {
         String queryText = request == null ? null : request.getQueryText();
         int topK = normalizeTopK(request == null ? null : request.getTopK());
-        String rewrittenQuery = request != null && request.isRewrite()
-                ? queryRewriteService.rewriteForHistorySearch(queryText)
-                : normalizeQuery(queryText);
-        if (!hasText(rewrittenQuery)) {
-            return RetrievalResult.builder()
-                    .queryText(queryText)
-                    .rewrittenQuery(rewrittenQuery)
-                    .topK(topK)
-                    .retrievalPath("EMPTY")
-                    .fallbackUsed(false)
-                    .hits(List.of())
-                    .build();
+        boolean rewriteEnabled = request != null && request.isRewrite();
+
+        // Step 1: rewrite（如果 rewrite 未启用，仅做基本归一化）
+        String originalQuery = normalizeQuery(queryText);
+        if (!hasText(originalQuery)) {
+            return emptyResult(queryText, topK, "EMPTY");
         }
 
-        Optional<RetrievalResult> vectorStoreResult = retrieveFromVectorStore(queryText, rewrittenQuery, topK);
-        if (vectorStoreResult.isPresent()) {
-            return vectorStoreResult.get();
+        if (!rewriteEnabled) {
+            // rewrite 未启用：单路检索，仅使用 normalized query
+            return singlePathRetrieve(queryText, originalQuery, topK);
         }
-        return retrieveFromMysqlFallback(queryText, rewrittenQuery, topK);
+
+        // rewrite 已启用：执行双路检索（带安全检查）
+        RewriteResult rewriteResult = queryRewriteService.rewriteForHistorySearch(queryText);
+        log.debug("RAG rewrite: original='{}', rewritten='{}', safeToUse={}",
+                rewriteResult.getOriginalQuery(), rewriteResult.getRewrittenQuery(), rewriteResult.isSafeToUse());
+
+        // Step 2: 确定需要检索的查询列表
+        List<String> searchQueries = new ArrayList<>();
+        searchQueries.add(rewriteResult.getOriginalQuery());
+        if (rewriteResult.isSafeToUse() && hasText(rewriteResult.getRewrittenQuery())
+                && !rewriteResult.getRewrittenQuery().equals(rewriteResult.getOriginalQuery())) {
+            searchQueries.add(rewriteResult.getRewrittenQuery());
+        }
+
+        // Step 3: 对每个查询执行检索，收集所有原始命中
+        List<RetrievalHit> allRawHits = new ArrayList<>();
+        String retrievalPath = "EMPTY";
+        boolean fallbackUsed = false;
+
+        for (String query : searchQueries) {
+            Optional<List<RetrievalHit>> vectorHits = searchFromVectorStore(query, topK);
+            if (vectorHits.isPresent()) {
+                allRawHits.addAll(vectorHits.get());
+                retrievalPath = "PGVECTOR";
+            } else {
+                List<RetrievalHit> mysqlHits = searchFromMysqlFallback(query, topK);
+                allRawHits.addAll(mysqlHits);
+                if (!mysqlHits.isEmpty()) {
+                    retrievalPath = "MYSQL_FALLBACK";
+                    fallbackUsed = true;
+                }
+            }
+        }
+
+        // Step 4: 按 knowledgeId 去重
+        List<RetrievalHit> deduplicatedHits = deduplicateByKnowledgeId(allRawHits);
+
+        if (deduplicatedHits.isEmpty()) {
+            log.warn("RAG 检索无结果，query='{}', dualPath={}", queryText, searchQueries.size() > 1);
+            return emptyResult(queryText, topK, retrievalPath, fallbackUsed,
+                    rewriteResult.getRewrittenQuery(), rewriteResult.isSafeToUse());
+        }
+
+        // Step 5: 统一 rerank
+        String rerankQuery = hasText(rewriteResult.getOriginalQuery())
+                ? rewriteResult.getOriginalQuery() : queryText;
+        List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rerankQuery, deduplicatedHits, topK);
+
+        log.info("RAG 检索路径={}, fallbackUsed={}, dualPath={}, query='{}', topK={}, rawHits={}, dedupHits={}, finalHits={}",
+                retrievalPath, fallbackUsed, searchQueries.size() > 1, queryText, topK,
+                allRawHits.size(), deduplicatedHits.size(), rerankedHits.size());
+
+        return RetrievalResult.builder()
+                .queryText(queryText)
+                .rewrittenQuery(rewriteResult.getRewrittenQuery())
+                .topK(topK)
+                .retrievalPath(retrievalPath)
+                .fallbackUsed(fallbackUsed)
+                .dualPathUsed(searchQueries.size() > 1)
+                .hits(rerankedHits)
+                .build();
+    }
+
+    /**
+     * rewrite 未启用时的单路检索。
+     */
+    private RetrievalResult singlePathRetrieve(String queryText, String normalizedQuery, int topK) {
+        Optional<RetrievalResult> vectorResult = retrieveFromVectorStore(queryText, normalizedQuery, topK);
+        if (vectorResult.isPresent()) {
+            return vectorResult.get();
+        }
+        return retrieveFromMysqlFallback(queryText, normalizedQuery, topK);
     }
 
     /**
@@ -128,8 +204,95 @@ public class RetrievalService {
                 .build());
     }
 
-    /** 使用 Spring AI VectorStore 执行 PGvector 相似度检索。 */
-    private Optional<RetrievalResult> retrieveFromVectorStore(String queryText, String rewrittenQuery, int topK) {
+    // ========== 双路检索：PGvector ==========
+
+    /**
+     * 从 PGvector 检索原始命中列表（不经过 rerank，由调用方合并后统一 rerank）。
+     */
+    private Optional<List<RetrievalHit>> searchFromVectorStore(String query, int topK) {
+        if (!vectorStoreEnabled) {
+            return Optional.empty();
+        }
+        SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
+        if (holder == null || holder.vectorStore() == null) {
+            log.warn("RAG 向量存储未就绪，跳过 PGvector 检索");
+            return Optional.empty();
+        }
+        try {
+            List<Document> documents = holder.vectorStore().similaritySearch(SearchRequest.builder()
+                    .query(query)
+                    .topK(topK)
+                    .similarityThresholdAll()
+                    .build());
+            return Optional.of(documents.stream()
+                    .map(this::toHit)
+                    .toList());
+        } catch (RuntimeException ex) {
+            log.warn("PGvector 检索失败，跳过：reason={}", ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    // ========== 双路检索：MySQL 兜底 ==========
+
+    /**
+     * 从 MySQL JSON 向量检索原始命中列表（不经过 rerank，由调用方合并后统一 rerank）。
+     */
+    private List<RetrievalHit> searchFromMysqlFallback(String query, int topK) {
+        if (!hasText(query)) {
+            return List.of();
+        }
+        List<Double> queryVector = embeddingModelClient.embed(query);
+        Map<Long, TicketKnowledge> knowledgeMap = activeKnowledgeMap();
+        if (knowledgeMap.isEmpty()) {
+            log.warn("MySQL 检索无可用知识，query='{}'", query);
+            return List.of();
+        }
+        return embeddingRepository.findByKnowledgeIds(List.copyOf(knowledgeMap.keySet()))
+                .stream()
+                .filter(embedding -> hasText(embedding.getEmbeddingVector()))
+                .map(embedding -> toHit(embedding, knowledgeMap.get(embedding.getKnowledgeId()), queryVector))
+                .filter(hit -> hit.getScore() != null)
+                .sorted(Comparator.comparing(RetrievalHit::getScore).reversed())
+                .toList();
+    }
+
+    // ========== 去重 ==========
+
+    /**
+     * 按 knowledgeId 去重，保留 score 更高的命中。
+     */
+    private List<RetrievalHit> deduplicateByKnowledgeId(List<RetrievalHit> hits) {
+        Map<Long, RetrievalHit> bestByKnowledgeId = new HashMap<>();
+        // 用 LinkedHashMap 保证插入顺序
+        Map<Long, RetrievalHit> ordered = new java.util.LinkedHashMap<>();
+        for (RetrievalHit hit : hits) {
+            Long knowledgeId = hit.getKnowledgeId();
+            if (knowledgeId == null) {
+                // 没有 knowledgeId 的保留所有
+                continue;
+            }
+            RetrievalHit existing = bestByKnowledgeId.get(knowledgeId);
+            if (existing == null) {
+                bestByKnowledgeId.put(knowledgeId, hit);
+                ordered.put(knowledgeId, hit);
+            } else if (hit.getScore() != null && (existing.getScore() == null || hit.getScore() > existing.getScore())) {
+                bestByKnowledgeId.put(knowledgeId, hit);
+                ordered.put(knowledgeId, hit);
+            }
+        }
+        return List.copyOf(ordered.values());
+    }
+
+    // ========== 兼容旧方法（保留 PGvector 全链路，用于外部调用） ==========
+
+    /** 使用 Spring AI VectorStore 执行 PGvector 相似度检索（保留原方法签名）。 */
+    Optional<RetrievalResult> retrieveFromVectorStore(String queryText, String rewrittenQuery, int topK) {
+        return retrieveFromVectorStore(queryText, rewrittenQuery, topK, true);
+    }
+
+    private Optional<RetrievalResult> retrieveFromVectorStore(
+            String queryText, String rewrittenQuery, int topK, boolean doRerank) {
         if (!vectorStoreEnabled) {
             return Optional.empty();
         }
@@ -147,16 +310,18 @@ public class RetrievalService {
             List<RetrievalHit> hits = documents.stream()
                     .map(this::toHit)
                     .toList();
-            List<RetrievalHit> rerankedHits = retrievalRerankService.rerank(rewrittenQuery, hits, topK);
+            List<RetrievalHit> finalHits = doRerank
+                    ? retrievalRerankService.rerank(rewrittenQuery, hits, topK)
+                    : hits;
             log.info("RAG 检索路径=PGVECTOR，fallbackUsed=false，query='{}', topK={}, hits={}",
-                    rewrittenQuery, topK, rerankedHits.size());
+                    rewrittenQuery, topK, finalHits.size());
             return Optional.of(RetrievalResult.builder()
                     .queryText(queryText)
                     .rewrittenQuery(rewrittenQuery)
                     .topK(topK)
                     .retrievalPath("PGVECTOR")
                     .fallbackUsed(false)
-                    .hits(rerankedHits)
+                    .hits(finalHits)
                     .build());
         } catch (RuntimeException ex) {
             log.warn("Spring AI 向量检索失败，回退到 MySQL 向量：reason={}", ex.getMessage());
@@ -164,8 +329,8 @@ public class RetrievalService {
         }
     }
 
-    /** 使用 MySQL JSON 向量执行默认兜底检索。 */
-    private RetrievalResult retrieveFromMysqlFallback(String queryText, String rewrittenQuery, int topK) {
+    /** 使用 MySQL JSON 向量执行默认兜底检索（保留原方法签名）。 */
+    RetrievalResult retrieveFromMysqlFallback(String queryText, String rewrittenQuery, int topK) {
         List<Double> queryVector = embeddingModelClient.embed(rewrittenQuery);
         Map<Long, TicketKnowledge> knowledgeMap = activeKnowledgeMap();
         if (knowledgeMap.isEmpty()) {
@@ -200,6 +365,35 @@ public class RetrievalService {
                 .build();
     }
 
+    // ========== 结果构建辅助 ==========
+
+    /** 构造空结果。 */
+    private RetrievalResult emptyResult(String queryText, int topK, String path) {
+        return RetrievalResult.builder()
+                .queryText(queryText)
+                .topK(topK)
+                .retrievalPath(path)
+                .fallbackUsed(false)
+                .hits(List.of())
+                .build();
+    }
+
+    /** 构造带详细信息的空结果。 */
+    private RetrievalResult emptyResult(String queryText, int topK, String path,
+                                         boolean fallbackUsed, String rewrittenQuery, boolean dualPath) {
+        return RetrievalResult.builder()
+                .queryText(queryText)
+                .rewrittenQuery(rewrittenQuery)
+                .topK(topK)
+                .retrievalPath(path)
+                .fallbackUsed(fallbackUsed)
+                .dualPathUsed(dualPath)
+                .hits(List.of())
+                .build();
+    }
+
+    // ========== 原有方法保持不变 ==========
+
     /** 归一化查询文本。 */
     private String normalizeQuery(String queryText) {
         return queryText == null ? "" : queryText.trim().replaceAll("\\s+", " ");
@@ -215,7 +409,7 @@ public class RetrievalService {
     }
 
     /** 将 Spring AI Document 转换为检索命中。 */
-    private RetrievalHit toHit(Document document) {
+    RetrievalHit toHit(Document document) {
         Map<String, Object> metadata = document.getMetadata() == null ? Map.of() : document.getMetadata();
         return RetrievalHit.builder()
                 .knowledgeId(toLong(metadata.get("knowledgeId")))

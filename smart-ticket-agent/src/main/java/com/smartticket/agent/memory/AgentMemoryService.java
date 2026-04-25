@@ -8,6 +8,7 @@ import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.domain.entity.AgentUserPreferenceMemory;
+import com.smartticket.domain.enums.MemorySource;
 import com.smartticket.domain.mapper.AgentUserPreferenceMemoryMapper;
 import com.smartticket.infra.redis.RedisJsonClient;
 import com.smartticket.infra.redis.RedisKeys;
@@ -20,11 +21,20 @@ import org.springframework.stereotype.Service;
 
 /**
  * 智能体记忆服务。
+ *
+ * <p>记忆不是权威事实源，数据库/Tool 实时查询结果才是权威事实。
+ * 记忆用于上下文缓存和偏好线索，不替代数据库查询。</p>
+ *
+ * <p>每条记忆包含来源(source)、置信度(confidence)和过期时间(expiresAt)，
+ * 用于判断可信度。低置信度记忆只能用于推荐，不能自动执行。
+ * 涉及工单状态、处理人、审批状态时必须实时查数据库。</p>
  */
 @Service
 public class AgentMemoryService {
     private static final Logger log = LoggerFactory.getLogger(AgentMemoryService.class);
     private static final Duration TICKET_MEMORY_TTL = Duration.ofMinutes(30);
+    private static final double DEFAULT_CONFIDENCE = 0.85;
+    private static final double INFERRED_CONFIDENCE = 0.60;
 
     // 用户偏好映射接口提供器
     private final ObjectProvider<AgentUserPreferenceMemoryMapper> preferenceMapperProvider;
@@ -90,7 +100,14 @@ public class AgentMemoryService {
             return;
         }
         try {
-            context.setUserPreferenceMemory(mapper.findByUserId(currentUser.getUserId()));
+            AgentUserPreferenceMemory preference = mapper.findByUserId(currentUser.getUserId());
+            // 跳过过期的偏好记忆
+            if (preference != null && preference.getExpiresAt() != null
+                    && preference.getExpiresAt().isBefore(LocalDateTime.now())) {
+                log.debug("skip expired user preference memory, userId={}", currentUser.getUserId());
+                return;
+            }
+            context.setUserPreferenceMemory(preference);
         } catch (RuntimeException ex) {
             log.debug("load agent user preference memory failed, userId={}", currentUser.getUserId(), ex);
         }
@@ -108,10 +125,17 @@ public class AgentMemoryService {
             return;
         }
         try {
-            context.setTicketDomainMemory(redisJsonClient.get(
+            AgentTicketDomainMemory memory = redisJsonClient.get(
                     RedisKeys.agentTicketDomainMemory(context.getActiveTicketId()),
                     AgentTicketDomainMemory.class
-            ));
+            );
+            // 跳过过期的工单领域记忆
+            if (memory != null && memory.getExpiresAt() != null
+                    && memory.getExpiresAt().isBefore(LocalDateTime.now())) {
+                log.debug("skip expired ticket domain memory, ticketId={}", context.getActiveTicketId());
+                return;
+            }
+            context.setTicketDomainMemory(memory);
         } catch (RuntimeException ex) {
             log.debug("load agent ticket domain memory failed, ticketId={}", context.getActiveTicketId(), ex);
         }
@@ -164,6 +188,22 @@ public class AgentMemoryService {
         if (memory.getResponseStyle() == null) {
             memory.setResponseStyle("CONCISE");
         }
+
+        // 设置可靠性元数据
+        if (parameters.getType() != null || parameters.getCategory() != null
+                || parameters.getPriority() != null) {
+            // 用户传入的参数来自当前交互，视为 TOOL_RESULT
+            memory.setSource(MemorySource.TOOL_RESULT);
+            memory.setConfidence(DEFAULT_CONFIDENCE);
+            // 偏好记忆 7 天过期
+            memory.setExpiresAt(LocalDateTime.now().plusDays(7));
+        } else if (memory.getSource() == null) {
+            // 没有新数据且没有已有来源标记：标记为 INFERRED
+            memory.setSource(MemorySource.INFERRED);
+            memory.setConfidence(INFERRED_CONFIDENCE);
+            memory.setExpiresAt(LocalDateTime.now().plusDays(1));
+        }
+
         memory.setUpdatedAt(LocalDateTime.now());
         return memory;
     }
@@ -184,6 +224,10 @@ public class AgentMemoryService {
                 .riskStatus(riskStatus(toolResult.getReply()))
                 .approvalStatus(approvalStatus(toolResult.getReply()))
                 .updatedAt(LocalDateTime.now())
+                // 来自工具执行结果的记忆
+                .source(MemorySource.TOOL_RESULT)
+                .confidence(DEFAULT_CONFIDENCE)
+                .expiresAt(LocalDateTime.now().plus(TICKET_MEMORY_TTL))
                 .build();
         context.setTicketDomainMemory(memory);
 
