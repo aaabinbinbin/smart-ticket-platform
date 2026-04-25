@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,6 +46,7 @@ public class TicketCreateEnrichmentService {
      *
      * <p>LLM enricher 只在 llm-enabled=true 且 ChatModel 可用时创建。</p>
      */
+    @Autowired
     public TicketCreateEnrichmentService(
             TicketCreateEnrichmentProperties properties,
             ObjectProvider<ChatModel> chatModelProvider,

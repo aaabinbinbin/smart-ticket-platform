@@ -8,6 +8,10 @@ import com.smartticket.domain.enums.TicketTypeEnum;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -89,16 +93,28 @@ public class TicketCreateLlmEnricher {
                 description == null ? "" : description
         );
         try {
-            String responseText = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
-                    .user(userPrompt)
-                    .call()
-                    .content();
+            long timeoutMs = properties.getLlmTimeoutMs();
+            String responseText = CompletableFuture.supplyAsync(() ->
+                            chatClient.prompt()
+                                    .system(SYSTEM_PROMPT)
+                                    .user(userPrompt)
+                                    .call()
+                                    .content()
+                    )
+                    .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .join();
             if (responseText == null || responseText.isBlank()) {
                 log.warn("LLM enrichment 返回空内容");
                 return null;
             }
             return parseAndValidate(responseText);
+        } catch (CompletionException ex) {
+            if (ex.getCause() instanceof TimeoutException) {
+                log.warn("LLM enrichment 调用超时（{}ms）", properties.getLlmTimeoutMs());
+            } else {
+                log.warn("LLM enrichment 调用异常：{}", ex.getCause() != null ? ex.getCause().getMessage() : ex.getClass().getSimpleName());
+            }
+            return null;
         } catch (Exception ex) {
             log.warn("LLM enrichment 调用异常：{}", ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName());
             return null;
