@@ -31,6 +31,8 @@ import com.smartticket.agent.resilience.AgentTurnBudget;
 import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.reply.AgentReplyRenderer;
 import com.smartticket.agent.skill.AgentSkill;
+import com.smartticket.agent.stream.AgentEventSink;
+import com.smartticket.agent.stream.NoopAgentEventSink;
 import com.smartticket.agent.skill.SkillRegistry;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolRequest;
@@ -138,22 +140,47 @@ public class AgentFacade {
      * @return 对外返回的 Agent 对话结果
      */
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
+        return chatWithSink(currentUser, sessionId, message, NoopAgentEventSink.INSTANCE);
+    }
+
+    /**
+     * 处理用户单轮流式对话消息。
+     *
+     * <p>P7 新增的 SSE 入口复用同步主链，只额外通过 sink 输出 accepted、route、status、delta、
+     * final 和 error 事件。该方法不会改变 `/api/agent/chat` 的响应协议；写操作仍然走确定性命令链路，
+     * ReAct 仍然只允许只读场景。方法会修改 session/memory/pendingAction/trace，修改点与同步入口相同。</p>
+     *
+     * @param currentUser 当前登录用户
+     * @param sessionId 会话 ID
+     * @param message 用户消息
+     * @param sink 事件输出器
+     * @return 完整 Agent 对话结果，SSE final 事件也会发送该对象
+     */
+    public AgentChatResult chatStream(CurrentUser currentUser, String sessionId, String message, AgentEventSink sink) {
+        return chatWithSink(currentUser, sessionId, message, sink == null ? NoopAgentEventSink.INSTANCE : sink);
+    }
+
+    private AgentChatResult chatWithSink(CurrentUser currentUser, String sessionId, String message, AgentEventSink sink) {
+        sink.accepted(sessionId);
         AgentTraceContext trace = traceService.start(currentUser, sessionId, message);
         if (!rateLimitService.tryAcquire(currentUser, sessionId)) {
             // 限流发生在主链加载 session 之前，避免高压请求继续消耗模型、RAG 或数据库资源。
-            return rejectBeforeMainFlow(sessionId, trace, AgentErrorCode.AGENT_RATE_LIMITED, "Agent 请求触发限流");
+            return rejectBeforeMainFlow(sessionId, trace, sink, AgentErrorCode.AGENT_RATE_LIMITED, "Agent 请求触发限流");
         }
         if (!sessionLockService.tryLock(sessionId)) {
             // 同一 session 并发请求直接快速失败，保护 pendingAction 和 recentMessages 不被串写。
-            return rejectBeforeMainFlow(sessionId, trace, AgentErrorCode.AGENT_SESSION_BUSY, "同一 session 已有请求处理中");
+            return rejectBeforeMainFlow(sessionId, trace, sink, AgentErrorCode.AGENT_SESSION_BUSY, "同一 session 已有请求处理中");
         }
         try {
-            return handleChat(currentUser, sessionId, message, trace);
+            AgentChatResult result = handleChat(currentUser, sessionId, message, trace, sink);
+            sink.finalResult(result);
+            return result;
         } catch (AgentBudgetExceededException ex) {
             traceService.step(trace, "resilience", "budget", null, ex.getErrorCode().name(), ex.getMessage());
-            return rejectBeforeMainFlow(sessionId, trace, ex.getErrorCode(), ex.getMessage());
+            return rejectBeforeMainFlow(sessionId, trace, sink, ex.getErrorCode(), ex.getMessage());
         } finally {
             sessionLockService.unlock(sessionId);
+            sink.closeQuietly();
         }
     }
 
@@ -161,24 +188,30 @@ public class AgentFacade {
             CurrentUser currentUser,
             String sessionId,
             String message,
-            AgentTraceContext trace
+            AgentTraceContext trace,
+            AgentEventSink sink
     ) {
         boolean springAiReady = isSpringAiChatReady();
         AgentSessionContext context = sessionService.load(sessionId);
         memoryService.hydrate(currentUser, context);
 
         if (pendingActionCoordinator.hasPendingAction(context)) {
+            sink.status("正在继续上一轮未完成操作");
             return continuePendingTurn(currentUser, sessionId, message, context, springAiReady, trace);
         }
 
+        sink.status("正在识别意图");
         traceService.step(trace, "route", "before", null, "START", message);
         IntentRoute route = intentRouter.route(message, context);
         traceService.step(trace, "route", "after", null, route.getIntent().name(), String.valueOf(route.getConfidence()));
+        sink.route(route);
+        sink.status("正在生成执行计划");
         AgentPlan plan = agentPlanner.buildOrLoadPlan(context, route);
         context.setPlanState(plan);
         traceService.step(trace, "planner", "decision",
                 plan.getNextSkillCode(), plan.getNextAction().name(), plan.getCurrentStage().name());
 
+        sink.status("正在解析执行策略");
         AgentExecutionPolicy policy = executionPolicyService.resolve(currentUser, route);
         traceService.step(trace, "policy", "resolve", null,
                 policy.getMode().name(), String.valueOf(policy.getAllowedToolNames()));
@@ -192,14 +225,17 @@ public class AgentFacade {
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
 
         if (policy.getMode() == AgentExecutionMode.CLARIFICATION) {
+            sink.status("需要补充意图信息");
             return clarifyLowConfidenceIntent(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
         }
 
         if (isWritePolicy(policy)) {
+            sink.status("正在执行确定性写命令");
             return executeWriteCommand(currentUser, sessionId, message, context, route, plan, springAiReady, trace, budget);
         }
 
         if (springAiReady && policy.isAllowReact()) {
+            sink.status("正在执行只读 ReAct 查询");
             Optional<ReadOnlyReactExecution> reactExecution = readOnlyReactExecutor.execute(
                     currentUser, message, context, route, plan, policy, trace, budget);
             if (reactExecution.isPresent()) {
@@ -212,16 +248,19 @@ public class AgentFacade {
                         plan,
                         springAiReady,
                         trace,
-                        reactExecution.get()
+                        reactExecution.get(),
+                        sink
                 );
             }
             if (degradePolicyService.canDegradeToDeterministic(route)) {
                 traceService.step(trace, "resilience", "degrade", null,
                         AgentErrorCode.AGENT_DEGRADED.name(), "只读 ReAct 不可用，转入确定性链路");
+                sink.status("只读增强能力不可用，正在降级为确定性查询");
             }
         }
 
         // 只读场景在 ReAct 不可用、无白名单工具或模型执行失败时，仍然回退到确定性查询链。
+        sink.status("正在执行确定性查询");
         return executeDeterministicReadOnly(currentUser, sessionId, message, context, route, plan, springAiReady, trace, budget);
     }
 
@@ -389,10 +428,15 @@ public class AgentFacade {
             AgentPlan plan,
             boolean springAiReady,
             AgentTraceContext trace,
-            ReadOnlyReactExecution reactExecution
+            ReadOnlyReactExecution reactExecution,
+            AgentEventSink sink
     ) {
         updateSessionAfterToolCalls(currentUser, sessionId, context, route, message, reactExecution.toolCalls());
         AgentExecutionSummary summary = reactExecution.summary();
+        // 只读总结文本可以作为 delta 事件输出；最终事实仍以 final 中的完整 AgentChatResult 为准。
+        if (summary != null && summary.getModelReply() != null && !summary.getModelReply().isBlank()) {
+            sink.delta(summary.getModelReply());
+        }
         String finalReply = renderReply(route, plan, context, summary);
         traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
@@ -574,6 +618,7 @@ public class AgentFacade {
     private AgentChatResult rejectBeforeMainFlow(
             String sessionId,
             AgentTraceContext trace,
+            AgentEventSink sink,
             AgentErrorCode errorCode,
             String reason
     ) {
@@ -581,12 +626,16 @@ public class AgentFacade {
         AgentExecutionSummary summary = degradePolicyService.failure(errorCode, reason);
         String reply = renderReply(null, null, null, summary);
         traceService.finish(trace, null, null, summary);
-        return AgentChatResult.builder()
+        AgentChatResult result = AgentChatResult.builder()
                 .sessionId(sessionId)
                 .reply(reply)
                 .springAiChatReady(isSpringAiChatReady())
                 .traceId(trace == null ? null : trace.getTraceId())
                 .build();
+        // 工程保护拒绝时同时输出 error 和 final，前端既能展示错误码，也能复用完整最终结果。
+        sink.error(errorCode.name(), reason, result.getTraceId());
+        sink.finalResult(result);
+        return result;
     }
 
     private boolean isSpringAiChatReady() {

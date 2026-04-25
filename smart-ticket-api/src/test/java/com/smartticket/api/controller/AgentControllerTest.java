@@ -1,9 +1,11 @@
 package com.smartticket.api.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -25,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @ExtendWith(MockitoExtension.class)
 class AgentControllerTest {
@@ -89,6 +92,37 @@ class AgentControllerTest {
 
         verify(currentUserResolver).resolve(authentication);
         verify(agentFacade).chat(eq(currentUser), eq("session-1"), eq("查询工单"));
+    }
+
+    @Test
+    void chatStreamShouldDelegateToFacadeWithSseSink() {
+        AgentController controller = new AgentController(agentFacade, currentUserResolver);
+        UsernamePasswordAuthenticationToken authentication = auth();
+        CurrentUser currentUser = CurrentUser.builder()
+                .userId(1L)
+                .username("user1")
+                .roles(List.of("USER"))
+                .build();
+        when(currentUserResolver.resolve(authentication)).thenReturn(currentUser);
+        when(agentFacade.chatStream(any(), eq("session-1"), eq("查询工单"), any())).thenReturn(AgentChatResult.builder()
+                .sessionId("session-1")
+                .intent("QUERY_TICKET")
+                .reply("ok")
+                .build());
+
+        SseEmitter emitter = controller.chatStream(authentication, request());
+
+        assertNotNull(emitter);
+        verify(currentUserResolver).resolve(authentication);
+        verify(agentFacade, timeout(1000)).chatStream(eq(currentUser), eq("session-1"), eq("查询工单"), any());
+    }
+
+    private UsernamePasswordAuthenticationToken auth() {
+        AuthUser authUser = new AuthUser(
+                SysUser.builder().id(1L).username("user1").passwordHash("{noop}123456").realName("User One").status(1).build(),
+                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+        return new UsernamePasswordAuthenticationToken(authUser, null, authUser.getAuthorities());
     }
 
     private AgentChatRequest request() {

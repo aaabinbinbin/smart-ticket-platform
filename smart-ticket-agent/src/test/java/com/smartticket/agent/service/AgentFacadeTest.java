@@ -41,6 +41,7 @@ import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.reply.AgentReplyRenderer;
 import com.smartticket.agent.skill.AgentSkill;
 import com.smartticket.agent.skill.SkillRegistry;
+import com.smartticket.agent.stream.AgentEventSink;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.core.AgentToolStatus;
 import com.smartticket.agent.tool.core.AgentToolMetadata;
@@ -55,6 +56,7 @@ import com.smartticket.agent.tool.ticket.TransferTicketTool;
 import com.smartticket.agent.trace.AgentTraceContext;
 import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
@@ -476,6 +478,41 @@ class AgentFacadeTest {
         }
     }
 
+    @Test
+    void chatStreamShouldEmitAcceptedRouteStatusAndFinalResult() {
+        TestFixture fixture = fixture();
+        AgentSessionContext context = AgentSessionContext.builder().build();
+        AgentToolResult toolResult = AgentToolResult.builder()
+                .status(AgentToolStatus.SUCCESS)
+                .toolName("queryTicket")
+                .reply("已查询工单详情。")
+                .data("ticket-detail")
+                .activeTicketId(1001L)
+                .build();
+        when(fixture.sessionService.load("s-stream")).thenReturn(context);
+        when(fixture.intentRouter.route("查询工单1001", context)).thenReturn(IntentRoute.builder()
+                .intent(AgentIntent.QUERY_TICKET)
+                .confidence(0.92d)
+                .reason("命中查询关键词")
+                .build());
+        when(fixture.parameterExtractor.extract("查询工单1001", context)).thenReturn(AgentToolParameters.builder()
+                .ticketId(1001L)
+                .build());
+        when(fixture.executionGuard.check(any(), eq("查询工单1001"), eq(context), any(), any()))
+                .thenReturn(AgentExecutionDecision.allow(fixture.queryTicketTool));
+        when(fixture.queryTicketTool.execute(any())).thenReturn(toolResult);
+        CapturingSink sink = new CapturingSink();
+
+        AgentChatResult result = fixture.agentFacade.chatStream(currentUser(), "s-stream", "查询工单1001", sink);
+
+        assertEquals("QUERY_TICKET", result.getIntent());
+        assertEquals(result, sink.finalResult);
+        assertEquals(true, sink.events.contains("accepted:s-stream"));
+        assertEquals(true, sink.events.stream().anyMatch(event -> event.startsWith("route:QUERY_TICKET")));
+        assertEquals(true, sink.events.stream().anyMatch(event -> event.startsWith("status:")));
+        assertEquals(true, sink.closed);
+    }
+
     private TestFixture fixture() {
         return fixture(false);
     }
@@ -645,5 +682,47 @@ class AgentFacadeTest {
                 .username("user1")
                 .roles(List.of("USER"))
                 .build();
+    }
+
+    private static class CapturingSink implements AgentEventSink {
+        private final List<String> events = new ArrayList<>();
+        private AgentChatResult finalResult;
+        private boolean closed;
+
+        @Override
+        public void accepted(String sessionId) {
+            events.add("accepted:" + sessionId);
+        }
+
+        @Override
+        public void status(String message) {
+            events.add("status:" + message);
+        }
+
+        @Override
+        public void route(IntentRoute route) {
+            events.add("route:" + (route == null || route.getIntent() == null ? null : route.getIntent().name()));
+        }
+
+        @Override
+        public void delta(String text) {
+            events.add("delta:" + text);
+        }
+
+        @Override
+        public void finalResult(AgentChatResult result) {
+            this.finalResult = result;
+            events.add("final");
+        }
+
+        @Override
+        public void error(String errorCode, String message, String traceId) {
+            events.add("error:" + errorCode);
+        }
+
+        @Override
+        public void closeQuietly() {
+            closed = true;
+        }
     }
 }
