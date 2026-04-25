@@ -116,7 +116,11 @@ RAG 主链路：
 
 ### 创建工单简化
 
-普通用户创建工单只需要传 title + description，type/category/priority/typeProfile 由 `TicketCreateEnrichmentService` 根据规则自动补全。用户显式传入的字段不会被覆盖。Agent 创建工单也经过同一 enrichment 流程。
+普通用户创建工单只需要传 title + description，type/category/priority/typeProfile 由 `TicketCreateEnrichmentService` 在 `TicketCommandService.createTicket()` 内部自动补全。用户显式传入的字段不会被覆盖。Agent 创建工单和 HTTP 创建工单均经过同一 enrichment 流程。
+
+### Idempotency-Key 规范
+
+创建工单接口推荐通过 HTTP Header `Idempotency-Key` 传幂等键。请求体中的 `idempotencyKey` 字段仅作为历史兼容字段保留。如果 Header 和 body 同时传入且不一致，接口返回 400。
 
 ### RAG 直接检索
 
@@ -222,9 +226,9 @@ mvn -pl smart-ticket-app -am spring-boot:run
 - P0 Agent 对话（同步 + SSE）、意图路由、确定性写命令、只读 ReAct、Session/Memory、Trace/Metrics
 - P0 RAG 知识构建链（MySQL + pgvector）、query rewrite、rerank、直接检索接口
 - P1 Dashboard 管理端指标、限流降级、SSE done 事件、专用线程池、历史检索关键词优化、知识指标语义修复
-- P0 创建工单只需 title + description，系统自动补全 type/category/priority/typeProfile（TicketCreateEnrichmentService）
+- P0 创建工单只需 title + description，系统自动补全 type/category/priority/typeProfile（TicketCreateEnrichmentService + TicketCommandService 内部统一调用）
 - P0 Idempotency-Key 规范：header/body 冲突返回 400
-- P1 Agent 创建工单自动补全 typeProfile（CreateTicketTool 经 enrichment 流程）
+- P1 Agent 创建工单自动补全 typeProfile（经 TicketCommandService 统一 enrichment）
 - P1 RAG 双路召回：originalQuery + rewrittenQuery，安全规则保护否定词和核心故障词，不安全时降级
 - P2 Agent Memory source/confidence/expiresAt 可靠性元数据
 - P2 pgvector 性能边界与演进路线文档

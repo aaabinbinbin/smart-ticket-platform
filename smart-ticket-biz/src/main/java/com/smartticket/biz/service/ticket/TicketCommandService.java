@@ -19,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 负责创建工单及创建阶段的前置校验。
  * 这里不处理后续流转，只关心入库前的默认值、幂等控制和类型约束。
+ *
+ * <p>创建入口统一在此处调用 {@link TicketCreateEnrichmentService#enrich} 自动补全
+ * type/category/priority/typeProfile，所有上游入口（HTTP、Agent Tool）都受益。</p>
  */
 @Service
 public class TicketCommandService {
@@ -32,6 +35,8 @@ public class TicketCommandService {
     private final TicketSlaService ticketSlaService;
     // 工单类型画像服务
     private final TicketTypeProfileService ticketTypeProfileService;
+    // 工单创建字段补全服务
+    private final TicketCreateEnrichmentService ticketCreateEnrichmentService;
 
     /**
      * 构造工单命令服务。
@@ -41,21 +46,27 @@ public class TicketCommandService {
             TicketRepository ticketRepository,
             TicketIdempotencyService ticketIdempotencyService,
             TicketSlaService ticketSlaService,
-            TicketTypeProfileService ticketTypeProfileService
+            TicketTypeProfileService ticketTypeProfileService,
+            TicketCreateEnrichmentService ticketCreateEnrichmentService
     ) {
         this.support = support;
         this.ticketRepository = ticketRepository;
         this.ticketIdempotencyService = ticketIdempotencyService;
         this.ticketSlaService = ticketSlaService;
         this.ticketTypeProfileService = ticketTypeProfileService;
+        this.ticketCreateEnrichmentService = ticketCreateEnrichmentService;
     }
 
     /**
      * 创建工单。
+     *
+     * <p>自动补全缺失的结构化字段后执行校验、入库。补全不会覆盖用户显式传入的字段。</p>
      */
     @Transactional
     public Ticket createTicket(CurrentUser operator, TicketCreateCommandDTO command) {
-        // 先统一规范化幂等键，保证后续所有分支使用同一份值。
+        // enrichment 自动补全缺失的结构化字段（type/category/priority/typeProfile）
+        command = ticketCreateEnrichmentService.enrich(command);
+        // 再统一规范化幂等键，保证后续所有分支使用同一份值。
         String idempotencyKey = normalizeIdempotencyKey(command);
         if (ticketIdempotencyService.enabled(idempotencyKey)) {
             // 开启幂等控制时，优先走带锁的创建流程，避免重复提交写入多条工单。

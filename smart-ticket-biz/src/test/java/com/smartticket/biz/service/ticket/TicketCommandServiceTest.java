@@ -24,6 +24,7 @@ import com.smartticket.domain.enums.TicketStatusEnum;
 import com.smartticket.domain.enums.TicketTypeEnum;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -48,8 +49,16 @@ class TicketCommandServiceTest {
     @Mock
     private TicketTypeProfileService ticketTypeProfileService;
 
+    @Mock
+    private TicketCreateEnrichmentService ticketCreateEnrichmentService;
+
     @InjectMocks
     private TicketCommandService service;
+
+    @BeforeEach
+    void setUp() {
+        when(ticketCreateEnrichmentService.enrich(any())).thenAnswer(invocation -> invocation.getArgument(0));
+    }
 
     @Test
     void createTicketShouldApplyDefaultTypeCategoryAndPriority() {

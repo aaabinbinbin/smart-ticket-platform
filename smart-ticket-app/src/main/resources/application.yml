@@ -62,6 +62,12 @@ smart-ticket:
       max-retries: 5
       relay-batch-size: 20
       relay-fixed-delay-ms: 30000
+  ticket:
+    enrichment:
+      llm-enabled: false
+      llm-timeout-ms: 3000
+      llm-max-retry: 0
+      llm-min-confidence: 0.6
   ai:
     chat:
       enabled: true

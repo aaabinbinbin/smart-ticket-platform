@@ -17,6 +17,7 @@ import com.smartticket.agent.tool.core.AgentToolStatus;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.domain.entity.AgentUserPreferenceMemory;
+import com.smartticket.domain.enums.MemorySource;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketTypeEnum;
@@ -79,6 +80,43 @@ class AgentMemoryServiceTest {
         assertEquals("WATCH", context.getTicketDomainMemory().getRiskStatus());
         verify(mapper).upsert(any(AgentUserPreferenceMemory.class));
         verify(redisJsonClient).set(eq("agent:memory:ticket:1002"), any(AgentTicketDomainMemory.class), any(Duration.class));
+    }
+
+    @Test
+    void rememberShouldSetSourceConfidenceAndExpiresAt() {
+        AgentUserPreferenceMemoryMapper mapper = mock(AgentUserPreferenceMemoryMapper.class);
+        RedisJsonClient redisJsonClient = mock(RedisJsonClient.class);
+        AgentMemoryService service = new AgentMemoryService(provider(mapper), provider(redisJsonClient));
+        AgentSessionContext context = AgentSessionContext.builder().activeTicketId(1003L).build();
+        AgentToolParameters parameters = AgentToolParameters.builder()
+                .type(TicketTypeEnum.INCIDENT)
+                .category(TicketCategoryEnum.SYSTEM)
+                .priority(TicketPriorityEnum.HIGH)
+                .build();
+
+        service.remember(
+                currentUser(),
+                context,
+                IntentRoute.builder().intent(AgentIntent.QUERY_TICKET).confidence(0.9d).build(),
+                parameters,
+                AgentToolResult.builder()
+                        .toolName("queryTicket")
+                        .status(AgentToolStatus.SUCCESS)
+                        .activeTicketId(1003L)
+                        .reply("工单已查询完成，当前状态为处理中")
+                        .build()
+        );
+
+        // 验证内存包含 source/confidence/expiresAt
+        assertNotNull(context.getUserPreferenceMemory());
+        assertEquals(MemorySource.TOOL_RESULT, context.getUserPreferenceMemory().getSource());
+        assertEquals(0.85, context.getUserPreferenceMemory().getConfidence());
+        assertNotNull(context.getUserPreferenceMemory().getExpiresAt());
+
+        assertNotNull(context.getTicketDomainMemory());
+        assertEquals(MemorySource.TOOL_RESULT, context.getTicketDomainMemory().getSource());
+        assertEquals(0.85, context.getTicketDomainMemory().getConfidence());
+        assertNotNull(context.getTicketDomainMemory().getExpiresAt());
     }
 
     @SuppressWarnings("unchecked")

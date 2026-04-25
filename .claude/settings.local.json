@@ -25,7 +25,11 @@
       "Bash(npx vite *)",
       "Bash(docker exec *)",
       "Bash(mysql --version)",
-      "Bash(mysql *)"
+      "Bash(mysql *)",
+      "Bash(git status *)",
+      "Bash(git check-ignore *)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git hash-object *)"
     ]
   }
 }

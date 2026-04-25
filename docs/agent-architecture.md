@@ -130,7 +130,7 @@ Tool 是实际执行业务动作的后端能力。
 当前已有：
 
 - 查询工单
-- 创建工单（自动经 enrichment 补全 type/category/priority/typeProfile）
+- 创建工单（type/category/priority/typeProfile 由 TicketCommandService 内部 enrichment 自动补全）
 - 转派工单
 - 检索历史案例
 
@@ -143,7 +143,7 @@ Tool 不负责规划，也不负责风险决策；它只执行已经被放行的
 - 用户只需传 title + description，系统根据规则自动推断 type、category、priority、typeProfile。
 - 如果用户显式传了某个字段，优先尊重用户输入，不覆盖。
 - 当前采用规则实现（关键词匹配），后续可扩展 LLM enrichment 分支（需超时和降级设计）。
-- Agent 创建工单和 HTTP 创建工单均经过同一 enrichment 流程。
+- enrichment 在 `TicketCommandService.createTicket()` 内部统一调用，Agent 创建工单和 HTTP 创建工单均自动受益。
 
 写操作禁止让 LLM 直接修改业务数据。创建、转派等动作必须走：
 

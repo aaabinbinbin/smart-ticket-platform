@@ -130,8 +130,8 @@ hits count=5
 ### P0：创建工单体验与幂等键规范化
 
 - **TicketCreateEnrichmentService**：用户只需传 title + description，系统自动补全 type/category/priority/typeProfile
+- **Enrichment 收口**：enrichment 在 `TicketCommandService.createTicket()` 内部统一调用，HTTP 和 Agent 入口均受益
 - **Idempotency-Key 规范化**：header 和 body 都有值但不同时返回 400，header 优先，body deprecated
-- **Agent 创建工单 enrichment**：CreateTicketTool 经过统一 enrichment 流程，不再缺 typeProfile
 
 ### P1：RAG 双路召回与评估
 

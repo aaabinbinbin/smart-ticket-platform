@@ -19,7 +19,6 @@ import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
 import com.smartticket.biz.dto.ticket.TicketPageQueryDTO;
 import com.smartticket.biz.dto.ticket.TicketSummaryDTO;
 import com.smartticket.biz.dto.ticket.TicketUpdateStatusCommandDTO;
-import com.smartticket.biz.service.ticket.TicketCreateEnrichmentService;
 import com.smartticket.biz.service.ticket.TicketService;
 import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
@@ -64,8 +63,6 @@ public class TicketController {
     private final TicketRequestParser ticketRequestParser;
     // 工单装配器
     private final TicketAssembler ticketAssembler;
-    // 工单创建字段补全服务
-    private final TicketCreateEnrichmentService ticketCreateEnrichmentService;
 
     /**
      * 构造工单控制器。
@@ -74,22 +71,20 @@ public class TicketController {
             TicketService ticketService,
             CurrentUserResolver currentUserResolver,
             TicketRequestParser ticketRequestParser,
-            TicketAssembler ticketAssembler,
-            TicketCreateEnrichmentService ticketCreateEnrichmentService
+            TicketAssembler ticketAssembler
     ) {
         this.ticketService = ticketService;
         this.currentUserResolver = currentUserResolver;
         this.ticketRequestParser = ticketRequestParser;
         this.ticketAssembler = ticketAssembler;
-        this.ticketCreateEnrichmentService = ticketCreateEnrichmentService;
     }
 
     /**
      * 创建工单。
      *
      * <p>用户只需传 title + description，type/category/priority/typeProfile
-     * 等结构化字段由 {@link TicketCreateEnrichmentService} 自动补全。
-     * 如果用户显式传了这些字段，不会覆盖。</p>
+     * 等结构化字段由 {@link com.smartticket.biz.service.ticket.TicketCreateEnrichmentService}
+     * 在业务层自动补全。如果用户显式传了这些字段，不会覆盖。</p>
      */
     @PostMapping
     @Operation(summary = "创建工单", description = "创建一张处于待分配状态的工单，只有 title 和 description 为必填")
@@ -98,8 +93,7 @@ public class TicketController {
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody CreateTicketRequestDTO request
     ) {
-        // 先构建部分命令（用户可能只传了 title + description）
-        TicketCreateCommandDTO partial = TicketCreateCommandDTO.builder()
+        TicketCreateCommandDTO command = TicketCreateCommandDTO.builder()
                 .title(request.getTitle())
                 .description(request.getDescription())
                 .type(ticketRequestParser.parseType(request.getType()))
@@ -108,9 +102,7 @@ public class TicketController {
                 .priority(ticketRequestParser.parsePriority(request.getPriority()))
                 .idempotencyKey(resolveIdempotencyKey(idempotencyKey, request.getIdempotencyKey()))
                 .build();
-        // enrichment 自动补全缺失的结构化字段
-        TicketCreateCommandDTO enriched = ticketCreateEnrichmentService.enrich(partial);
-        Ticket ticket = ticketService.createTicket(currentUserResolver.resolve(authentication), enriched);
+        Ticket ticket = ticketService.createTicket(currentUserResolver.resolve(authentication), command);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
     }
 

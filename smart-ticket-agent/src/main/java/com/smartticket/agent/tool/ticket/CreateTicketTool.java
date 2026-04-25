@@ -14,7 +14,6 @@ import com.smartticket.agent.tool.support.AgentToolResults;
 import com.smartticket.agent.tool.support.SpringAiToolSupport;
 import com.smartticket.biz.dto.ticket.TicketCreateCommandDTO;
 import com.smartticket.biz.service.ticket.TicketCommandService;
-import com.smartticket.biz.service.ticket.TicketCreateEnrichmentService;
 import com.smartticket.domain.entity.Ticket;
 import com.smartticket.domain.enums.TicketCategoryEnum;
 import com.smartticket.domain.enums.TicketPriorityEnum;
@@ -48,8 +47,6 @@ public class CreateTicketTool implements AgentTool {
     private final RetrievalService retrievalService;
     // SpringAI工具支撑
     private final SpringAiToolSupport springAiToolSupport;
-    // 工单创建字段补全服务
-    private final TicketCreateEnrichmentService ticketCreateEnrichmentService;
     // deflectionThreshold
     private final double deflectionThreshold;
 
@@ -61,14 +58,12 @@ public class CreateTicketTool implements AgentTool {
             AgentToolRequestValidator validator,
             RetrievalService retrievalService,
             @Lazy SpringAiToolSupport springAiToolSupport,
-            TicketCreateEnrichmentService ticketCreateEnrichmentService,
             @Value("${smart-ticket.agent.create.deflection-threshold:0.72}") double deflectionThreshold
     ) {
         this.ticketCommandService = ticketCommandService;
         this.validator = validator;
         this.retrievalService = retrievalService;
         this.springAiToolSupport = springAiToolSupport;
-        this.ticketCreateEnrichmentService = ticketCreateEnrichmentService;
         this.deflectionThreshold = deflectionThreshold;
     }
 
@@ -125,17 +120,15 @@ public class CreateTicketTool implements AgentTool {
         boolean deflectionSuggested = shouldSuggestDeflection(similarCases);
         boolean deflectionSucceeded = deflectionSuggested && !userAlreadyTried;
 
-        // 构建部分命令后走 enrichment 自动补全缺失的结构化字段（type/category/priority/typeProfile）
-        TicketCreateCommandDTO partial = TicketCreateCommandDTO.builder()
+        // type/category/priority/typeProfile 等结构化字段由 TicketCommandService 内部 enrichment 自动补全
+        Ticket ticket = ticketCommandService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
                 .title(request.getParameters().getTitle())
                 .description(request.getParameters().getDescription())
                 .type(request.getParameters().getType())
                 .category(request.getParameters().getCategory())
                 .priority(request.getParameters().getPriority())
                 .idempotencyKey(request.getParameters().getIdempotencyKey())
-                .build();
-        TicketCreateCommandDTO enriched = ticketCreateEnrichmentService.enrich(partial);
-        Ticket ticket = ticketCommandService.createTicket(request.getCurrentUser(), enriched);
+                .build());
         String reply = buildReply(similarCases, deflectionSuggested, userAlreadyTried);
         return AgentToolResults.success(
                 NAME,
