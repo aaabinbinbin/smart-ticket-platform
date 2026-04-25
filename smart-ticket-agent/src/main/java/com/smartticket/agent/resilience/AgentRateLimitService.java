@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +24,7 @@ public class AgentRateLimitService {
     private final Map<Long, Deque<Long>> userWindows = new ConcurrentHashMap<>();
     private final Deque<Long> globalWindow = new ArrayDeque<>();
 
+    @Autowired
     public AgentRateLimitService(
             @Value("${smart-ticket.agent.rate-limit.user-per-minute:60}") int maxRequestsPerUserPerMinute,
             @Value("${smart-ticket.agent.rate-limit.global-per-minute:600}") int maxGlobalRequestsPerMinute
@@ -30,7 +32,7 @@ public class AgentRateLimitService {
         this(maxRequestsPerUserPerMinute, maxGlobalRequestsPerMinute, Clock.systemUTC());
     }
 
-    public AgentRateLimitService(int maxRequestsPerUserPerMinute, int maxGlobalRequestsPerMinute, Clock clock) {
+    AgentRateLimitService(int maxRequestsPerUserPerMinute, int maxGlobalRequestsPerMinute, Clock clock) {
         this.maxRequestsPerUserPerMinute = Math.max(maxRequestsPerUserPerMinute, 1);
         this.maxGlobalRequestsPerMinute = Math.max(maxGlobalRequestsPerMinute, 1);
         this.clock = clock;

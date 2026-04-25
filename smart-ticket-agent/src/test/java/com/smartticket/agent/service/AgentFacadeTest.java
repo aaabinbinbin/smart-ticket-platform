@@ -592,7 +592,7 @@ class AgentFacadeTest {
                 deterministicCommandExecutor,
                 executionPolicyService,
                 readOnlyReactExecutor,
-                new AgentRateLimitService(100, 1000, java.time.Clock.systemUTC()),
+                new AgentRateLimitService(100, 1000),
                 sessionLockService,
                 budgetService,
                 new AgentDegradePolicyService()
