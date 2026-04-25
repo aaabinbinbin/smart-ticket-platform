@@ -22,7 +22,10 @@
       "Bash(grep -n \"//.*\" smart-ticket-agent/src/main/java/com/smartticket/agent/service/IntentRouter.java)",
       "Bash(grep -rn '\\\\\\\\u00[0-9a-fA-F]\\\\{4\\\\}' --include=\"*.java\" smart-ticket-*/src/)",
       "Bash(git stash *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(docker exec *)",
+      "Bash(mysql --version)",
+      "Bash(mysql *)"
     ]
   }
 }

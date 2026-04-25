@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.smartticket.domain.entity.TicketKnowledge;
-import com.smartticket.infra.ai.VectorStoreConfig.SpringAiVectorStoreHolder;
+import com.smartticket.infra.ai.PgVectorDirectWriteRepository;
 import com.smartticket.rag.embedding.EmbeddingModelClient;
 import com.smartticket.rag.repository.TicketKnowledgeEmbeddingRepository;
 import com.smartticket.rag.security.SensitiveInfoDetector;
@@ -22,12 +22,12 @@ class EmbeddingServiceTest {
     void embedKnowledgeShouldCreateStructuredChunksBeforeFullTextChunks() {
         EmbeddingModelClient embeddingModelClient = mock(EmbeddingModelClient.class);
         TicketKnowledgeEmbeddingRepository repository = mock(TicketKnowledgeEmbeddingRepository.class);
-        ObjectProvider<SpringAiVectorStoreHolder> vectorStoreProvider = mock(ObjectProvider.class);
+        ObjectProvider<PgVectorDirectWriteRepository> pgVectorRepoProvider = mock(ObjectProvider.class);
         when(embeddingModelClient.embed(org.mockito.ArgumentMatchers.anyString())).thenReturn(List.of(1.0d, 0.0d));
         EmbeddingService service = new EmbeddingService(
                 embeddingModelClient,
                 repository,
-                vectorStoreProvider,
+                pgVectorRepoProvider,
                 new SensitiveInfoMasker(new SensitiveInfoDetector()),
                 false
         );
@@ -57,12 +57,12 @@ class EmbeddingServiceTest {
     void embedKnowledgeShouldMaskSensitiveInfoBeforePersistAndEmbedding() {
         EmbeddingModelClient embeddingModelClient = mock(EmbeddingModelClient.class);
         TicketKnowledgeEmbeddingRepository repository = mock(TicketKnowledgeEmbeddingRepository.class);
-        ObjectProvider<SpringAiVectorStoreHolder> vectorStoreProvider = mock(ObjectProvider.class);
+        ObjectProvider<PgVectorDirectWriteRepository> pgVectorRepoProvider = mock(ObjectProvider.class);
         when(embeddingModelClient.embed(org.mockito.ArgumentMatchers.anyString())).thenReturn(List.of(1.0d, 0.0d));
         EmbeddingService service = new EmbeddingService(
                 embeddingModelClient,
                 repository,
-                vectorStoreProvider,
+                pgVectorRepoProvider,
                 new SensitiveInfoMasker(new SensitiveInfoDetector()),
                 false
         );

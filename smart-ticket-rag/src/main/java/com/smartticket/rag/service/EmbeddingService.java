@@ -2,7 +2,8 @@ package com.smartticket.rag.service;
 
 import com.smartticket.domain.entity.TicketKnowledge;
 import com.smartticket.domain.entity.TicketKnowledgeEmbedding;
-import com.smartticket.infra.ai.VectorStoreConfig.SpringAiVectorStoreHolder;
+import com.smartticket.infra.ai.PgVectorDirectWriteRepository;
+import com.smartticket.infra.ai.PgVectorDirectWriteRepository.VectorDocument;
 import com.smartticket.rag.embedding.EmbeddingModelClient;
 import com.smartticket.rag.repository.TicketKnowledgeEmbeddingRepository;
 import com.smartticket.rag.security.SensitiveInfoMasker;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,13 +45,13 @@ public class EmbeddingService {
     /** 知识切片仓储，用于默认 MySQL JSON 向量兜底。 */
     private final TicketKnowledgeEmbeddingRepository embeddingRepository;
 
-    /** Spring AI VectorStore 持有对象，启用 PGvector 后用于向量库写入。 */
-    private final ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider;
+    /** PGvector 直写仓储，使用预计算向量直接写入 PostgreSQL，避免 PgVectorStore 二次调用 EmbeddingModel。 */
+    private final ObjectProvider<PgVectorDirectWriteRepository> pgVectorDirectWriteRepositoryProvider;
 
     /** 敏感信息脱敏器，确保 embedding 和向量库不会保存原始凭证或个人敏感信息。 */
     private final SensitiveInfoMasker sensitiveInfoMasker;
 
-    /** 是否启用 Spring AI VectorStore。 */
+    /** 是否启用 PGvector 向量存储。 */
     private final boolean vectorStoreEnabled;
 
     private record KnowledgeChunk(String type, String sourceField, String text) {
@@ -61,13 +63,13 @@ public class EmbeddingService {
     public EmbeddingService(
             EmbeddingModelClient embeddingModelClient,
             TicketKnowledgeEmbeddingRepository embeddingRepository,
-            ObjectProvider<SpringAiVectorStoreHolder> vectorStoreHolderProvider,
+            ObjectProvider<PgVectorDirectWriteRepository> pgVectorDirectWriteRepositoryProvider,
             SensitiveInfoMasker sensitiveInfoMasker,
             @Value("${smart-ticket.ai.vector-store.enabled:false}") boolean vectorStoreEnabled
     ) {
         this.embeddingModelClient = embeddingModelClient;
         this.embeddingRepository = embeddingRepository;
-        this.vectorStoreHolderProvider = vectorStoreHolderProvider;
+        this.pgVectorDirectWriteRepositoryProvider = pgVectorDirectWriteRepositoryProvider;
         this.sensitiveInfoMasker = sensitiveInfoMasker;
         this.vectorStoreEnabled = vectorStoreEnabled;
     }
@@ -90,7 +92,7 @@ public class EmbeddingService {
         log.info("向量构建开始：knowledgeId={}, vectorStoreEnabled={}, chunks={}",
                 knowledge.getId(), vectorStoreEnabled, chunks.size());
         List<TicketKnowledgeEmbedding> saved = new ArrayList<>(chunks.size());
-        List<Document> vectorDocuments = new ArrayList<>(chunks.size());
+        List<VectorDocument> vectorDocuments = new ArrayList<>(chunks.size());
         for (int i = 0; i < chunks.size(); i++) {
             KnowledgeChunk chunk = chunks.get(i);
             String maskedText = sensitiveInfoMasker.mask(chunk.text());
@@ -106,7 +108,8 @@ public class EmbeddingService {
                     .build();
             embeddingRepository.insert(embedding);
             saved.add(embedding);
-            vectorDocuments.add(toVectorDocument(knowledge, chunk, maskedText, i));
+            Document doc = toVectorDocument(knowledge, chunk, maskedText, i);
+            vectorDocuments.add(new VectorDocument(doc, toFloatList(vector)));
         }
         writeVectorStore(knowledge.getId(), vectorDocuments);
         log.info("向量构建完成：knowledgeId={}, mysqlChunks={}", knowledge.getId(), saved.size());
@@ -163,28 +166,29 @@ public class EmbeddingService {
     }
 
     /**
-     * 将知识切片写入 Spring AI VectorStore。
+     * 将预计算切片向量直接写入 PGvector。
      *
-     * <p>VectorStore 由 Spring AI 根据 PGvector 配置负责向量化和入库；MySQL
-     * 切片表仍保留为默认开发兜底和可观测记录。</p>
+     * <p>使用 {@link PgVectorDirectWriteRepository} 直写，
+     * 避免 PgVectorStore 内部二次调用 EmbeddingModel 产生额外 API 开销与兼容风险。
+     * MySQL 切片表仍保留为默认开发兜底和可观测记录。</p>
      */
-    private void writeVectorStore(Long knowledgeId, List<Document> documents) {
+    private void writeVectorStore(Long knowledgeId, List<VectorDocument> documents) {
         if (!vectorStoreEnabled || documents == null || documents.isEmpty()) {
-            log.info("向量存储写入已跳过：knowledgeId={}, reason={}",
+            log.info("PGvector 直写已跳过：knowledgeId={}, reason={}",
                     knowledgeId, vectorStoreEnabled ? "no-documents" : "vector-store-disabled");
             return;
         }
-        SpringAiVectorStoreHolder holder = vectorStoreHolderProvider.getIfAvailable();
-        if (holder == null || holder.vectorStore() == null) {
-            log.warn("向量存储不可用：knowledgeId={}, 继续仅使用 MySQL 回退路径", knowledgeId);
+        PgVectorDirectWriteRepository repo = pgVectorDirectWriteRepositoryProvider.getIfAvailable();
+        if (repo == null) {
+            log.warn("PGvector 直写仓储不可用：knowledgeId={}, 继续仅使用 MySQL 回退路径", knowledgeId);
             return;
         }
         try {
-            holder.vectorStore().delete(documents.stream().map(Document::getId).toList());
-            holder.vectorStore().add(documents);
-            log.info("向量存储写入完成：knowledgeId={}, documents={}", knowledgeId, documents.size());
+            repo.deleteByKnowledgeId(knowledgeId);
+            repo.upsertDocuments(documents);
+            log.info("PGvector 直写完成：knowledgeId={}, documents={}", knowledgeId, documents.size());
         } catch (RuntimeException ex) {
-            log.warn("写入 Spring AI 向量存储失败：knowledgeId={}, reason={}", knowledgeId, ex.getMessage());
+            log.warn("PGvector 直写失败：knowledgeId={}, reason={}", knowledgeId, ex.getMessage());
         }
     }
 
@@ -222,9 +226,23 @@ public class EmbeddingService {
                 .build();
     }
 
-    /** 生成稳定的向量文档 ID，便于同一知识重复构建时覆盖旧切片。 */
+    /** 生成稳定的向量文档 UUID，便于同一知识重复构建时覆盖旧切片。 */
     private String vectorDocumentId(Long knowledgeId, int chunkIndex) {
-        return "ticket-knowledge-" + knowledgeId + "-" + chunkIndex;
+        return UUID.nameUUIDFromBytes(
+                ("ticket-knowledge-" + knowledgeId + "-" + chunkIndex).getBytes()
+        ).toString();
+    }
+
+    /** 将 List&lt;Double&gt; 转换为 List&lt;Float&gt;，用于 VectorDocument。 */
+    private static List<Float> toFloatList(List<Double> vector) {
+        if (vector == null || vector.isEmpty()) {
+            return List.of();
+        }
+        List<Float> result = new ArrayList<>(vector.size());
+        for (Double d : vector) {
+            result.add(d != null ? d.floatValue() : 0.0f);
+        }
+        return result;
     }
 
     /** 将向量转换成 JSON 数组文本，便于第一版写入 MySQL TEXT 字段。 */
