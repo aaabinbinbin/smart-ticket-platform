@@ -35,7 +35,12 @@ public enum AgentStreamEventType {
     /**
      * 本轮发生错误或被工程保护拒绝。
      */
-    ERROR("error");
+    ERROR("error"),
+
+    /**
+     * SSE 流式输出正常结束。
+     */
+    DONE("done");
 
     private final String eventName;
 

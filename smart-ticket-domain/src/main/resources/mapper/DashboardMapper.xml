@@ -29,6 +29,12 @@
         FROM ticket_knowledge_embedding
     </select>
 
+    <select id="countActiveKnowledge" resultType="long">
+        SELECT COUNT(*)
+        FROM ticket_knowledge
+        WHERE status = 'ACTIVE'
+    </select>
+
     <select id="findLatestKnowledgeBuildTime" resultType="java.time.LocalDateTime">
         SELECT MAX(created_at)
         FROM ticket_knowledge_build_task

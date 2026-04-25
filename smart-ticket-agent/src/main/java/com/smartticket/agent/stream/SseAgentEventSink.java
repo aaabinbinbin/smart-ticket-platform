@@ -87,6 +87,11 @@ public class SseAgentEventSink implements AgentEventSink {
         }
         closed = true;
         try {
+            emitter.send(SseEmitter.event().name(AgentStreamEventType.DONE.eventName()).data("{\"done\":true}"));
+        } catch (IOException | IllegalStateException ex) {
+            log.debug("发送 SSE done 事件失败: sessionId={}, reason={}", sessionId, ex.getMessage());
+        }
+        try {
             emitter.complete();
         } catch (RuntimeException ex) {
             log.debug("关闭 Agent SSE 输出时客户端可能已断开: sessionId={}, reason={}", sessionId, ex.getMessage());

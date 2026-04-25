@@ -92,7 +92,6 @@ public class DashboardService {
 
     /** 聚合 RAG 指标。 */
     public RagMetrics aggregateRag() {
-        long knowledgeCount = 0;
         long buildSuccess = 0;
         long buildFailed = 0;
 
@@ -106,9 +105,9 @@ public class DashboardService {
                 case "FAILED", "DEAD" -> buildFailed += count;
                 default -> log.debug("Dashboard 忽略未知构建任务状态：{}", status);
             }
-            knowledgeCount += count;
         }
 
+        long knowledgeCount = dashboardMapper.countActiveKnowledge();
         long embeddingChunkCount = dashboardMapper.countKnowledgeEmbedding();
         LocalDateTime latestBuildAt = dashboardMapper.findLatestKnowledgeBuildTime();
 

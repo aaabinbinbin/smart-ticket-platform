@@ -21,6 +21,7 @@ import com.smartticket.common.exception.BusinessErrorCode;
 import com.smartticket.common.exception.BusinessException;
 import com.smartticket.domain.entity.SysUser;
 import java.util.List;
+import java.util.concurrent.Executor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -38,9 +39,11 @@ class AgentControllerTest {
     @Mock
     private CurrentUserResolver currentUserResolver;
 
+    private final Executor agentExecutor = Runnable::run;
+
     @Test
     void chatShouldRejectNullAuthentication() {
-        AgentController controller = new AgentController(agentFacade, currentUserResolver);
+        AgentController controller = new AgentController(agentFacade, currentUserResolver, agentExecutor);
         when(currentUserResolver.resolve(null)).thenThrow(new BusinessException(BusinessErrorCode.UNAUTHORIZED));
 
         BusinessException ex = assertThrows(BusinessException.class, () -> controller.chat(null, request()));
@@ -50,7 +53,7 @@ class AgentControllerTest {
 
     @Test
     void chatShouldRejectUnexpectedPrincipalType() {
-        AgentController controller = new AgentController(agentFacade, currentUserResolver);
+        AgentController controller = new AgentController(agentFacade, currentUserResolver, agentExecutor);
         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                 "plain-user",
                 null,
@@ -65,7 +68,7 @@ class AgentControllerTest {
 
     @Test
     void chatShouldMapAuthUserToCurrentUser() {
-        AgentController controller = new AgentController(agentFacade, currentUserResolver);
+        AgentController controller = new AgentController(agentFacade, currentUserResolver, agentExecutor);
         AuthUser authUser = new AuthUser(
                 SysUser.builder().id(1L).username("user1").passwordHash("{noop}123456").realName("User One").status(1).build(),
                 List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ROLE_STAFF"))
@@ -96,7 +99,7 @@ class AgentControllerTest {
 
     @Test
     void chatStreamShouldDelegateToFacadeWithSseSink() {
-        AgentController controller = new AgentController(agentFacade, currentUserResolver);
+        AgentController controller = new AgentController(agentFacade, currentUserResolver, agentExecutor);
         UsernamePasswordAuthenticationToken authentication = auth();
         CurrentUser currentUser = CurrentUser.builder()
                 .userId(1L)

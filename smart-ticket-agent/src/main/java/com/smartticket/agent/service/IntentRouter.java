@@ -21,10 +21,15 @@ import org.springframework.stereotype.Service;
 @Service
 public class IntentRouter {
     private static final Logger log = LoggerFactory.getLogger(IntentRouter.class);
-    private static final List<String> HISTORY_KEYWORDS = List.of(
-            "历史", "历史案例", "类似案例", "经验", "方案", "记录",
-            "类似", "相似", "知识库", "解决方案", "怎么处理",
-            "history", "historical", "previous", "similar", "knowledge base", "how was it handled"
+    private static final List<String> STRONG_HISTORY_KEYWORDS = List.of(
+            "历史", "历史工单", "历史案例", "类似", "相似", "知识库",
+            "以前", "之前", "previous", "similar", "knowledge base"
+    );
+    private static final List<String> AUXILIARY_KEYWORDS = List.of(
+            "方案", "记录", "怎么处理", "处理经验", "解决方案"
+    );
+    private static final List<String> HISTORY_CONTEXT_KEYWORDS = List.of(
+            "参考", "有没有", "查一下", "看看", "refer", "look up", "search", "find"
     );
     private static final List<String> CONTEXT_KEYWORDS = List.of(
             "刚才", "之前", "上次", "前面", "这个", "它"
@@ -74,7 +79,11 @@ public class IntentRouter {
         String normalized = normalize(message);
         boolean transfer = containsAny(normalized, TRANSFER_KEYWORDS);
         boolean create = containsAny(normalized, CREATE_KEYWORDS);
-        boolean history = containsAny(normalized, HISTORY_KEYWORDS);
+        boolean strongHistory = containsAny(normalized, STRONG_HISTORY_KEYWORDS);
+        boolean auxiliary = containsAny(normalized, AUXILIARY_KEYWORDS);
+        boolean historyContext = containsAny(normalized, HISTORY_CONTEXT_KEYWORDS);
+        // 规则：强历史词直接路由 SEARCH_HISTORY；辅助词和历史上下文词同时出现也路由 SEARCH_HISTORY
+        boolean history = strongHistory || (auxiliary && historyContext);
         boolean query = containsAny(normalized, QUERY_KEYWORDS);
         boolean ticketReference = containsTicketReference(normalized);
         int matchedIntents = countMatches(transfer, create, history, query);

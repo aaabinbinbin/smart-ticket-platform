@@ -10,6 +10,7 @@ import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.router.LlmIntentClassifier;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -123,7 +124,7 @@ class IntentRouterTest {
 
     @Test
     void shouldRouteToSearchHistoryForEnglishE2eQuery() {
-        IntentRoute result = router.route("How to handle login token expired in test environment? Please refer to historical ticket experience.", null);
+        IntentRoute result = router.route("How to handle login token expired in test environment? Find similar previous ticket experience.", null);
         assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
     }
 
@@ -137,5 +138,49 @@ class IntentRouterTest {
     void shouldKeepExplicitTicketNumberAsQueryTicket() {
         IntentRoute result = router.route("看一下工单 456 的状态", null);
         assertEquals(AgentIntent.QUERY_TICKET, result.getIntent());
+    }
+
+    // ======== P1 收窄关键词新增测试 ========
+
+    @Test
+    @DisplayName("历史工单查询应路由到 SEARCH_HISTORY")
+    void shouldRouteHistoryTicketQueryToSearchHistory() {
+        IntentRoute result = router.route("查询历史工单", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    @DisplayName("类似问题查询应路由到 SEARCH_HISTORY")
+    void shouldRouteSimilarIssueToSearchHistory() {
+        IntentRoute result = router.route("有没有类似问题可以参考", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    @DisplayName("知识库查询应路由到 SEARCH_HISTORY")
+    void shouldRouteKnowledgeBaseQueryToSearchHistory() {
+        IntentRoute result = router.route("查一下知识库", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
+    }
+
+    @Test
+    @DisplayName("普通'怎么处理'不强行路由到 SEARCH_HISTORY")
+    void shouldNotRouteGenericHowToHandleAsSearchHistory() {
+        IntentRoute result = router.route("这个问题怎么处理", null);
+        assertEquals(AgentIntent.QUERY_TICKET, result.getIntent());
+    }
+
+    @Test
+    @DisplayName("这个工单怎么处理应走 QUERY_TICKET")
+    void shouldNotRouteThisTicketHowToHandleAsSearchHistory() {
+        IntentRoute result = router.route("这个工单怎么处理", null);
+        assertEquals(AgentIntent.QUERY_TICKET, result.getIntent());
+    }
+
+    @Test
+    @DisplayName("辅助词加历史上下文应路由到 SEARCH_HISTORY")
+    void shouldRouteAuxiliaryWithContextToSearchHistory() {
+        IntentRoute result = router.route("有没有解决方案参考", null);
+        assertEquals(AgentIntent.SEARCH_HISTORY, result.getIntent());
     }
 }

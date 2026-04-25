@@ -89,9 +89,20 @@ Authorization: Bearer <token>
 RAG 检索路径=PGVECTOR，fallbackUsed=false
 ```
 
-## 6. 当前剩余优化项
+## 6. 验收截图
 
-- Agent 历史检索路由已优化（关键字列表扩充，支持"类似/相似/知识库/解决方案/怎么处理"）
-- 后续可补 RAG Recall@K / MRR 评估集
-- 后续可补 SSE 流式 Agent 接口
-- 后续可补 Dashboard 指标接口
+截图可放置于 `docs/images/` 目录下：
+
+- ticket_knowledge_build_task SUCCESS — 知识构建任务状态为 SUCCESS
+- ticket_knowledge ACTIVE — 知识记录状态为 ACTIVE
+- ticket_knowledge_embedding chunks — embedding 切片数据
+- pgvector vector_store embedding — pgvector 表中 UUID、content、metadata、vector_dims(embedding) 验证
+
+## 7. 当前完成状态
+
+- Agent 历史检索路由已优化（强历史词 + 辅助词 + 历史上下文词三层判断）
+- SSE 流式 Agent 接口已完成（含 done 事件、专用 agentExecutor 线程池）
+- Dashboard 指标接口已完成（工单、RAG、Agent 三大板块，knowledgeCount=ACTIVE 知识数）
+- RAG Recall@K / MRR 评估集已实现（测试级，见 RagEvaluationMetrics，覆盖 Recall@3、Recall@5、MRR）
+- E2E 验收脚本已完成（scripts/run_rag_pgvector_e2e.ps1，覆盖完整链路）
+- 构造型 Controller 层测试：RagControllerTest、AdminDashboardControllerTest、AgentStreamControllerTest

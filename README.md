@@ -80,6 +80,27 @@ smart-ticket-platform
 - 知识准入会生成候选知识；需要人工判断的内容进入候选审核。
 - 管理员审核通过后，会强制进入正式知识构建和 embedding 流程。
 
+### RAG 直接检索
+
+`GET /api/rag/search` 绕过 Agent 路由，直接调用 RetrievalService 执行向量检索，方便验证 PGVECTOR 路径是否正常工作：
+
+- 参数：`query`（检索文本）、`topK`（返回数，默认 5，最大 10）
+- 返回：`retrievalPath`、`fallbackUsed`、`hits`（命中列表）
+- 路径：pgvector → 命中返回 PGVECTOR；pgvector 不可用或未启用时回退 MySQL 关键词检索，返回 MYSQL_FALLBACK
+
+### Dashboard 管理端接口
+
+`GET /api/admin/dashboard` 提供工单平台和 RAG/Agent 核心运行指标，仅 ADMIN 角色可访问：
+
+- **工单板块**：待分配、处理中、已解决、已关闭数量，今日创建数
+- **RAG 板块**：ACTIVE 知识数、知识构建成功/失败数、embedding 切片数、当前检索路径
+- **Agent 板块**：近 7 天调用次数、成功次数、平均耗时
+
+## 接口与文档
+
+- `/api/agent/chat` — Agent 对话（同步接口）
+- `/api/agent/chat/stream` — Agent 流式对话（SSE，事件包括 accepted、route、status、delta、final、error、done）
+
 ## 快速启动
 
 见 [docs/quick-start.md](docs/quick-start.md)。
@@ -104,3 +125,20 @@ mvn -pl smart-ticket-app -am spring-boot:run
 - [接口说明](docs/ticket-api.md)
 - [演示脚本](docs/demo-playbook.md)
 - [数据库初始化脚本](docs/sql/schema.sql)
+- [P0 验收记录](docs/p0-acceptance-record.md)
+- [RAG 评估说明](docs/rag-evaluation.md)
+
+### 验收与测试
+
+- [P0 验收记录](docs/p0-acceptance-record.md) — 包含单元测试、RAG 主路径、知识构建链路、pgvector 表数据验证、RAG 检索验证
+- [RAG 评估说明](docs/rag-evaluation.md) — 当前 RAG 评估集用于本地测试和指标计算验证，覆盖 Recall@3、Recall@5、MRR
+- [Agent 稳定性验收](docs/agent-stability-acceptance.md) — 请求限流、session 锁、预算超限、降级策略、异常恢复等稳定性场景
+- [压测脚本](scripts/agent-smoke-load.ps1) — Agent 接口轻量压测
+- [E2E 验收脚本](scripts/run_rag_pgvector_e2e.ps1) — 完整端到端 RAG + pgvector 验收流程：创建工单 -> 关闭 -> 等待知识构建 -> Agent 检索 -> 直接 RAG 检索
+
+### 当前完成能力
+
+- P0 工单 CRUD、状态流转、权限控制
+- P0 Agent 对话（同步 + SSE）、意图路由、确定性写命令、只读 ReAct、Session/Memory、Trace/Metrics
+- P0 RAG 知识构建链（MySQL + pgvector）、query rewrite、rerank、直接检索接口
+- P1 Dashboard 管理端指标、限流降级、SSE done 事件、专用线程池、历史检索关键词优化、知识指标语义修复

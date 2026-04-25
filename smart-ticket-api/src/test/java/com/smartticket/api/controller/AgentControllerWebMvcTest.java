@@ -23,6 +23,8 @@ import com.smartticket.auth.model.AuthUser;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.domain.entity.SysUser;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -54,6 +56,9 @@ class AgentControllerWebMvcTest {
 
     @MockBean
     private CurrentUserResolver currentUserResolver;
+
+    @MockBean(name = "agentExecutor")
+    private Executor agentExecutor;
 
     @Test
     void chatShouldHandleQueryTicketIntent() throws Exception {

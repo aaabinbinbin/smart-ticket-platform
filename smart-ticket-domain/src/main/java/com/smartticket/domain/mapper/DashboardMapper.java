@@ -35,6 +35,11 @@ public interface DashboardMapper {
     List<Map<String, Object>> countKnowledgeBuildTaskByStatus();
 
     /**
+     * 统计 ACTIVE 知识数量。
+     */
+    long countActiveKnowledge();
+
+    /**
      * 统计知识切片总数。
      */
     long countKnowledgeEmbedding();

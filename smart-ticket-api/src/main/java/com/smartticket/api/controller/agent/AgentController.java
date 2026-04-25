@@ -12,6 +12,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.core.Authentication;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,14 +42,22 @@ public class AgentController {
     private final CurrentUserResolver currentUserResolver;
 
     /**
+     * Agent 专用线程池，避免占用公共 ForkJoinPool。
+     */
+    private final Executor agentExecutor;
+
+    /**
      * 创建智能体对话控制器。
      *
      * @param agentFacade Agent 主链应用服务
      * @param currentUserResolver 当前登录用户解析器
+     * @param agentExecutor Agent 专用线程池
      */
-    public AgentController(AgentFacade agentFacade, CurrentUserResolver currentUserResolver) {
+    public AgentController(AgentFacade agentFacade, CurrentUserResolver currentUserResolver,
+                           @Qualifier("agentExecutor") Executor agentExecutor) {
         this.agentFacade = agentFacade;
         this.currentUserResolver = currentUserResolver;
+        this.agentExecutor = agentExecutor;
     }
 
     /**
@@ -96,7 +106,7 @@ public class AgentController {
                 sink.error("AGENT_STREAM_FAILED", ex.getMessage(), null);
                 sink.closeQuietly();
             }
-        });
+        }, agentExecutor);
         return emitter;
     }
 

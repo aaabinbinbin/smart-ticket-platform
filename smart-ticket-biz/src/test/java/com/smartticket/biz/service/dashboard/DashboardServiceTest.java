@@ -53,12 +53,14 @@ class DashboardServiceTest {
                 Map.of("status", "FAILED", "cnt", 1L),
                 Map.of("status", "PENDING", "cnt", 2L)
         ));
+        when(dashboardMapper.countActiveKnowledge()).thenReturn(15L);
         when(dashboardMapper.countKnowledgeEmbedding()).thenReturn(80L);
         when(dashboardMapper.findLatestKnowledgeBuildTime()).thenReturn(LocalDateTime.of(2026, 4, 25, 10, 0));
 
         DashboardService service = new DashboardService(dashboardMapper, true, "PGVECTOR");
         RagMetrics metrics = service.aggregateRag();
 
+        assertEquals(15, metrics.knowledgeCount);
         assertEquals(8, metrics.knowledgeBuildSuccessCount);
         assertEquals(1, metrics.knowledgeBuildFailedCount);
         assertEquals(80, metrics.embeddingChunkCount);
@@ -78,6 +80,7 @@ class DashboardServiceTest {
         when(dashboardMapper.countKnowledgeBuildTaskByStatus()).thenReturn(List.of(
                 Map.of("status", "SUCCESS", "cnt", 8L)
         ));
+        when(dashboardMapper.countActiveKnowledge()).thenReturn(15L);
         when(dashboardMapper.countKnowledgeEmbedding()).thenReturn(80L);
         when(dashboardMapper.countAgentTraceRecent(any())).thenReturn(20L);
         when(dashboardMapper.countAgentTraceSuccessRecent(any())).thenReturn(18L);
@@ -90,6 +93,7 @@ class DashboardServiceTest {
         AgentMetrics agent = service.aggregateAgent();
 
         assertEquals(1, ticket.pendingAssignCount);
+        assertEquals(15, rag.knowledgeCount);
         assertEquals(8, rag.knowledgeBuildSuccessCount);
         assertEquals(20, agent.recentAgentCallCount);
         assertEquals(18, agent.recentSuccessCount);

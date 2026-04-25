@@ -358,14 +358,14 @@ Step "11. Check IDEA logs for the following"
 Write-Host ""
 Write-Host "Look for these log entries in IDEA console:" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  1. 知识构建任务已发布：taskId=..., ticketId=..." -ForegroundColor White
-Write-Host "  2. 工单知识任务开始：taskId=..., ticketId=..." -ForegroundColor White
-Write-Host "  3. 向量构建开始：knowledgeId=..., vectorStoreEnabled=true, chunks=8" -ForegroundColor White
-Write-Host "  4. PGvector 直写完成：table=public.vector_store, documents=8, updated=8" -ForegroundColor White
-Write-Host "  5. 工单知识任务完成：taskId=..., ticketId=..., knowledgeId=..., chunks=8" -ForegroundColor White
-Write-Host "  6. RAG 检索路径=PGVECTOR，fallbackUsed=false" -ForegroundColor White
+Write-Host "  1. Knowledge build task published: taskId=..., ticketId=..." -ForegroundColor White
+Write-Host "  2. Knowledge build task started: taskId=..., ticketId=..." -ForegroundColor White
+Write-Host "  3. Vector build started: knowledgeId=..., vectorStoreEnabled=true, chunks=8" -ForegroundColor White
+Write-Host "  4. PGvector direct write completed: table=public.vector_store, documents=8, updated=8" -ForegroundColor White
+Write-Host "  5. Knowledge build task completed: taskId=..., ticketId=..., knowledgeId=..., chunks=8" -ForegroundColor White
+Write-Host "  6. RAG retrieval path=PGVECTOR, fallbackUsed=false" -ForegroundColor White
 Write-Host ""
-Write-Host "If vector_store is still 0, check MySQL:" -ForegroundColor Yellow
+Write-Host "If vector_store count is still 0, check MySQL build_task table:" -ForegroundColor Yellow
 Write-Host "  SELECT id, ticket_id, status, retry_count, error_message FROM ticket_knowledge_build_task ORDER BY id DESC LIMIT 10;"
 Write-Host "  SELECT id, ticket_id, status FROM ticket_knowledge ORDER BY id DESC LIMIT 10;"
 Write-Host ""
