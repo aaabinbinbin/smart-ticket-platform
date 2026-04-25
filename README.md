@@ -1,20 +1,44 @@
 # 智能工单平台
 
-基于 Java 17、Spring Boot 3、Spring Security、MyBatis、Spring AI 的模块化单体项目。项目定位是用于展示 Java 后端工程能力、复杂业务建模能力，以及受控型业务 Agent 的工程化落地能力。
+基于 Java 17、Spring Boot 3、Spring Security、MyBatis、Redis、RabbitMQ、Spring AI、PostgreSQL + pgvector 的智能工单 MVP。项目覆盖工单创建、分派、认领、转派、状态流转、SLA、审批、操作日志、知识沉淀、RAG 检索和受控型业务 Agent。
 
 当前项目是高完成度 MVP，不是生产级完整平台。
 
-## 项目亮点
+## 核心能力
 
-- 工单主流程：创建、查询、详情、分配、认领、转派、状态流转、评论、关闭、操作日志。
-- 认证与权限：JWT 登录、RBAC、接口鉴权。
-- Agent 主链：`route -> policy -> plan -> pending/command/react -> reply -> memory/context/trace -> response`。
-- 受控型 Agent：支持意图路由、执行策略、Skill 注册、Tool 白名单、确定性写命令、高风险操作二次确认。
-- Agent 稳定性：支持 session lock、rate limit、单轮预算、降级策略、同步/SSE 双接口和 trace metrics。
-- RAG 工程化：知识构建、Embedding、query rewrite、轻量 rerank、MySQL fallback、pgvector 可选主路径。
-- 知识闭环：工单关闭后通过 RabbitMQ 异步触发知识构建，并使用数据库 task 保证失败可补偿。
-- 人工审核：知识候选支持管理员审核，通过后进入正式知识构建链路。
-- 可观测性：Agent trace 持久化，接口返回 `traceId`，并提供最近调用指标统计。
+### 业务模块
+
+- 工单创建、查询、详情、分派、认领、转派
+- 状态流转：PENDING_ASSIGN / PROCESSING / RESOLVED / CLOSED
+- 幂等创建、并发认领保护
+- SLA 和通知
+- 审批与操作日志
+- 工单关闭后触发知识沉淀
+
+### Agent 模块
+
+- 意图识别（LLM 分类 + 关键词回退）
+- Planner 生成并推进执行计划
+- SkillRegistry 统一选择可用能力，ReAct 只暴露只读工具
+- ExecutionGuard 权限和风险校验
+- Tool fallback：Spring AI 不可用时走确定性后端链路
+- Memory：工作记忆、工单领域记忆、用户偏好记忆
+- Trace & Metrics：记录 route、policy、plan、tool、fallback、degrade、耗时
+- 高风险操作二次确认
+- 只读检索和写操作分离
+- SSE 事件级流式输出：`POST /api/agent/chat/stream`
+
+### RAG 模块
+
+- 工单关闭后异步知识构建
+- RabbitMQ 消息驱动
+- 知识准入与候选审核
+- 结构化 chunk：SYMPTOM / ROOT_CAUSE / RESOLUTION / RISK_NOTE / APPLICABLE_SCOPE / FULL_TEXT
+- 敏感信息脱敏
+- MySQL fallback embedding
+- PostgreSQL + pgvector 主向量库
+- 直接 RAG 检索接口：`GET /api/rag/search`
+- retrievalPath / fallbackUsed 可观测
 
 ## 技术栈
 
@@ -80,6 +104,14 @@ smart-ticket-platform
 - 知识准入会生成候选知识；需要人工判断的内容进入候选审核。
 - 管理员审核通过后，会强制进入正式知识构建和 embedding 流程。
 
+RAG 主链路：
+
+```text
+关闭工单 → 创建知识构建任务 → RabbitMQ 投递消息 → 任务处理器消费
+→ 生成知识 → 结构化 chunk → 敏感信息脱敏 → embedding
+→ MySQL fallback → pgvector.vector_store → /api/rag/search 检索
+```
+
 ### RAG 直接检索
 
 `GET /api/rag/search` 绕过 Agent 路由，直接调用 RetrievalService 执行向量检索，方便验证 PGVECTOR 路径是否正常工作：
@@ -96,10 +128,49 @@ smart-ticket-platform
 - **RAG 板块**：ACTIVE 知识数、知识构建成功/失败数、embedding 切片数、当前检索路径
 - **Agent 板块**：近 7 天调用次数、成功次数、平均耗时
 
-## 接口与文档
+## 核心接口
 
-- `/api/agent/chat` — Agent 对话（同步接口）
-- `/api/agent/chat/stream` — Agent 流式对话（SSE，事件包括 accepted、route、status、delta、final、error、done）
+| 接口 | 方法 | 说明 |
+|---|---|---|
+| `/api/agent/chat` | POST | Agent 同步对话 |
+| `/api/agent/chat/stream` | POST | Agent SSE 事件级流式对话（非 token 级流式），事件：accepted、route、status、delta、final、error、done |
+| `/api/rag/search` | GET | 直接 RAG 检索，返回 retrievalPath / fallbackUsed / hits |
+| `/api/admin/dashboard` | GET | 管理端 Dashboard 指标（仅 ADMIN） |
+
+## P0 验收方式
+
+### 运行测试
+
+```bash
+mvn -pl smart-ticket-agent -am test
+mvn -pl smart-ticket-biz -am test
+mvn -pl smart-ticket-rag -am test
+mvn -pl smart-ticket-api -am test
+```
+
+### 启动后确认 RAG 主路径
+
+启动日志应出现：
+
+```text
+RAG 路径状态：embeddingEnabled=true, vectorStoreEnabled=true, vectorStoreReady=true, retrievalPath=PGVECTOR
+```
+
+### 运行 E2E 脚本
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\run_rag_pgvector_e2e.ps1
+```
+
+脚本成功后应看到：
+
+```text
+[OK] RAG search OK
+retrievalPath=PGVECTOR
+fallbackUsed=False
+hits count=5
+```
 
 ## 快速启动
 
@@ -114,6 +185,8 @@ mvn test
 ```bash
 mvn -pl smart-ticket-app -am spring-boot:run
 ```
+
+> Dashboard retrievalPath 是配置视角展示，真实检索路径以 `/api/rag/search` 返回值和 RetrievalService 日志为准。RAG 评估当前是测试级指标计算工具，不是完整线上评估平台，覆盖 Recall@3、Recall@5、MRR。
 
 ## 文档入口
 

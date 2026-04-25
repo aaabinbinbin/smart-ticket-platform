@@ -62,6 +62,10 @@ public class RagController {
     ) {
         // 当前登录用户校验，确保已登录可访问
         CurrentUser currentUser = currentUserResolver.resolve(authentication);
+
+        if (query == null || query.trim().isEmpty()) {
+            return ApiResponse.failure("VALIDATION_FAILED", "检索查询文本不能为空");
+        }
         log.info("RAG 检索请求：user={}, query='{}', topK={}", currentUser.getUsername(), query, topK);
 
         RetrievalResult result = retrievalService.retrieve(RetrievalRequest.builder()

@@ -114,6 +114,21 @@ class RagControllerWebMvcTest {
     }
 
     /**
+     * 测试空查询文本返回参数错误。
+     */
+    @Test
+    void searchShouldRejectBlankQuery() throws Exception {
+        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "test-user", List.of("ROLE_ADMIN")));
+
+        mockMvc.perform(get("/api/rag/search")
+                        .param("query", "")
+                        .with(authentication(auth())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+    }
+
+    /**
      * 测试 RAG 检索接口未认证时返回 401。
      */
     @Test
