@@ -13,6 +13,8 @@ import com.smartticket.agent.planner.AgentPlanAction;
 import com.smartticket.agent.planner.AgentPlanStage;
 import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.prompt.PromptTemplateService;
+import com.smartticket.agent.resilience.AgentTurnBudget;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.support.SpringAiToolCallState;
 import com.smartticket.agent.tool.support.SpringAiToolCallState.AgentToolCallRecord;
@@ -50,19 +52,22 @@ public class ReadOnlyReactExecutor {
     private final PromptTemplateService promptTemplateService;
     private final AgentTraceService traceService;
     private final AgentReactToolCatalog agentReactToolCatalog;
+    private final AgentTurnBudgetService budgetService;
 
     public ReadOnlyReactExecutor(
             ObjectProvider<ChatClient> chatClientProvider,
             AgentPlanner agentPlanner,
             PromptTemplateService promptTemplateService,
             AgentTraceService traceService,
-            AgentReactToolCatalog agentReactToolCatalog
+            AgentReactToolCatalog agentReactToolCatalog,
+            AgentTurnBudgetService budgetService
     ) {
         this.chatClientProvider = chatClientProvider;
         this.agentPlanner = agentPlanner;
         this.promptTemplateService = promptTemplateService;
         this.traceService = traceService;
         this.agentReactToolCatalog = agentReactToolCatalog;
+        this.budgetService = budgetService;
     }
 
     /**
@@ -87,7 +92,8 @@ public class ReadOnlyReactExecutor {
             IntentRoute route,
             AgentPlan plan,
             AgentExecutionPolicy policy,
-            AgentTraceContext trace
+            AgentTraceContext trace,
+            AgentTurnBudget budget
     ) {
         ChatClient chatClient = chatClientProvider.getIfAvailable();
         if (chatClient == null) {
@@ -102,10 +108,13 @@ public class ReadOnlyReactExecutor {
         }
 
         SpringAiToolCallState callState = new SpringAiToolCallState();
-        Map<String, Object> toolContext = buildToolContext(currentUser, message, context, route, callState, allowedToolNames);
+        Map<String, Object> toolContext = buildToolContext(
+                currentUser, message, context, route, callState, allowedToolNames, budget);
         preparePlanAndTrace(plan, trace, route);
 
         try {
+            // LLM 调用预算在调用前扣减，避免模型慢调用已经发出后才发现超限。
+            budgetService.consumeLlmCall(budget);
             List<ChatResponse> responses = chatClient.prompt()
                     .system(buildSystemPrompt())
                     .user(buildConversationContext(context, message, route))
@@ -124,7 +133,7 @@ public class ReadOnlyReactExecutor {
             log.warn("只读 ReAct streaming 调用失败，尝试降级到非流式调用: intent={}, reason={}",
                     route == null ? null : route.getIntent(), ex.getMessage());
             traceService.step(trace, "agent", "react-loop", null, "RETRY_CALL", ex.getMessage());
-            return tryNonStreaming(chatClient, message, context, route, plan, policy, trace, tools, toolContext, callState);
+            return tryNonStreaming(chatClient, message, context, route, plan, policy, trace, tools, toolContext, callState, budget);
         }
     }
 
@@ -150,9 +159,12 @@ public class ReadOnlyReactExecutor {
             AgentTraceContext trace,
             Object[] tools,
             Map<String, Object> toolContext,
-            SpringAiToolCallState callState
+            SpringAiToolCallState callState,
+            AgentTurnBudget budget
     ) {
         try {
+            // 非流式重试同样属于 LLM 调用，必须受同一轮预算约束。
+            budgetService.consumeLlmCall(budget);
             String content = chatClient.prompt()
                     .system(buildSystemPrompt())
                     .user(buildConversationContext(context, message, route))
@@ -178,7 +190,8 @@ public class ReadOnlyReactExecutor {
             AgentSessionContext context,
             IntentRoute route,
             SpringAiToolCallState callState,
-            List<String> allowedToolNames
+            List<String> allowedToolNames,
+            AgentTurnBudget budget
     ) {
         Map<String, Object> toolContext = new HashMap<>();
         toolContext.put(SpringAiToolSupport.CURRENT_USER_KEY, currentUser);
@@ -187,6 +200,7 @@ public class ReadOnlyReactExecutor {
         toolContext.put(SpringAiToolSupport.ROUTE_KEY, route);
         toolContext.put(SpringAiToolSupport.STATE_KEY, callState);
         toolContext.put(SpringAiToolSupport.ALLOWED_TOOL_NAMES_KEY, allowedToolNames);
+        toolContext.put(SpringAiToolSupport.TURN_BUDGET_KEY, budget);
         return toolContext;
     }
 

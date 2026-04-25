@@ -6,6 +6,8 @@ import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
 import com.smartticket.agent.orchestration.ToolCallPlan;
+import com.smartticket.agent.resilience.AgentTurnBudget;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.service.AgentSessionService;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolRequest;
@@ -58,6 +60,11 @@ public class SpringAiToolSupport {
     public static final String ALLOWED_TOOL_NAMES_KEY = "allowedToolNames";
 
     /**
+     * toolContext 中保存本轮预算对象的 key。
+     */
+    public static final String TURN_BUDGET_KEY = "turnBudget";
+
+    /**
      * 智能体执行边界守卫。
      */
     private final AgentExecutionGuard executionGuard;
@@ -68,11 +75,21 @@ public class SpringAiToolSupport {
     private final AgentSessionService sessionService;
 
     /**
+     * 单轮预算服务，用于 ReAct 工具调用前扣减 Tool/RAG 次数。
+     */
+    private final AgentTurnBudgetService budgetService;
+
+    /**
      * 构造 Spring AI 工具支撑组件。
      */
-    public SpringAiToolSupport(@Lazy AgentExecutionGuard executionGuard, AgentSessionService sessionService) {
+    public SpringAiToolSupport(
+            @Lazy AgentExecutionGuard executionGuard,
+            AgentSessionService sessionService,
+            AgentTurnBudgetService budgetService
+    ) {
         this.executionGuard = executionGuard;
         this.sessionService = sessionService;
+        this.budgetService = budgetService;
     }
 
     /**
@@ -110,6 +127,7 @@ public class SpringAiToolSupport {
             capture(toolContext, tool.name(), result);
             return result;
         }
+        consumeToolBudget(toolContext, tool);
         // 查询类 ReAct 只能使用只读工具，避免模型在只读推理阶段越权触发写操作。
         if (isReadOnlyReasoningRoute(route) && !isReadOnlyTool(tool)) {
             AgentToolResult result = AgentToolResults.failed(
@@ -144,6 +162,20 @@ public class SpringAiToolSupport {
         }
         capture(toolContext, tool.name(), result);
         return result;
+    }
+
+    /**
+     * 在真正执行 Tool 前扣减预算。
+     *
+     * <p>预算检查放在白名单之后、Guard 之前，是为了让越权工具不占用本轮预算，
+     * 同时避免已超预算的 ReAct 继续触发数据库或 RAG 查询。</p>
+     */
+    private void consumeToolBudget(ToolContext toolContext, AgentTool tool) {
+        AgentTurnBudget budget = get(toolContext, TURN_BUDGET_KEY, AgentTurnBudget.class);
+        budgetService.consumeToolCall(budget);
+        if (tool != null && "searchHistory".equals(tool.name())) {
+            budgetService.consumeRagCall(budget);
+        }
     }
 
     /**

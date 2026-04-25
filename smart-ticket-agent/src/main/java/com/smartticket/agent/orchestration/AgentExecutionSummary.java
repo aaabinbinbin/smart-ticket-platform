@@ -91,6 +91,24 @@ public class AgentExecutionSummary {
     private boolean toolInvoked;
 
     /**
+     * 当前轮是否经过降级路径。
+     *
+     * <p>P6 高压治理用该字段把 LLM/RAG 不可用、预算收紧后的确定性处理显式暴露给 trace，
+     * 避免仅凭 fallbackUsed 无法区分“正常确定性路径”和“压力下降级路径”。</p>
+     */
+    private boolean degraded;
+
+    /**
+     * 当前轮失败或降级时的工程错误码。
+     */
+    private String failureCode;
+
+    /**
+     * 当前轮失败或降级的可审计原因。
+     */
+    private String failureReason;
+
+    /**
      * 判断当前 summary 是否含有主结果。
      *
      * @return true 表示已有 primaryResult，可供回复渲染和后续提交复用

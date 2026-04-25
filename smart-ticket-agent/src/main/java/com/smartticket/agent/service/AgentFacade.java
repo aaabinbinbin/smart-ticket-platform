@@ -22,6 +22,13 @@ import com.smartticket.agent.planner.AgentPlan;
 import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.react.ReadOnlyReactExecutor;
 import com.smartticket.agent.react.ReadOnlyReactExecutor.ReadOnlyReactExecution;
+import com.smartticket.agent.resilience.AgentBudgetExceededException;
+import com.smartticket.agent.resilience.AgentDegradePolicyService;
+import com.smartticket.agent.resilience.AgentErrorCode;
+import com.smartticket.agent.resilience.AgentRateLimitService;
+import com.smartticket.agent.resilience.AgentSessionLockService;
+import com.smartticket.agent.resilience.AgentTurnBudget;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.reply.AgentReplyRenderer;
 import com.smartticket.agent.skill.AgentSkill;
 import com.smartticket.agent.skill.SkillRegistry;
@@ -71,6 +78,10 @@ public class AgentFacade {
     private final DeterministicCommandExecutor deterministicCommandExecutor;
     private final AgentExecutionPolicyService executionPolicyService;
     private final ReadOnlyReactExecutor readOnlyReactExecutor;
+    private final AgentRateLimitService rateLimitService;
+    private final AgentSessionLockService sessionLockService;
+    private final AgentTurnBudgetService budgetService;
+    private final AgentDegradePolicyService degradePolicyService;
 
     public AgentFacade(
             ObjectProvider<ChatClient> chatClientProvider,
@@ -87,7 +98,11 @@ public class AgentFacade {
             PendingActionCoordinator pendingActionCoordinator,
             DeterministicCommandExecutor deterministicCommandExecutor,
             AgentExecutionPolicyService executionPolicyService,
-            ReadOnlyReactExecutor readOnlyReactExecutor
+            ReadOnlyReactExecutor readOnlyReactExecutor,
+            AgentRateLimitService rateLimitService,
+            AgentSessionLockService sessionLockService,
+            AgentTurnBudgetService budgetService,
+            AgentDegradePolicyService degradePolicyService
     ) {
         this.chatClientProvider = chatClientProvider;
         this.chatEnabled = chatEnabled;
@@ -104,6 +119,10 @@ public class AgentFacade {
         this.deterministicCommandExecutor = deterministicCommandExecutor;
         this.executionPolicyService = executionPolicyService;
         this.readOnlyReactExecutor = readOnlyReactExecutor;
+        this.rateLimitService = rateLimitService;
+        this.sessionLockService = sessionLockService;
+        this.budgetService = budgetService;
+        this.degradePolicyService = degradePolicyService;
     }
 
     /* ==========================================================
@@ -119,8 +138,32 @@ public class AgentFacade {
      * @return 对外返回的 Agent 对话结果
      */
     public AgentChatResult chat(CurrentUser currentUser, String sessionId, String message) {
-        boolean springAiReady = isSpringAiChatReady();
         AgentTraceContext trace = traceService.start(currentUser, sessionId, message);
+        if (!rateLimitService.tryAcquire(currentUser, sessionId)) {
+            // 限流发生在主链加载 session 之前，避免高压请求继续消耗模型、RAG 或数据库资源。
+            return rejectBeforeMainFlow(sessionId, trace, AgentErrorCode.AGENT_RATE_LIMITED, "Agent 请求触发限流");
+        }
+        if (!sessionLockService.tryLock(sessionId)) {
+            // 同一 session 并发请求直接快速失败，保护 pendingAction 和 recentMessages 不被串写。
+            return rejectBeforeMainFlow(sessionId, trace, AgentErrorCode.AGENT_SESSION_BUSY, "同一 session 已有请求处理中");
+        }
+        try {
+            return handleChat(currentUser, sessionId, message, trace);
+        } catch (AgentBudgetExceededException ex) {
+            traceService.step(trace, "resilience", "budget", null, ex.getErrorCode().name(), ex.getMessage());
+            return rejectBeforeMainFlow(sessionId, trace, ex.getErrorCode(), ex.getMessage());
+        } finally {
+            sessionLockService.unlock(sessionId);
+        }
+    }
+
+    private AgentChatResult handleChat(
+            CurrentUser currentUser,
+            String sessionId,
+            String message,
+            AgentTraceContext trace
+    ) {
+        boolean springAiReady = isSpringAiChatReady();
         AgentSessionContext context = sessionService.load(sessionId);
         memoryService.hydrate(currentUser, context);
 
@@ -139,6 +182,12 @@ public class AgentFacade {
         AgentExecutionPolicy policy = executionPolicyService.resolve(currentUser, route);
         traceService.step(trace, "policy", "resolve", null,
                 policy.getMode().name(), String.valueOf(policy.getAllowedToolNames()));
+        AgentTurnBudget budget = budgetService.create(policy);
+        traceService.step(trace, "resilience", "budget", null, "READY",
+                "llm=" + policy.getMaxLlmCalls()
+                        + ",tool=" + policy.getMaxToolCalls()
+                        + ",rag=" + policy.getMaxRagCalls()
+                        + ",timeout=" + policy.getTimeout());
         log.info("智能体对话开始：sessionId={}, userId={}, intent={}, springAiChatReady={}",
                 sessionId, currentUser.getUserId(), route.getIntent(), springAiReady);
 
@@ -147,12 +196,12 @@ public class AgentFacade {
         }
 
         if (isWritePolicy(policy)) {
-            return executeWriteCommand(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
+            return executeWriteCommand(currentUser, sessionId, message, context, route, plan, springAiReady, trace, budget);
         }
 
         if (springAiReady && policy.isAllowReact()) {
             Optional<ReadOnlyReactExecution> reactExecution = readOnlyReactExecutor.execute(
-                    currentUser, message, context, route, plan, policy, trace);
+                    currentUser, message, context, route, plan, policy, trace, budget);
             if (reactExecution.isPresent()) {
                 return completeReadOnlyReactTurn(
                         currentUser,
@@ -166,10 +215,14 @@ public class AgentFacade {
                         reactExecution.get()
                 );
             }
+            if (degradePolicyService.canDegradeToDeterministic(route)) {
+                traceService.step(trace, "resilience", "degrade", null,
+                        AgentErrorCode.AGENT_DEGRADED.name(), "只读 ReAct 不可用，转入确定性链路");
+            }
         }
 
         // 只读场景在 ReAct 不可用、无白名单工具或模型执行失败时，仍然回退到确定性查询链。
-        return executeDeterministicReadOnly(currentUser, sessionId, message, context, route, plan, springAiReady, trace);
+        return executeDeterministicReadOnly(currentUser, sessionId, message, context, route, plan, springAiReady, trace, budget);
     }
 
     /* ==========================================================
@@ -206,7 +259,7 @@ public class AgentFacade {
                 false
         );
         String finalReply = renderReply(route, plan, context, summary);
-        traceService.finish(trace, route, plan, summary.getParameters(), summary.getPrimaryResult(), finalReply, false, false);
+        traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
     }
 
@@ -227,8 +280,10 @@ public class AgentFacade {
             IntentRoute route,
             AgentPlan plan,
             boolean springAiReady,
-            AgentTraceContext trace
+            AgentTraceContext trace,
+            AgentTurnBudget budget
     ) {
+        budgetService.consumeToolCall(budget);
         traceService.step(trace, "command", "draft", plan.getNextSkillCode(), "START", route.getIntent().name());
         AgentExecutionSummary summary = deterministicCommandExecutor.execute(currentUser, message, context, route, plan);
         updateSessionAfterTool(currentUser, sessionId, context, route, message, summary.getParameters(), summary.getPrimaryResult());
@@ -237,7 +292,7 @@ public class AgentFacade {
                 summary.getPrimaryResult() == null ? null : summary.getPrimaryResult().getToolName(),
                 summary.getStatus().name(),
                 summary.getCommandDraft() == null ? null : summary.getCommandDraft().getPreviewText());
-        traceService.finish(trace, route, plan, summary.getParameters(), summary.getPrimaryResult(), finalReply, false, false);
+        traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
     }
 
@@ -252,8 +307,14 @@ public class AgentFacade {
             IntentRoute route,
             AgentPlan plan,
             boolean springAiReady,
-            AgentTraceContext trace
+            AgentTraceContext trace,
+            AgentTurnBudget budget
     ) {
+        budgetService.consumeToolCall(budget);
+        if (route != null && route.getIntent() == AgentIntent.SEARCH_HISTORY) {
+            // 历史案例检索属于 RAG 慢资源，和普通工单查询分开计数，方便高压下局部降级。
+            budgetService.consumeRagCall(budget);
+        }
         AgentSkill skill = skillRegistry.requireByIntent(route.getIntent());
         AgentTool tool = skill.tool();
         AgentToolParameters parameters = parameterExtractor.extract(message, context);
@@ -304,9 +365,12 @@ public class AgentFacade {
                 false,
                 true
         );
+        if (springAiReady && degradePolicyService.canDegradeToDeterministic(route)) {
+            degradePolicyService.markDegraded(summary, AgentErrorCode.AGENT_DEGRADED, "只读增强能力不可用，已走确定性查询链路");
+        }
         String finalReply = renderReply(route, plan, context, summary);
         traceService.step(trace, "fallback", "skill-call", toolResult.getToolName(), toolResult.getStatus().name(), "finished");
-        traceService.finish(trace, route, plan, summary.getParameters(), summary.getPrimaryResult(), finalReply, false, true);
+        traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
     }
 
@@ -330,7 +394,7 @@ public class AgentFacade {
         updateSessionAfterToolCalls(currentUser, sessionId, context, route, message, reactExecution.toolCalls());
         AgentExecutionSummary summary = reactExecution.summary();
         String finalReply = renderReply(route, plan, context, summary);
-        traceService.finish(trace, route, plan, summary.getParameters(), summary.getPrimaryResult(), finalReply, true, false);
+        traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
     }
 
@@ -357,7 +421,7 @@ public class AgentFacade {
         AgentExecutionSummary summary = continuation.getSummary();
         updateSessionAfterTool(currentUser, sessionId, context, route, message, summary.getParameters(), summary.getPrimaryResult());
         String finalReply = renderReply(route, plan, context, summary);
-        traceService.finish(trace, route, plan, summary.getParameters(), summary.getPrimaryResult(), finalReply, false, false);
+        traceService.finish(trace, route, plan, summary);
         return toChatResult(sessionId, route, context, summary, springAiReady, plan, trace);
     }
 
@@ -497,6 +561,30 @@ public class AgentFacade {
                 .result(summary != null && summary.getPrimaryResult() != null ? summary.getPrimaryResult().getData() : null)
                 .springAiChatReady(springAiReady)
                 .plan(plan)
+                .traceId(trace == null ? null : trace.getTraceId())
+                .build();
+    }
+
+    /**
+     * 在请求未进入主业务链时构造兼容响应。
+     *
+     * <p>限流、session busy、预算超限这类工程保护不能继续加载或修改 session，
+     * 因此这里只生成失败 summary、渲染回复并收尾 trace，不触碰 memory 或 pendingAction。</p>
+     */
+    private AgentChatResult rejectBeforeMainFlow(
+            String sessionId,
+            AgentTraceContext trace,
+            AgentErrorCode errorCode,
+            String reason
+    ) {
+        traceService.step(trace, "resilience", "reject", null, errorCode.name(), reason);
+        AgentExecutionSummary summary = degradePolicyService.failure(errorCode, reason);
+        String reply = renderReply(null, null, null, summary);
+        traceService.finish(trace, null, null, summary);
+        return AgentChatResult.builder()
+                .sessionId(sessionId)
+                .reply(reply)
+                .springAiChatReady(isSpringAiChatReady())
                 .traceId(trace == null ? null : trace.getTraceId())
                 .build();
     }

@@ -34,6 +34,10 @@ import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.prompt.PromptTemplateService;
 import com.smartticket.agent.react.AgentReactToolCatalog;
 import com.smartticket.agent.react.ReadOnlyReactExecutor;
+import com.smartticket.agent.resilience.AgentDegradePolicyService;
+import com.smartticket.agent.resilience.AgentRateLimitService;
+import com.smartticket.agent.resilience.AgentSessionLockService;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.reply.AgentReplyRenderer;
 import com.smartticket.agent.skill.AgentSkill;
 import com.smartticket.agent.skill.SkillRegistry;
@@ -52,6 +56,7 @@ import com.smartticket.agent.trace.AgentTraceContext;
 import com.smartticket.agent.trace.AgentTraceService;
 import com.smartticket.biz.model.CurrentUser;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -441,6 +446,36 @@ class AgentFacadeTest {
         verify(fixture.transferTicketTool, never()).execute(any());
     }
 
+    @Test
+    void chatShouldRejectWhenSameSessionIsBusy() throws InterruptedException {
+        TestFixture fixture = fixture();
+        CountDownLatch locked = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Thread holder = new Thread(() -> {
+            fixture.sessionLockService.tryLock("s-busy");
+            locked.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            } finally {
+                fixture.sessionLockService.unlock("s-busy");
+            }
+        });
+        holder.start();
+        try {
+            locked.await();
+            AgentChatResult result = fixture.agentFacade.chat(currentUser(), "s-busy", "查询工单1001");
+
+            assertEquals("当前会话已有一条消息正在处理中，请稍后再试。", result.getReply());
+            assertEquals("trace-1", result.getTraceId());
+            verify(fixture.sessionService, never()).load(anyString());
+        } finally {
+            release.countDown();
+            holder.join();
+        }
+    }
+
     private TestFixture fixture() {
         return fixture(false);
     }
@@ -476,8 +511,11 @@ class AgentFacadeTest {
                 agentPlanner,
                 promptTemplateService,
                 traceService,
-                reactToolCatalog
+                reactToolCatalog,
+                new AgentTurnBudgetService()
         );
+        AgentTurnBudgetService budgetService = new AgentTurnBudgetService();
+        AgentSessionLockService sessionLockService = new AgentSessionLockService();
         DeterministicCommandExecutor deterministicCommandExecutor = new DeterministicCommandExecutor(
                 parameterExtractor,
                 sessionService,
@@ -553,7 +591,11 @@ class AgentFacadeTest {
                 pendingActionCoordinator,
                 deterministicCommandExecutor,
                 executionPolicyService,
-                readOnlyReactExecutor
+                readOnlyReactExecutor,
+                new AgentRateLimitService(100, 1000, java.time.Clock.systemUTC()),
+                sessionLockService,
+                budgetService,
+                new AgentDegradePolicyService()
         );
         return new TestFixture(
                 agentFacade,
@@ -567,6 +609,7 @@ class AgentFacadeTest {
                 traceService,
                 promptTemplateService,
                 parameterExtractor,
+                sessionLockService,
                 querySkill,
                 queryTicketTool,
                 createTicketTool,
@@ -587,6 +630,7 @@ class AgentFacadeTest {
             AgentTraceService traceService,
             PromptTemplateService promptTemplateService,
             AgentToolParameterExtractor parameterExtractor,
+            AgentSessionLockService sessionLockService,
             AgentSkill querySkill,
             QueryTicketTool queryTicketTool,
             CreateTicketTool createTicketTool,

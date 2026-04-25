@@ -14,6 +14,7 @@ import com.smartticket.agent.execution.AgentExecutionGuard;
 import com.smartticket.agent.model.AgentIntent;
 import com.smartticket.agent.model.AgentSessionContext;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.service.AgentSessionService;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolMetadata;
@@ -40,7 +41,7 @@ class SpringAiToolSupportTest {
     void executeShouldRejectWriteToolWhenOriginalRouteIsReadOnly() {
         AgentExecutionGuard executionGuard = mock(AgentExecutionGuard.class);
         AgentSessionService sessionService = mock(AgentSessionService.class);
-        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService);
+        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService, new AgentTurnBudgetService());
         AgentTool writeTool = mock(AgentTool.class);
         ToolContext toolContext = mock(ToolContext.class);
         SpringAiToolCallState state = new SpringAiToolCallState();
@@ -80,7 +81,7 @@ class SpringAiToolSupportTest {
     void executeShouldAllowReadOnlyToolWhenOriginalRouteIsReadOnly() {
         AgentExecutionGuard executionGuard = mock(AgentExecutionGuard.class);
         AgentSessionService sessionService = mock(AgentSessionService.class);
-        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService);
+        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService, new AgentTurnBudgetService());
         AgentTool readOnlyTool = mock(AgentTool.class);
         ToolContext toolContext = mock(ToolContext.class);
         SpringAiToolCallState state = new SpringAiToolCallState();
@@ -130,7 +131,7 @@ class SpringAiToolSupportTest {
     void executeShouldRejectToolOutsideAllowedPolicyList() {
         AgentExecutionGuard executionGuard = mock(AgentExecutionGuard.class);
         AgentSessionService sessionService = mock(AgentSessionService.class);
-        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService);
+        SpringAiToolSupport support = new SpringAiToolSupport(executionGuard, sessionService, new AgentTurnBudgetService());
         AgentTool readOnlyTool = mock(AgentTool.class);
         ToolContext toolContext = mock(ToolContext.class);
         SpringAiToolCallState state = new SpringAiToolCallState();

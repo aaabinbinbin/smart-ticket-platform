@@ -3,6 +3,7 @@ package com.smartticket.agent.trace;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smartticket.agent.model.IntentRoute;
+import com.smartticket.agent.orchestration.AgentExecutionSummary;
 import com.smartticket.agent.planner.AgentPlan;
 import com.smartticket.agent.tool.core.AgentToolResult;
 import com.smartticket.agent.tool.parameter.AgentToolParameters;
@@ -97,10 +98,62 @@ public class AgentTraceService {
             boolean springAiUsed,
             boolean fallbackUsed
     ) {
+        finish(context, route, plan, parameters, toolResult, finalReply, springAiUsed, fallbackUsed, null, null);
+    }
+
+    /**
+     * 基于统一 summary 收尾本轮 trace。
+     *
+     * <p>P6 开始高压治理会在 summary 中记录 degraded、failureCode 和 failureReason。
+     * 该方法只把这些结构化事实写入 trace，不影响主业务成功失败，也不会修改
+     * session、memory 或 pendingAction。</p>
+     *
+     * @param context trace 上下文
+     * @param route 当前意图路由
+     * @param plan 当前执行计划
+     * @param summary 本轮统一执行摘要
+     */
+    public void finish(
+            AgentTraceContext context,
+            IntentRoute route,
+            AgentPlan plan,
+            AgentExecutionSummary summary
+    ) {
+        if (summary == null) {
+            finish(context, route, plan, null, null, null, false, false, null, null);
+            return;
+        }
+        finish(
+                context,
+                route,
+                plan,
+                summary.getParameters(),
+                summary.getPrimaryResult(),
+                summary.getRenderedReply(),
+                summary.isSpringAiUsed(),
+                summary.isFallbackUsed(),
+                summary.getFailureCode(),
+                summary.getFailureReason()
+        );
+    }
+
+    private void finish(
+            AgentTraceContext context,
+            IntentRoute route,
+            AgentPlan plan,
+            AgentToolParameters parameters,
+            AgentToolResult toolResult,
+            String finalReply,
+            boolean springAiUsed,
+            boolean fallbackUsed,
+            String failureCode,
+            String failureReason
+    ) {
         if (context == null) {
             return;
         }
         long elapsed = System.currentTimeMillis() - context.getStartedAtMillis();
+        String status = toolResult == null || toolResult.getStatus() == null ? "UNKNOWN" : toolResult.getStatus().name();
         AgentTraceRecord record = AgentTraceRecord.builder()
                 .traceId(context.getTraceId())
                 .sessionId(context.getSessionId())
@@ -116,8 +169,8 @@ public class AgentTraceService {
                 .fallbackUsed(fallbackUsed)
                 .finalReply(finalReply)
                 .elapsedMillis(elapsed)
-                .status(toolResult == null || toolResult.getStatus() == null ? "UNKNOWN" : toolResult.getStatus().name())
-                .failureType(fallbackUsed ? "FALLBACK" : null)
+                .status(status)
+                .failureType(failureCode != null ? failureCode : (fallbackUsed ? "FALLBACK" : null))
                 .stepJson(toStepJson(context.getSteps()))
                 .reasoningJson(toReasoningJson(context.getReasoningChain()))
                 .createdAt(LocalDateTime.now())

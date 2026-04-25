@@ -21,6 +21,8 @@ import com.smartticket.agent.planner.AgentPlanAction;
 import com.smartticket.agent.planner.AgentPlanStage;
 import com.smartticket.agent.planner.AgentPlanner;
 import com.smartticket.agent.prompt.PromptTemplateService;
+import com.smartticket.agent.resilience.AgentTurnBudget;
+import com.smartticket.agent.resilience.AgentTurnBudgetService;
 import com.smartticket.agent.skill.AgentSkill;
 import com.smartticket.agent.tool.core.AgentTool;
 import com.smartticket.agent.tool.core.AgentToolMetadata;
@@ -52,7 +54,8 @@ class ReadOnlyReactExecutorTest {
                 mock(AgentPlanner.class),
                 promptTemplateService(),
                 mock(AgentTraceService.class),
-                new AgentReactToolCatalog()
+                new AgentReactToolCatalog(),
+                new AgentTurnBudgetService()
         );
         AgentExecutionPolicy policy = AgentExecutionPolicy.builder()
                 .mode(AgentExecutionMode.READ_ONLY_REACT)
@@ -67,7 +70,8 @@ class ReadOnlyReactExecutorTest {
                 route(AgentIntent.QUERY_TICKET),
                 plan(),
                 policy,
-                new AgentTraceContext("trace-1", "session", 1L, "msg")
+                new AgentTraceContext("trace-1", "session", 1L, "msg"),
+                new AgentTurnBudget(1, 1, 0, Duration.ofSeconds(30))
         );
 
         assertTrue(result.isEmpty());
@@ -84,7 +88,8 @@ class ReadOnlyReactExecutorTest {
                 planner,
                 promptTemplateService(),
                 traceService,
-                new AgentReactToolCatalog()
+                new AgentReactToolCatalog(),
+                new AgentTurnBudgetService()
         );
         ChatResponse response = mock(ChatResponse.class, org.mockito.Answers.RETURNS_DEEP_STUBS);
         AgentExecutionPolicy policy = AgentExecutionPolicy.builder()
@@ -109,7 +114,8 @@ class ReadOnlyReactExecutorTest {
                 route(AgentIntent.QUERY_TICKET),
                 plan(),
                 policy,
-                new AgentTraceContext("trace-1", "session", 1L, "msg")
+                new AgentTraceContext("trace-1", "session", 1L, "msg"),
+                new AgentTurnBudget(1, 1, 0, Duration.ofSeconds(30))
         );
 
         assertTrue(result.isPresent());
