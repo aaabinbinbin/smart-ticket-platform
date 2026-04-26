@@ -18,6 +18,11 @@ public interface TicketSlaInstanceMapper {
     int insert(TicketSlaInstance instance);
 
     /**
+     * 新增或更新（INSERT ... ON DUPLICATE KEY UPDATE）。
+     */
+    int upsert(TicketSlaInstance instance);
+
+    /**
      * 查询按ID。
      */
     TicketSlaInstance findById(@Param("id") Long id);

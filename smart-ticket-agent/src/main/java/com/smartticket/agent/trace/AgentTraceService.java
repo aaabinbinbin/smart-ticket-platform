@@ -28,6 +28,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class AgentTraceService {
     private static final Logger log = LoggerFactory.getLogger(AgentTraceService.class);
+    private static final int MAX_IN_MEMORY_TRACES = 1000;
     private final Map<String, List<AgentTraceRecord>> bySession = new ConcurrentHashMap<>();
     private final Map<Long, List<AgentTraceRecord>> byUser = new ConcurrentHashMap<>();
     // 轨迹Record映射接口提供器
@@ -173,11 +174,17 @@ public class AgentTraceService {
                 .failureType(failureCode != null ? failureCode : (fallbackUsed ? "FALLBACK" : null))
                 .stepJson(toStepJson(context.getSteps()))
                 .reasoningJson(toReasoningJson(context.getReasoningChain()))
+                .inputTokens(context.getInputTokens())
+                .outputTokens(context.getOutputTokens())
                 .createdAt(LocalDateTime.now())
                 .build();
         persist(record);
+        // 内存缓存设上限，防止 OOM
         bySession.computeIfAbsent(record.getSessionId(), ignored -> new ArrayList<>()).add(record);
         byUser.computeIfAbsent(record.getUserId(), ignored -> new ArrayList<>()).add(record);
+        if (bySession.size() > MAX_IN_MEMORY_TRACES || estimateTotalInMemory() > MAX_IN_MEMORY_TRACES) {
+            trimInMemory();
+        }
         log.info("智能体轨迹：traceId={}, sessionId={}, userId={}, intent={}, stage={}, status={}, elapsedMs={}",
                 record.getTraceId(), record.getSessionId(), record.getUserId(), record.getIntent(), record.getPlanStage(),
                 record.getStatus(), record.getElapsedMillis());
@@ -285,5 +292,34 @@ public class AgentTraceService {
             return value;
         }
         return value.substring(0, maxLength) + "...";
+    }
+
+    private int estimateTotalInMemory() {
+        return bySession.values().stream().mapToInt(List::size).sum();
+    }
+
+    private void trimInMemory() {
+        bySession.values().forEach(list -> {
+            while (list.size() > 200) {
+                list.remove(0);
+            }
+        });
+        byUser.values().forEach(list -> {
+            while (list.size() > 200) {
+                list.remove(0);
+            }
+        });
+        if (bySession.size() > MAX_IN_MEMORY_TRACES) {
+            var keys = List.copyOf(bySession.keySet());
+            for (int i = 0; i < keys.size() - MAX_IN_MEMORY_TRACES / 2 && i < keys.size(); i++) {
+                bySession.remove(keys.get(i));
+            }
+        }
+        if (byUser.size() > MAX_IN_MEMORY_TRACES) {
+            var keys = List.copyOf(byUser.keySet());
+            for (int i = 0; i < keys.size() - MAX_IN_MEMORY_TRACES / 2 && i < keys.size(); i++) {
+                byUser.remove(keys.get(i));
+            }
+        }
     }
 }

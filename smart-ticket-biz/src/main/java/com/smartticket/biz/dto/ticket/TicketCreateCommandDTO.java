@@ -31,5 +31,7 @@ public class TicketCreateCommandDTO {
     private TicketPriorityEnum priority;
     // 幂等键
     private String idempotencyKey;
+    // 来源
+    private String source;
 }
 

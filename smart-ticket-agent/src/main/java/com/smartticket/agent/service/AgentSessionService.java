@@ -65,6 +65,11 @@ public class AgentSessionService {
         cacheService.save(sessionId, context);
     }
 
+    /** 每次交互后重置 session TTL，防止活跃会话意外过期。 */
+    public void touch(String sessionId) {
+        cacheService.touch(sessionId);
+    }
+
     /**
      * 调用后根据 Tool 结果更新上下文。
      *

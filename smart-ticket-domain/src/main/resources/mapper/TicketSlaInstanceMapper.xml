@@ -14,12 +14,27 @@
         )
     </insert>
 
+    <insert id="upsert" parameterType="com.smartticket.domain.entity.TicketSlaInstance"
+            useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO ticket_sla_instance (
+            ticket_id, policy_id, first_response_deadline, resolve_deadline, breached
+        )
+        VALUES (
+            #{ticketId}, #{policyId}, #{firstResponseDeadline}, #{resolveDeadline}, #{breached}
+        )
+        ON DUPLICATE KEY UPDATE
+            policy_id = VALUES(policy_id),
+            first_response_deadline = VALUES(first_response_deadline),
+            resolve_deadline = VALUES(resolve_deadline),
+            breached = VALUES(breached)
+    </insert>
+
     <select id="findById" resultType="com.smartticket.domain.entity.TicketSlaInstance">
-        SELECT * FROM ticket_sla_instance WHERE id = #{id}
+        SELECT id, ticket_id, policy_id, first_response_deadline, resolve_deadline, breached, created_at, updated_at FROM ticket_sla_instance WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketSlaInstance">
-        SELECT * FROM ticket_sla_instance WHERE ticket_id = #{ticketId}
+        SELECT id, ticket_id, policy_id, first_response_deadline, resolve_deadline, breached, created_at, updated_at FROM ticket_sla_instance WHERE ticket_id = #{ticketId}
     </select>
 
     <update id="updateByTicketId" parameterType="com.smartticket.domain.entity.TicketSlaInstance">
@@ -32,7 +47,7 @@
     </update>
 
     <select id="findBreachedCandidates" resultType="com.smartticket.domain.entity.TicketSlaInstance">
-        SELECT *
+        SELECT id, ticket_id, policy_id, first_response_deadline, resolve_deadline, breached, created_at, updated_at
         FROM ticket_sla_instance
         WHERE breached = 0
           AND (first_response_deadline &lt;= #{now} OR resolve_deadline &lt;= #{now})

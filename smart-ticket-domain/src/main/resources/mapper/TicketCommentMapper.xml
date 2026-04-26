@@ -11,13 +11,13 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketComment">
-        SELECT *
+        SELECT id, ticket_id, commenter_id, comment_type, content, created_at
         FROM ticket_comment
         WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketComment">
-        SELECT *
+        SELECT id, ticket_id, commenter_id, comment_type, content, created_at
         FROM ticket_comment
         WHERE ticket_id = #{ticketId}
         ORDER BY created_at ASC

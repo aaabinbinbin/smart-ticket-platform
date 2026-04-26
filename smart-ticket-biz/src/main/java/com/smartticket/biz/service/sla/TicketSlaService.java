@@ -25,7 +25,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -33,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class TicketSlaService {
+    private static final Logger log = LoggerFactory.getLogger(TicketSlaService.class);
     // LIMIT
     private static final int DEFAULT_SCAN_LIMIT = 100;
     // LIMIT
@@ -169,11 +173,7 @@ public class TicketSlaService {
                 .resolveDeadline(baseTime.plusMinutes(policy.getResolveMinutes()))
                 .breached(0)
                 .build();
-        if (instanceRepository.findByTicketId(ticket.getId()) == null) {
-            instanceRepository.insert(instance);
-        } else {
-            instanceRepository.updateByTicketId(instance);
-        }
+        instanceRepository.upsert(instance);
     }
 
     /**
@@ -189,8 +189,9 @@ public class TicketSlaService {
 
     /**
      * 扫描BreachedInstances。
+     *
+     * <p>逐条实例使用独立事务处理，单条失败不影响其他。</p>
      */
-    @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, Integer limit) {
         return scanBreachedInstances(operator, LocalDateTime.now(), limit);
     }
@@ -198,7 +199,6 @@ public class TicketSlaService {
     /**
      * 扫描BreachedInstances。
      */
-    @Transactional
     public TicketSlaScanResultDTO scanBreachedInstances(CurrentUser operator, LocalDateTime now, Integer limit) {
         permissionService.requireAdmin(operator);
         return doScanBreachedInstances(now, limit);
@@ -207,13 +207,12 @@ public class TicketSlaService {
     /**
      * 扫描BreachedInstancesAutomatically。
      */
-    @Transactional
     public TicketSlaScanResultDTO scanBreachedInstancesAutomatically() {
         return doScanBreachedInstances(LocalDateTime.now(), null);
     }
 
     /**
-     * 执行ScanBreachedInstances。
+     * 执行ScanBreachedInstances，逐条实例独立事务提交。
      */
     private TicketSlaScanResultDTO doScanBreachedInstances(LocalDateTime now, Integer limit) {
         int normalizedLimit = normalizeScanLimit(limit);
@@ -224,38 +223,27 @@ public class TicketSlaService {
         int resolveBreachedCount = 0;
         int escalatedCount = 0;
         int notifiedCount = 0;
+        int errorCount = 0;
         Optional<Long> adminUserId = findEscalationAdminUserId();
         for (TicketSlaInstance candidate : candidates) {
-            if (candidate.getId() == null || candidate.getTicketId() == null) {
-                continue;
-            }
-            Ticket ticket = ticketRepository.findById(candidate.getTicketId());
-            if (ticket == null) {
-                continue;
-            }
-            String breachType = determineBreachType(ticket, candidate, scanTime);
-            if (breachType == null) {
-                continue;
-            }
-            if (instanceRepository.markBreached(candidate.getId()) <= 0) {
-                continue;
-            }
-            markedIds.add(candidate.getId());
-            if ("FIRST_RESPONSE".equals(breachType)) {
-                firstResponseBreachedCount++;
-            } else {
-                resolveBreachedCount++;
-            }
-            boolean escalated = escalateTicket(ticket, adminUserId.orElse(null), breachType);
-            if (escalated) {
-                escalatedCount++;
-            }
-            Ticket latestTicket = ticketRepository.findById(ticket.getId());
-            notificationService.notifyBreached(latestTicket == null ? ticket : latestTicket, candidate, breachType, escalated);
-            notifiedCount++;
-            writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId.orElse(null)), OperationTypeEnum.SLA_BREACH, "SLA违约", "instanceId=" + candidate.getId(), "breachType=" + breachType + ", escalated=" + escalated);
-            if (escalated) {
-                writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId.orElse(null)), OperationTypeEnum.SLA_ESCALATE, "SLA升级", null, "breachType=" + breachType + ", adminUserId=" + adminUserId.orElse(null));
+            try {
+                ScanResult r = processOneBreachedInstance(candidate, scanTime, adminUserId.orElse(null));
+                if (r == null) {
+                    continue;
+                }
+                markedIds.add(r.instanceId);
+                if ("FIRST_RESPONSE".equals(r.breachType)) {
+                    firstResponseBreachedCount++;
+                } else {
+                    resolveBreachedCount++;
+                }
+                if (r.escalated) {
+                    escalatedCount++;
+                }
+                notifiedCount++;
+            } catch (Exception ex) {
+                errorCount++;
+                log.warn("SLA 扫描处理实例失败，instanceId={}, reason={}", candidate.getId(), ex.getMessage());
             }
         }
         return TicketSlaScanResultDTO.builder()
@@ -270,6 +258,44 @@ public class TicketSlaService {
                 .breachedInstanceIds(markedIds)
                 .build();
     }
+
+    /**
+     * 处理单条 SLA 违约实例，使用独立事务。
+     *
+     * <p>每条实例的标记、升级、通知、审计日志在同一个独立事务中提交，
+     * 失败时不影响其他实例的处理。</p>
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    protected ScanResult processOneBreachedInstance(TicketSlaInstance candidate, LocalDateTime scanTime, Long adminUserId) {
+        if (candidate.getId() == null || candidate.getTicketId() == null) {
+            return null;
+        }
+        Ticket ticket = ticketRepository.findById(candidate.getTicketId());
+        if (ticket == null) {
+            return null;
+        }
+        String breachType = determineBreachType(ticket, candidate, scanTime);
+        if (breachType == null) {
+            return null;
+        }
+        if (instanceRepository.markBreached(candidate.getId()) <= 0) {
+            return null;
+        }
+        boolean escalated = escalateTicket(ticket, adminUserId, breachType);
+        Ticket latestTicket = ticketRepository.findById(ticket.getId());
+        notificationService.notifyBreached(latestTicket == null ? ticket : latestTicket, candidate, breachType, escalated);
+        writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId), OperationTypeEnum.SLA_BREACH, "SLA违约",
+                "instanceId=" + candidate.getId(), "breachType=" + breachType + ", escalated=" + escalated);
+        if (escalated) {
+            writeAuditLog(ticket.getId(), resolveOperatorId(ticket, adminUserId), OperationTypeEnum.SLA_ESCALATE, "SLA升级",
+                    null, "breachType=" + breachType + ", adminUserId=" + adminUserId);
+        }
+        return new ScanResult(candidate.getId(), breachType, escalated);
+    }
+
+    /** 单条 SLA 扫描结果。 */
+    private record ScanResult(Long instanceId, String breachType, boolean escalated) {}
+
 
     /**
      * 查询Escalation管理用户ID。

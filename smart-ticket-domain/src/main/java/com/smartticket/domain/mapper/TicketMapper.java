@@ -46,7 +46,7 @@ public interface TicketMapper {
     /**
      * 统计开放Assigned工单。
      */
-    long countOpenAssigned工单(@Param("assigneeId") Long assigneeId);
+    long countOpenAssignedTickets(@Param("assigneeId") Long assigneeId);
 
     /**
      * 查询按状态。

@@ -66,7 +66,7 @@ public class RagController {
         if (query == null || query.trim().isEmpty()) {
             return ApiResponse.failure("VALIDATION_FAILED", "检索查询文本不能为空");
         }
-        log.info("RAG 检索请求：user={}, query='{}', topK={}", currentUser.getUsername(), query, topK);
+        log.debug("RAG 检索请求：user={}, query='{}', topK={}", currentUser.getUsername(), query, topK);
 
         RetrievalResult result = retrievalService.retrieve(RetrievalRequest.builder()
                 .queryText(query)
@@ -74,7 +74,7 @@ public class RagController {
                 .rewrite(true)
                 .build());
 
-        log.info("RAG 检索路径={}，fallbackUsed={}，query='{}', hits={}",
+        log.debug("RAG 检索路径={}，fallbackUsed={}，query='{}', hits={}",
                 result.getRetrievalPath(), result.isFallbackUsed(), query, result.getHits().size());
 
         return ApiResponse.success(result);

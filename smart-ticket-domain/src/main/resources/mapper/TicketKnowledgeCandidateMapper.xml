@@ -28,19 +28,19 @@
     </update>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeCandidate">
-        SELECT *
+        SELECT id, ticket_id, status, quality_score, decision, reason, review_comment, sensitive_risk, reviewed_at, reviewed_by, created_at, updated_at
         FROM ticket_knowledge_candidate
         WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketKnowledgeCandidate">
-        SELECT *
+        SELECT id, ticket_id, status, quality_score, decision, reason, review_comment, sensitive_risk, reviewed_at, reviewed_by, created_at, updated_at
         FROM ticket_knowledge_candidate
         WHERE ticket_id = #{ticketId}
     </select>
 
     <select id="findByStatus" resultType="com.smartticket.domain.entity.TicketKnowledgeCandidate">
-        SELECT *
+        SELECT id, ticket_id, status, quality_score, decision, reason, review_comment, sensitive_risk, reviewed_at, reviewed_by, created_at, updated_at
         FROM ticket_knowledge_candidate
         WHERE status = #{status}
         ORDER BY updated_at DESC

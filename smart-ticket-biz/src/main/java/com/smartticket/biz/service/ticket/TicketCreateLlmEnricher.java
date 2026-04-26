@@ -10,6 +10,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
@@ -68,10 +70,12 @@ public class TicketCreateLlmEnricher {
     private final ChatClient chatClient;
     private final TicketCreateEnrichmentProperties properties;
     private final ObjectMapper objectMapper;
+    private final ExecutorService llmExecutor = Executors.newFixedThreadPool(4, r -> {
+        Thread t = new Thread(r, "llm-enrich-");
+        t.setDaemon(true);
+        return t;
+    });
 
-    /**
-     * 构造 LLM 字段抽取器。
-     */
     public TicketCreateLlmEnricher(
             ChatClient chatClient,
             TicketCreateEnrichmentProperties properties,
@@ -99,7 +103,8 @@ public class TicketCreateLlmEnricher {
                                     .system(SYSTEM_PROMPT)
                                     .user(userPrompt)
                                     .call()
-                                    .content()
+                                    .content(),
+                            llmExecutor
                     )
                     .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                     .join();

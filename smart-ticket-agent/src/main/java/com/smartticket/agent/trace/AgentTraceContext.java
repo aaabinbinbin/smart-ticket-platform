@@ -20,6 +20,10 @@ public class AgentTraceContext {
     private final List<String> reasoningChain = new ArrayList<>();
     @Setter
     private String promptVersion;
+    @Setter
+    private Integer inputTokens;
+    @Setter
+    private Integer outputTokens;
 
     public AgentTraceContext(String traceId, String sessionId, Long userId, String rawInput) {
         this.traceId = traceId;

@@ -29,6 +29,13 @@ public class TicketSlaInstanceRepository {
     }
 
     /**
+     * 新增或更新（INSERT ... ON DUPLICATE KEY UPDATE）。
+     */
+    public int upsert(TicketSlaInstance instance) {
+        return mapper.upsert(instance);
+    }
+
+    /**
      * 查询按ID。
      */
     public TicketSlaInstance findById(Long id) {

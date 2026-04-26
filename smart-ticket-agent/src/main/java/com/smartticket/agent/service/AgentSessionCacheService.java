@@ -42,6 +42,17 @@ public class AgentSessionCacheService {
     }
 
     /**
+     * 续期 session TTL，每次对话交互后调用，避免活跃 session 意外过期。
+     */
+    public void touch(String sessionId) {
+        try {
+            redisJsonClient.expire(RedisKeys.agentSession(sessionId), SESSION_TTL);
+        } catch (RuntimeException ex) {
+            // Redis 不可用时静默降级，不影响主链
+        }
+    }
+
+    /**
      * 清理数据。
      */
     public void clear(String sessionId) {

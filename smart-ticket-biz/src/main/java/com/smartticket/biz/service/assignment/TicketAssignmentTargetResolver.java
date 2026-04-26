@@ -106,7 +106,7 @@ public class TicketAssignmentTargetResolver {
                         queue.getId(),
                         member.getId(),
                         member.getUserId(),
-                        ticketRepository.countOpenAssigned工单(member.getUserId()),
+                        ticketRepository.countOpenAssignedTickets(member.getUserId()),
                         member.getLastAssignedAt()
                 ));
             }

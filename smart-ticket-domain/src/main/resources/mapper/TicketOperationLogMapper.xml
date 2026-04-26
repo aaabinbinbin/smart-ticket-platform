@@ -15,13 +15,13 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketOperationLog">
-        SELECT *
+        SELECT id, ticket_id, operator_id, operation_type, operation_desc, before_value, after_value, created_at
         FROM ticket_operation_log
         WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketOperationLog">
-        SELECT *
+        SELECT id, ticket_id, operator_id, operation_type, operation_desc, before_value, after_value, created_at
         FROM ticket_operation_log
         WHERE ticket_id = #{ticketId}
         ORDER BY created_at ASC

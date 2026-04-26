@@ -70,7 +70,7 @@ class TicketCommandServiceTest {
                 .build();
         when(ticketIdempotencyService.normalize("create-1")).thenReturn("create-1");
         when(ticketIdempotencyService.enabled("create-1")).thenReturn(false);
-        when(support.generateTicketNo()).thenReturn("INC202604231200001234");
+        when(support.generateTicketNo(any(TicketTypeEnum.class))).thenReturn("INC202604231200001234");
         doAnswer(invocation -> {
             Ticket ticket = invocation.getArgument(0);
             ticket.setId(101L);
@@ -97,7 +97,6 @@ class TicketCommandServiceTest {
         assertEquals(TicketTypeEnum.INCIDENT, result.getType());
         assertEquals(TicketCategoryEnum.SYSTEM, result.getCategory());
         assertEquals(TicketPriorityEnum.MEDIUM, result.getPriority());
-        verify(ticketTypeProfileService).validate(TicketTypeEnum.INCIDENT, Map.of("env", "test"));
         verify(ticketTypeProfileService).saveOrUpdate(101L, TicketTypeEnum.INCIDENT, Map.of("env", "test"));
         verify(ticketSlaService).createOrRefreshInstance(persisted);
         verify(support).writeLog(eq(101L), eq(1L), eq(OperationTypeEnum.CREATE), eq("创建工单"), eq(null), eq("snapshot"));
@@ -174,7 +173,7 @@ class TicketCommandServiceTest {
         when(ticketIdempotencyService.getCreatedTicketId(1L, "create-fail")).thenReturn(null);
         when(ticketIdempotencyService.acquireCreateLock(1L, "create-fail")).thenReturn(true);
         // doCreateTicket 中生成工单编号时抛出异常，触发 catch 释放幂等锁
-        when(support.generateTicketNo()).thenThrow(new RuntimeException("DB write failure"));
+        when(support.generateTicketNo(any(TicketTypeEnum.class))).thenThrow(new RuntimeException("DB write failure"));
 
         assertThrows(RuntimeException.class, () -> service.createTicket(operator(), command));
 
@@ -190,7 +189,7 @@ class TicketCommandServiceTest {
                 .build();
         when(ticketIdempotencyService.normalize(null)).thenReturn(null);
         when(ticketIdempotencyService.enabled(null)).thenReturn(false);
-        when(support.generateTicketNo()).thenReturn("INC202604251200001234");
+        when(support.generateTicketNo(any(TicketTypeEnum.class))).thenReturn("INC202604251200001234");
         doAnswer(invocation -> {
             Ticket ticket = invocation.getArgument(0);
             ticket.setId(101L);
@@ -241,7 +240,7 @@ class TicketCommandServiceTest {
         // user2 使用相同 key 但 userId 不同，应创建新工单
         when(ticketIdempotencyService.getCreatedTicketId(2L, "create-1")).thenReturn(null);
         when(ticketIdempotencyService.acquireCreateLock(2L, "create-1")).thenReturn(true);
-        when(support.generateTicketNo()).thenReturn("INC202604251200001235");
+        when(support.generateTicketNo(any(TicketTypeEnum.class))).thenReturn("INC202604251200001235");
         doAnswer(invocation -> {
             Ticket ticket = invocation.getArgument(0);
             ticket.setId(102L);

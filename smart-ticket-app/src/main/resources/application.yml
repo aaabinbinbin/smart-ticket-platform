@@ -1,11 +1,18 @@
 spring:
   application:
     name: smart-ticket-platform
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/smart_ticket_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+      leak-detection-threshold: 30000
   data:
     redis:
       host: 192.168.100.128
@@ -82,6 +89,21 @@ smart-ticket:
   jwt:
     secret: ${SMART_TICKET_JWT_SECRET:smart-ticket-platform-local-jwt-secret-change-me}
     expiration-minutes: ${SMART_TICKET_JWT_EXPIRATION:120}
+
+server:
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+  health:
+    redis:
+      enabled: false
 
 springdoc:
   api-docs:

@@ -121,13 +121,16 @@ public class CreateTicketTool implements AgentTool {
         boolean deflectionSucceeded = deflectionSuggested && !userAlreadyTried;
 
         // type/category/priority/typeProfile 等结构化字段由 TicketCommandService 内部 enrichment 自动补全
+        // Agent 显式传入的 typeProfile 不会被 enrichment 覆盖（合并策略：用户显式 > LLM > 规则）
         Ticket ticket = ticketCommandService.createTicket(request.getCurrentUser(), TicketCreateCommandDTO.builder()
                 .title(request.getParameters().getTitle())
                 .description(request.getParameters().getDescription())
                 .type(request.getParameters().getType())
                 .category(request.getParameters().getCategory())
                 .priority(request.getParameters().getPriority())
+                .typeProfile(request.getParameters().getTypeProfile())
                 .idempotencyKey(request.getParameters().getIdempotencyKey())
+                .source("AGENT")
                 .build());
         String reply = buildReply(similarCases, deflectionSuggested, userAlreadyTried);
         return AgentToolResults.success(

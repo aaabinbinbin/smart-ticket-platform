@@ -63,7 +63,7 @@ public class TicketRepository {
     /**
      * 统计开放Assigned工单。
      */
-    public long countOpenAssigned工单(Long assigneeId) { return ticketMapper.countOpenAssigned工单(assigneeId); }
+    public long countOpenAssignedTickets(Long assigneeId) { return ticketMapper.countOpenAssignedTickets(assigneeId); }
     /**
      * 更新处理人。
      */

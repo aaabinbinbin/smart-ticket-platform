@@ -1,105 +1,120 @@
 # 项目概览
 
-智能工单平台是一个面向简历和面试展示的 Java 后端项目。它不是简单 CRUD，而是把工单业务、权限控制、Agent 编排、RAG 知识库和异步可靠任务放在同一个可运行工程中。
+这篇文章帮你快速理解：这个项目是什么、能做什么、以及背后的设计考量。
 
-## 项目定位
+---
 
-- 展示 Java 后端工程能力：模块化拆分、认证鉴权、事务、异步任务、测试。
-- 展示复杂业务建模能力：工单流转、SLA、自动分派、审批、操作日志。
-- 展示 Agent 工程化能力：受控执行、Tool Calling、Planner、Skill、Memory、Trace。
-- 展示 RAG 工程化能力：知识准入、检索重排、反馈闭环、人工审核、可靠入库。
+## 一句话定位
 
-当前阶段：高完成度 MVP。
+一个面向服务台场景的后端工程——不只是"提工单、查工单"，而是把**类型系统、权限控制、SLA 生命周期、审批流、Agent 编排、RAG 知识闭环**统一放进一个可运行、可演示、可讲清楚的项目里。
 
-## 已实现能力
+---
 
-### 工单业务
+## 这个项目适合谁看
 
-- 工单创建、详情、分页查询
-- 分配、认领、转派
-- 状态流转、关闭
-- 评论与操作日志
-- SLA 扫描与升级
-- 自动分派与队列成员
-- 审批流
-- 多视角摘要
+- **你在准备 Java 后端实习面试**：这里有模块化分层、事务设计、异常体系、权限模型——都是面试常问的
+- **你在准备 Agent/AI 应用方向面试**：这里有受控 Agent 的完整设计——意图路由、确定性执行、高风险确认、降级策略
+- **你刚接手一个类似的工单/服务台系统**：这里的架构拆分思路可能对你有参考价值
 
-### 认证权限
+---
 
-- JWT 登录
-- RBAC 角色控制
-- 当前用户解析
-- Agent / RAG 管理接口鉴权
+## 一个例子看全局
 
-### Agent
+用户说："登录报 500，影响研发自测，帮我建工单"
 
-- 意图路由
-- Planner 执行计划
-- SkillRegistry 能力注册
-- ExecutionGuard 执行前校验
-- Tool 调用与确定性 fallback
-- 高风险操作二次确认
-- 短期上下文与三层记忆
-- Trace 持久化和指标接口
+这条请求在系统里走过了什么：
 
-### RAG
-
-- 知识构建
-- 结构化切片
-- Embedding
-- query rewrite
-- 轻量 rerank
-- MySQL fallback
-- pgvector 可选路径
-- RAG 反馈
-- 知识候选人工审核
-- 工单关闭后异步可靠入知识库
-
-## 核心链路
-
-### Agent 主链
-
-```text
-load session
--> hydrate memory
--> route intent
--> build/load plan
--> select skill
--> guard
--> execute tool or Spring AI tool calling
--> fallback if needed
--> update context and memory
--> write trace
--> return reply + plan + traceId
+```
+1. JWT Filter 验身份 → 识别为 user1
+2. Controller 收请求 → 提取 Idempotency-Key（防重复）
+3. TicketCommandService.createTicket()
+   ├── TicketCreateEnrichmentService 自动补全：
+   │   type=INCIDENT（"报错""500"命中）
+   │   category=SYSTEM，priority=MEDIUM
+   │   typeProfile={symptom:"登录报 500", impactScope:"影响研发自测"}
+   ├── 幂等锁检查（Redis）
+   ├── 入库（MySQL）
+   ├── 生成 SLA 实例
+   └── 记操作日志
+4. Admin 分派 → staff1
+5. staff1 处理后关单
+6. 关单触发知识构建：
+   ├── RabbitMQ 消息
+   ├── 知识准入评分
+   ├── 生成 embedding
+   └── 写入向量库
 ```
 
-### 工单关闭入知识库
+如果用户用 Agent 说同一句话，流程也几乎一样——Agent 调用同一个 `TicketCommandService`，enrichment 自动生效。
 
-```text
-close ticket transaction
--> create ticket_knowledge_build_task
--> after commit publish event
--> RabbitMQ publish
--> RabbitMQ consume
--> build knowledge candidate or formal knowledge
--> update task status
--> scheduled relay retries unfinished task
+---
+
+## 工单不只是 CRUD
+
+这个项目的工单模块比你第一眼看过去的要厚：
+
+- **5 种工单类型**，每种有不同的必填字段和校验规则
+- **状态流转**不是随意跳转：`PENDING_ASSIGN → PROCESSING → RESOLVED → CLOSED`
+- **SLA 违约**有扫描、标记、升级的完整链路
+- **审批流**直接约束主流程：没审批过，不能分配、不能推进
+- **自动分派**不是写死给某个人，而是按规则命中 → 队列 → 最少负载成员
+
+## Agent 不是 ChatBot
+
+很多"AI + 工单"项目的做法是：接一个 LLM，让用户自由聊天。
+
+这个项目不一样——Agent 是**受控的**：
+
+- 写操作（创建、转派）不走 LLM Tool Calling，走确定性 Command 链路
+- 高风险操作（转派）必须用户二次确认
+- LLM 只参与理解和表达，不直接改业务数据
+- LLM 不可用时，关键词兜底路由确保核心链路仍可用
+
+## RAG 不是外挂
+
+RAG 检索和工单业务不是两个独立系统：
+
+- 知识来源：工单关闭 → 知识构建 → embedding → 入库（闭环）
+- 检索触发：Agent `SEARCH_HISTORY` 意图 → 双路召回 → 去重 → rerank
+- 检索反馈：用户标记有用/无用 → 影响后续排序
+- 可靠性：MQ + 定时补偿，确保知识不丢
+
+---
+
+## 架构哲学：为什么是模块化单体
+
+没拆成微服务，是刻意的。
+
+**原因很简单**：对个人项目和简历项目来说，模块化单体让你把精力放在业务抽象和工程质量上，而不是花在服务发现、分布式事务、部署编排上。
+
+但"单体"不等于"不分层"。这个项目内部有 9 个模块，模块之间有清晰的依赖方向和职责边界：
+
+```
+app（启动入口）
+ └── api（HTTP 协议层：Controller/DTO/VO）
+      ├── agent（Agent 编排）
+      ├── rag（RAG 检索）
+      ├── biz（业务核心）
+      │    └── infra（Redis/AI/向量库适配）
+      ├── auth（JWT 认证）
+      ├── domain（实体/枚举/Mapper）
+      └── common（异常/响应/错误码）
 ```
 
-### 知识候选审核
+后续真要拆微服务，这些模块边界就是天然的拆分参考线。
 
-```text
-knowledge admission uncertain
--> create candidate
--> admin review
--> approve: create build task and force build
--> reject: record reviewer and comment
-```
+---
 
-## 当前边界
+## 当前边界（诚实说）
 
-- 项目是 MVP，部分能力用于展示工程设计，不等同生产级平台。
-- Spring AI 和向量库默认关闭，可以通过配置打开。
-- pgvector 需要外部 PostgreSQL 环境。
-- RabbitMQ 用于工单关闭后的知识构建消息链路。
-- 前端页面不是当前重点，后端 API 和工程结构是主要展示面。
+这不是一个生产级平台，它是一个**高完成度 MVP**。具体来说：
+
+| 已做好 | 未做 / 简化 |
+|--------|------------|
+| 完整的工单生命周期 + 审批 + SLA | 通知通道是日志占位，不是真的发邮件/IM |
+| Agent 受控执行链路 | 前端审核页面未实现 |
+| RAG 检索 + 反馈闭环 | 纯本地的 hash embedding，生产需换语义模型 |
+| 模块化分层 + 清晰的依赖方向 | CI 只有 mvn test，无镜像构建 |
+| 异常处理 + 幂等 + 限流 + 降级 | 无分布式锁（多实例部署需替换） |
+
+面试时值得主动说这些，这体现了你对工程边界的判断力，而不是"我都做完了"。

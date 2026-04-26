@@ -105,6 +105,16 @@ public class AgentTraceRecord {
     private String reasoningJson;
 
     /**
+     * 输入 token 数（prompt tokens），可为 null 表示未统计。
+     */
+    private Integer inputTokens;
+
+    /**
+     * 输出 token 数（completion tokens），可为 null 表示未统计。
+     */
+    private Integer outputTokens;
+
+    /**
      * 创建时间。
      */
     private LocalDateTime createdAt;

@@ -1,102 +1,115 @@
 # 快速启动
 
-## 环境要求
+5 分钟让这个项目在你的机器上跑起来。
 
-- JDK 17
-- Maven 3.9+
-- MySQL 8.x
-- Redis
-- RabbitMQ
-- 可选：PostgreSQL + pgvector
+---
 
-## 初始化数据库
+## 你需要什么
 
-创建数据库：
+| 组件 | 版本 | 作用 |
+|------|------|------|
+| JDK | 17+ | 编译运行 |
+| Maven | 3.9+ | 构建 |
+| MySQL | 8.x | 主数据库 |
+| Redis | 7.x | 幂等锁、缓存、Session |
+| RabbitMQ | 3.x（可选） | 知识构建消息 |
+| PostgreSQL + pgvector | 15+（可选） | 向量检索主路径 |
 
-```sql
-CREATE DATABASE smart_ticket_platform DEFAULT CHARACTER SET utf8mb4;
-```
+实际上只装 JDK + MySQL + Redis 就能跑核心链路。RabbitMQ 和 PGVector 影响知识构建和向量检索，缺了也不影响工单 CRUD。
 
-执行初始化脚本：
+---
+
+## 第一步：初始化数据库
+
+MySQL 里建库建表：
 
 ```bash
-mysql -h127.0.0.1 -uroot -p123456 smart_ticket_platform < docs/sql/schema.sql
-mysql -h127.0.0.1 -uroot -p123456 smart_ticket_platform < docs/sql/seed.sql
+mysql -h127.0.0.1 -P3306 -uroot -p < docs/sql/schema.sql
+mysql -h127.0.0.1 -P3306 -uroot -p < docs/sql/seed.sql
 ```
 
-## 默认本地配置
+`schema.sql` 建 26 张表，`seed.sql` 写入演示数据（3 个用户、默认组/队列、SLA 策略、分派规则、审批模板）。
 
-配置文件：
+---
 
-- `smart-ticket-app/src/main/resources/application.yml`
+## 第二步：检查配置
 
-当前默认依赖：
+配置文件只有一个：`smart-ticket-app/src/main/resources/application.yml`
 
-- MySQL：`127.0.0.1:3306`
-- Redis：`127.0.0.1:6379`
-- RabbitMQ AMQP：`192.168.100.128:5672`
-- RabbitMQ 管理后台：`192.168.100.128:15672`
-- pgvector：`192.168.100.128:5432`
-
-RabbitMQ 当前账号：
-
-```text
-admin / admin
-```
-
-pgvector 当前配置：
+默认连接：
 
 ```yaml
-smart-ticket:
-  ai:
-    pgvector:
-      url: jdbc:postgresql://192.168.100.128:5432/smart_ticket_vector
-      username: postgres
-      password: 123456
+MySQL:    127.0.0.1:3306  root/123456
+Redis:    127.0.0.1:6379  无密码
+RabbitMQ: 192.168.100.128:5672  admin/admin
+PGVector: 192.168.100.128:5432  postgres/123456
 ```
 
-注意：`15672` 是 RabbitMQ 管理后台端口，Java 应用连接 RabbitMQ 使用 `5672`。
+如果你的环境和上面不同，改一下 `spring.datasource`、`spring.data.redis` 这几行就行。
 
-## 启动项目
+RabbitMQ 和 PGVector 不通也没关系——启动不会挂，相关功能会自动降级。
 
-直接启动：
+---
+
+## 第三步：启动
 
 ```bash
 mvn -pl smart-ticket-app -am spring-boot:run
 ```
 
-或先打包再启动：
+看到 `Started SmartTicketApplication` 就是好了。
+
+---
+
+## 第四步：验证
+
+先登录拿 token：
 
 ```bash
-mvn -DskipTests package
-java -jar smart-ticket-app/target/smart-ticket-app-0.0.1-SNAPSHOT.jar
+curl -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin1","password":"123456"}'
 ```
 
-## 运行测试
+拿到 token 后，创建一张工单试试：
 
-执行全部测试：
+```bash
+curl -X POST http://localhost:8080/api/tickets \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer <token>' \
+  -H 'Idempotency-Key: test-001' \
+  -d '{"title":"测试环境登录报500","description":"影响研发自测"}'
+```
+
+应该返回创建成功。工单类型、分类、优先级都会自动补全。
+
+---
+
+## 演示账号
+
+| 用户名 | 密码 | 角色 | 能做什么 |
+|--------|------|------|---------|
+| `user1` | `123456` | USER | 提工单、查自己的工单 |
+| `staff1` | `123456` | STAFF | 处理工单、认领 |
+| `admin1` | `123456` | ADMIN | 全部权限、管理配置 |
+
+---
+
+## 跑测试
 
 ```bash
 mvn test
 ```
 
-只验证 Agent 和 API 相关模块：
+当前覆盖：工单创建/流转、SLA 扫描、Agent Tool 执行、RAG 检索/改写/重排、API 层幂等键校验。
 
-```bash
-mvn test -pl smart-ticket-api -am
-```
+---
 
-## 演示账号
+## 启动不了？
 
-- `user1 / 123456`：普通用户
-- `staff1 / 123456`：处理人员
-- `admin1 / 123456`：管理员
-
-## 常用接口
-
-- Agent 对话：`POST /api/agent/chat`
-- Agent trace 查询：`GET /api/agent/traces/by-session`
-- Agent 最近指标：`GET /api/agent/traces/metrics/recent-by-user`
-- 知识候选列表：`GET /api/agent/knowledge-candidates`
-- 知识候选通过：`POST /api/agent/knowledge-candidates/{candidateId}/approve`
-- 知识候选拒绝：`POST /api/agent/knowledge-candidates/{candidateId}/reject`
+| 现象 | 可能原因 |
+|------|---------|
+| 连不上 MySQL | 检查 `application.yml` 里的 datasource 配置 |
+| Redis 连接失败 | `spring.data.redis.host` 不对，或 Redis 没启动 |
+| 端口被占用 | 改 `server.port` |
+| RabbitMQ 报错 | 没装的话把 `smart-ticket.knowledge.rabbit.enabled` 改成 `false` |

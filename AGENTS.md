@@ -4,12 +4,12 @@
 
 本仓库是 `smart-ticket-platform`，定位为 Java Spring Boot 智能工单平台，用于展示 Java 后端工程能力和受控型业务 Agent 工程化能力。
 
-当前重点任务是重构 `smart-ticket-agent` 模块。重构必须参考以下文档：
+当前项目已完成 P0-P2 阶段重构。Agent 架构参考以下文档：
 
-- `docs/agent-refactor-checklist.md`
-- `docs/agent-refactor-implementation-plan.md`
+- `docs/agent-architecture.md`
+- `docs/project-deep-dive.md`
 
-如果两个文档存在冲突，以 `docs/agent-refactor-implementation-plan.md` 的阶段规划和本文档中的工程约束为准。
+项目规范和工程约束以本文档为准。
 
 ---
 
@@ -31,10 +31,10 @@
 
 ## 3. 阶段执行规则
 
-执行任何阶段前，必须先阅读：
+执行任何改动前，参考：
 
-1. `docs/agent-refactor-checklist.md`
-2. `docs/agent-refactor-implementation-plan.md`
+1. `docs/agent-architecture.md`
+2. `docs/project-deep-dive.md`
 3. 本文件 `AGENTS.md`
 
 每个阶段必须遵守：

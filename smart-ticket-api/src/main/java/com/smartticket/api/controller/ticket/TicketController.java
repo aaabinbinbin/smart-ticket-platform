@@ -90,7 +90,7 @@ public class TicketController {
     @Operation(summary = "创建工单", description = "创建一张处于待分配状态的工单，只有 title 和 description 为必填")
     public ApiResponse<TicketVO> createTicket(
             Authentication authentication,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader(value = "Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody CreateTicketRequestDTO request
     ) {
         TicketCreateCommandDTO command = TicketCreateCommandDTO.builder()
@@ -100,7 +100,8 @@ public class TicketController {
                 .typeProfile(request.getTypeProfile())
                 .category(ticketRequestParser.parseCategory(request.getCategory()))
                 .priority(ticketRequestParser.parsePriority(request.getPriority()))
-                .idempotencyKey(resolveIdempotencyKey(idempotencyKey, request.getIdempotencyKey()))
+                .idempotencyKey(normalizeIdempotencyKey(idempotencyKey))
+                .source("API")
                 .build();
         Ticket ticket = ticketService.createTicket(currentUserResolver.resolve(authentication), command);
         return ApiResponse.success(ticketAssembler.toVO(ticket));
@@ -332,31 +333,19 @@ public class TicketController {
     }
 
     /**
-     * 解析幂等键。
+     * 规范化幂等键。
      *
-     * <p>推荐使用 HTTP 头 {@code Idempotency-Key} 传幂等键。
-     * body 中的 idempotencyKey 字段仍然兼容但标记为 deprecated。</p>
-     *
-     * <p>如果 header 和 body 都有值但不一致，返回 400 Bad Request。
-     * 这种情况说明客户端存在混淆，不应自动选择其中一个。</p>
+     * <p>幂等键统一通过 HTTP 头 {@code Idempotency-Key} 传递，必填。
+     * 客户端重复提交相同幂等键的请求时，服务端返回首次创建的结果。</p>
      */
-    private String resolveIdempotencyKey(String headerValue, String bodyValue) {
-        boolean hasHeader = headerValue != null && !headerValue.isBlank();
-        boolean hasBody = bodyValue != null && !bodyValue.isBlank();
-
-        if (hasHeader && hasBody && !headerValue.trim().equals(bodyValue.trim())) {
-            throw new BusinessException(BusinessErrorCode.INVALID_ARGUMENT,
-                    "Idempotency-Key 请求头和请求体不一致，请确保二者相同或只传其一");
+    private String normalizeIdempotencyKey(String headerValue) {
+        String trimmed = headerValue.trim();
+        if (trimmed.isEmpty()) {
+            throw new BusinessException(BusinessErrorCode.INVALID_IDEMPOTENCY_KEY);
         }
-
-        if (hasHeader) {
-            return headerValue.trim();
+        if (trimmed.length() > 128) {
+            throw new BusinessException(BusinessErrorCode.INVALID_IDEMPOTENCY_KEY);
         }
-
-        if (hasBody) {
-            return bodyValue.trim();
-        }
-
-        return null;
+        return trimmed;
     }
 }

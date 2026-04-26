@@ -1,4 +1,4 @@
-# PGvector Setup Update 2026-04-24
+# PGvector Setup Update
 
 本文档补充说明当前仓库中 `PGvector` 主路径的实际可用配置、初始化步骤和验收方法。
 

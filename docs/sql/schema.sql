@@ -135,12 +135,13 @@ CREATE TABLE IF NOT EXISTS ticket_knowledge (
     symptom_summary VARCHAR(1000) DEFAULT NULL COMMENT '问题现象摘要',
     root_cause_summary VARCHAR(1000) DEFAULT NULL COMMENT '根因摘要',
     resolution_steps TEXT DEFAULT NULL COMMENT '处理步骤摘要',
-    risk_notes VARCHAR(1000) DEFAULT NULL COMMENT '风险与注意事项',
+    risk_notes TEXT DEFAULT NULL COMMENT '风险与注意事项',
     applicable_scope VARCHAR(1000) DEFAULT NULL COMMENT '适用范围',
     status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    UNIQUE KEY uk_ticket_knowledge_ticket_id (ticket_id)
+    UNIQUE KEY uk_ticket_knowledge_ticket_id (ticket_id),
+    INDEX idx_ticket_knowledge_status_updated (status, updated_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ticket_knowledge_candidate (
@@ -294,7 +295,8 @@ CREATE TABLE IF NOT EXISTS ticket_sla_instance (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     UNIQUE KEY uk_ticket_sla_ticket_id (ticket_id),
     INDEX idx_ticket_sla_policy_id (policy_id),
-    INDEX idx_ticket_sla_deadline (resolve_deadline)
+    INDEX idx_ticket_sla_deadline (resolve_deadline),
+    INDEX idx_ticket_sla_breached_deadline (breached, resolve_deadline)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ticket_notification (
@@ -335,6 +337,9 @@ CREATE TABLE IF NOT EXISTS agent_trace_record (
     status VARCHAR(64) DEFAULT NULL COMMENT '执行状态',
     failure_type VARCHAR(64) DEFAULT NULL COMMENT '失败类型',
     step_json JSON DEFAULT NULL COMMENT '步骤级 Trace',
+    reasoning_json TEXT DEFAULT NULL COMMENT 'LLM推理链JSON，记录ReAct循环中LLM中间思考过程',
+    input_tokens INT DEFAULT NULL COMMENT '输入 token 数（prompt tokens）',
+    output_tokens INT DEFAULT NULL COMMENT '输出 token 数（completion tokens）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     INDEX idx_agent_trace_session_id (session_id, created_at),
     INDEX idx_agent_trace_user_id (user_id, created_at),
@@ -348,6 +353,9 @@ CREATE TABLE IF NOT EXISTS agent_user_preference_memory (
     common_priority VARCHAR(64) DEFAULT NULL COMMENT '常用优先级',
     common_terms VARCHAR(1000) DEFAULT NULL COMMENT '常用术语摘要，不保存敏感原文',
     response_style VARCHAR(64) DEFAULT NULL COMMENT '偏好回复风格',
+    source VARCHAR(32) DEFAULT NULL COMMENT '记忆来源：USER_EXPLICIT/TOOL_RESULT/INFERRED/LLM_EXTRACTED',
+    confidence DECIMAL(3,2) DEFAULT NULL COMMENT '置信度(0-1)，低置信度只能推荐不能自动执行',
+    expires_at DATETIME DEFAULT NULL COMMENT '过期时间，过期后不应使用此记忆',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_agent_user_preference_memory_updated_at (updated_at)

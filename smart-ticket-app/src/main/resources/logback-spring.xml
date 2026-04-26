@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 开发环境：控制台彩色输出 -->
+    <springProfile name="default | dev">
+        <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+        <logger name="com.smartticket" level="DEBUG"/>
+        <logger name="org.springframework.ai" level="DEBUG"/>
+    </springProfile>
+
+    <!-- 生产环境：JSON 结构化日志 + 文件 -->
+    <springProfile name="prod">
+        <appender name="JSON" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/smart-ticket-platform.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+                <fileNamePattern>logs/smart-ticket-platform.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+                <maxFileSize>100MB</maxFileSize>
+                <maxHistory>30</maxHistory>
+            </rollingPolicy>
+            <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+                <pattern>{"ts":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%level","logger":"%logger","msg":"%msg","ex":"%ex"}%n</pattern>
+            </encoder>
+        </appender>
+        <root level="INFO">
+            <appender-ref ref="JSON"/>
+        </root>
+        <logger name="com.smartticket" level="INFO"/>
+    </springProfile>
+</configuration>

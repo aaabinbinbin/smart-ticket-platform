@@ -15,19 +15,19 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketGroup">
-        SELECT *
+        SELECT id, group_name, group_code, owner_user_id, enabled, created_at, updated_at
         FROM ticket_group
         WHERE id = #{id}
     </select>
 
     <select id="findByCode" resultType="com.smartticket.domain.entity.TicketGroup">
-        SELECT *
+        SELECT id, group_name, group_code, owner_user_id, enabled, created_at, updated_at
         FROM ticket_group
         WHERE group_code = #{groupCode}
     </select>
 
     <select id="page" resultType="com.smartticket.domain.entity.TicketGroup">
-        SELECT *
+        SELECT id, group_name, group_code, owner_user_id, enabled, created_at, updated_at
         FROM ticket_group
         WHERE 1 = 1
         <if test="enabled != null">AND enabled = #{enabled}</if>

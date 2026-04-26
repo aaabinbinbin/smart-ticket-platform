@@ -6,6 +6,7 @@ import com.smartticket.domain.enums.TicketSummaryViewEnum;
 import com.smartticket.domain.enums.TicketTypeEnum;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -35,6 +36,8 @@ public class AgentToolParameters {
     private TicketCategoryEnum category;
     // 优先级
     private TicketPriorityEnum priority;
+    // 类型画像
+    private Map<String, Object> typeProfile;
     // 摘要Requested
     private Boolean summaryRequested;
     // 摘要View

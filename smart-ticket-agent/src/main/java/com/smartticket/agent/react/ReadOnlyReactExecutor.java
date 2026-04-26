@@ -125,6 +125,7 @@ public class ReadOnlyReactExecutor {
                     .collectList()
                     .block(resolveTimeout(policy));
             String modelReply = collectStreamingOutput(responses);
+            collectUsage(trace, responses);
             if (hasText(modelReply)) {
                 traceService.recordReasoning(trace, modelReply);
             }
@@ -262,31 +263,86 @@ public class ReadOnlyReactExecutor {
         return builder.toString();
     }
 
+    /** 单轮输入 token 估算上限，防止对话历史膨胀导致 context 过长。 */
+    private static final int MAX_INPUT_TOKENS = 4000;
+
     private String buildConversationContext(AgentSessionContext context, String message, IntentRoute route) {
         StringBuilder builder = new StringBuilder();
         List<String> recentMessages = context == null ? null : context.getRecentMessages();
+
+        // 先构建系统上下文（不计入截断）
+        String systemCtx = buildSystemContext(route, context);
+
         if (recentMessages != null && !recentMessages.isEmpty()) {
-            builder.append("## 对话历史\n");
-            for (String recentMessage : recentMessages) {
-                builder.append(recentMessage).append("\n");
+            // 从最近的开始保留，接近上限时截断
+            List<String> kept = truncateHistory(recentMessages, message, systemCtx, MAX_INPUT_TOKENS);
+            if (!kept.isEmpty()) {
+                builder.append("## 对话历史\n");
+                for (String msg : kept) {
+                    builder.append(msg).append("\n");
+                }
+                builder.append("\n");
+                if (kept.size() < recentMessages.size()) {
+                    log.debug("对话历史截断: {}条 → {}条", recentMessages.size(), kept.size());
+                }
             }
-            builder.append("\n");
         }
 
         builder.append("## 当前用户消息\n").append(message).append("\n\n");
-        builder.append("## 系统上下文\n");
-        builder.append("系统识别意图：").append(route.getIntent().name());
-        builder.append("（置信度：").append(String.format("%.0f%%", route.getConfidence() * 100)).append("）\n");
-        builder.append("识别依据：").append(route.getReason()).append("\n");
-        if (context != null && context.getActiveTicketId() != null) {
-            builder.append("当前活跃工单 ID：").append(context.getActiveTicketId()).append("\n");
-        }
-        if (context != null
-                && context.getWorkingMemory() != null
-                && context.getWorkingMemory().getLastToolSummary() != null) {
-            builder.append("上次操作摘要：").append(context.getWorkingMemory().getLastToolSummary()).append("\n");
-        }
+        builder.append(systemCtx);
         return builder.toString();
+    }
+
+    private String buildSystemContext(IntentRoute route, AgentSessionContext context) {
+        StringBuilder sb = new StringBuilder("## 系统上下文\n");
+        sb.append("系统识别意图：").append(route.getIntent().name());
+        sb.append("（置信度：").append(String.format("%.0f%%", route.getConfidence() * 100)).append("）\n");
+        sb.append("识别依据：").append(route.getReason()).append("\n");
+        if (context != null && context.getActiveTicketId() != null) {
+            sb.append("当前活跃工单 ID：").append(context.getActiveTicketId()).append("\n");
+        }
+        if (context != null && context.getWorkingMemory() != null
+                && context.getWorkingMemory().getLastToolSummary() != null) {
+            sb.append("上次操作摘要：").append(context.getWorkingMemory().getLastToolSummary()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 截断对话历史：从最新消息开始保留，直到接近 token 预算上限。
+     * 简单估算：英文 ~1 token/4 chars，中文 ~1 token/1.5 chars，折中取字符数/3。
+     */
+    static List<String> truncateHistory(List<String> messages, String currentMessage, String systemContext, int maxTokens) {
+        int baseTokens = estimateTokens(currentMessage) + estimateTokens(systemContext);
+        int remaining = maxTokens - baseTokens - 200; // 预留 200 token 给 prompt 指令
+        if (remaining <= 0) return List.of();
+
+        List<String> kept = new java.util.ArrayList<>();
+        int used = 0;
+        for (int i = messages.size() - 1; i >= 0; i--) {
+            int est = estimateTokens(messages.get(i));
+            if (used + est > remaining) break;
+            kept.add(0, messages.get(i));
+            used += est;
+        }
+        return kept;
+    }
+
+    static int estimateTokens(String text) {
+        return text == null ? 0 : Math.max(1, text.length() / 3);
+    }
+
+    private void collectUsage(AgentTraceContext trace, List<ChatResponse> responses) {
+        if (responses == null || responses.isEmpty()) return;
+        int totalInput = 0, totalOutput = 0;
+        for (ChatResponse r : responses) {
+            if (r == null || r.getMetadata() == null || r.getMetadata().getUsage() == null) continue;
+            var usage = r.getMetadata().getUsage();
+            if (usage.getPromptTokens() != null) totalInput += usage.getPromptTokens();
+            if (usage.getCompletionTokens() != null) totalOutput += usage.getCompletionTokens();
+        }
+        if (totalInput > 0) trace.setInputTokens(totalInput);
+        if (totalOutput > 0) trace.setOutputTokens(totalOutput);
     }
 
     private String collectStreamingOutput(List<ChatResponse> responses) {

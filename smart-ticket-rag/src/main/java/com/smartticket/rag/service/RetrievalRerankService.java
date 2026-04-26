@@ -96,18 +96,31 @@ public class RetrievalRerankService {
     }
 
     /**
-     * 执行分词。
+     * 执行分词，CJK 文本使用字符级 bigram 避免整句变成单个 token。
      */
     private Set<String> tokenize(String text) {
         if (text == null || text.trim().isEmpty()) {
             return Set.of();
         }
-        return List.of(text.toLowerCase(Locale.ROOT)
-                        .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}\\u4e00-\\u9fa5]+", " ")
-                        .trim()
-                        .split("\\s+"))
-                .stream()
-                .filter(token -> !token.isBlank())
-                .collect(Collectors.toSet());
+        String normalized = text.toLowerCase(Locale.ROOT).trim();
+        Set<String> tokens = new java.util.HashSet<>();
+
+        // 按空格/标点分割英文词
+        String[] parts = normalized.split("[\\s,;:!?()\\[\\]{}|/'\"<>]+");
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            if (part.chars().anyMatch(c -> Character.UnicodeBlock.of(c) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS)) {
+                // CJK: 生成 bigram token
+                for (int i = 0; i < part.length() - 1; i++) {
+                    tokens.add(part.substring(i, i + 2));
+                }
+                tokens.add(part);
+            } else {
+                tokens.add(part);
+            }
+        }
+        return tokens;
     }
 }

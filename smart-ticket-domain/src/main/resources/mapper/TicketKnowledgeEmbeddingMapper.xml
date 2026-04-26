@@ -11,26 +11,26 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
-        SELECT *
+        SELECT id, knowledge_id, chunk_index, chunk_type, source_field, chunk_text, embedding_vector, created_at
         FROM ticket_knowledge_embedding
         WHERE id = #{id}
     </select>
 
     <select id="findByKnowledgeId" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
-        SELECT *
+        SELECT id, knowledge_id, chunk_index, chunk_type, source_field, chunk_text, embedding_vector, created_at
         FROM ticket_knowledge_embedding
         WHERE knowledge_id = #{knowledgeId}
         ORDER BY chunk_index ASC
     </select>
 
     <select id="findAll" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
-        SELECT *
+        SELECT id, knowledge_id, chunk_index, chunk_type, source_field, chunk_text, embedding_vector, created_at
         FROM ticket_knowledge_embedding
         ORDER BY knowledge_id ASC, chunk_index ASC
     </select>
 
     <select id="findByKnowledgeIds" resultType="com.smartticket.domain.entity.TicketKnowledgeEmbedding">
-        SELECT *
+        SELECT id, knowledge_id, chunk_index, chunk_type, source_field, chunk_text, embedding_vector, created_at
         FROM ticket_knowledge_embedding
         WHERE knowledge_id IN
         <foreach item="knowledgeId" collection="knowledgeIds" open="(" separator="," close=")">

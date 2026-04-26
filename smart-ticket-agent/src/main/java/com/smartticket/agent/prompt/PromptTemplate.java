@@ -13,12 +13,10 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class PromptTemplate {
-    // 编码
     private String code;
-    // version
     private String version;
-    // purpose
+    private String model;
+    private Double temperature;
     private String purpose;
-    // 内容
     private String content;
 }

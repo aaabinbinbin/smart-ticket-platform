@@ -107,7 +107,11 @@ public class TicketKnowledgeBuildListener {
     public void relayPendingTasks() {
         List<TicketKnowledgeBuildTask> tasks = taskMapper.findDispatchable(LocalDateTime.now(), relayBatchSize);
         for (TicketKnowledgeBuildTask task : tasks) {
-            publish(task.getId(), task.getTicketId());
+            try {
+                publish(task.getId(), task.getTicketId());
+            } catch (RuntimeException ex) {
+                log.warn("知识构建任务投递失败：taskId={}, reason={}", task.getId(), ex.getMessage());
+            }
         }
     }
 

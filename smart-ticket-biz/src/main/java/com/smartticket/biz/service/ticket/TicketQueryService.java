@@ -13,6 +13,7 @@ import com.smartticket.domain.enums.CodeInfoEnum;
 import com.smartticket.domain.enums.TicketSummaryViewEnum;
 import java.util.List;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 负责工单读模型查询，包括详情、摘要和分页列表。
@@ -55,6 +56,7 @@ public class TicketQueryService {
     /**
      * 获取详情。
      */
+    @Transactional(readOnly = true)
     public TicketDetailDTO getDetail(CurrentUser operator, Long ticketId) {
         TicketDetailDTO cached = loadCachedDetail(operator, ticketId);
         if (cached != null) {
@@ -66,6 +68,7 @@ public class TicketQueryService {
     /**
      * 获取摘要。
      */
+    @Transactional(readOnly = true)
     public TicketSummaryDTO getSummary(CurrentUser operator, Long ticketId, TicketSummaryViewEnum requestedView) {
         TicketDetailDTO detail = getDetail(operator, ticketId);
         TicketSummaryViewEnum view = ticketSummaryService.resolveView(operator, detail.getTicket(), requestedView);
@@ -75,6 +78,7 @@ public class TicketQueryService {
     /**
      * 分页查询工单。
      */
+    @Transactional(readOnly = true)
     public PageResult<Ticket> pageTickets(CurrentUser operator, TicketPageQueryDTO query) {
         PageQuery pageQuery = buildPageQuery(query);
         List<Ticket> records = loadPageRecords(operator, pageQuery);

@@ -18,6 +18,9 @@ import org.springframework.stereotype.Service;
 public class TicketDetailCacheService {
     private static final Logger log = LoggerFactory.getLogger(TicketDetailCacheService.class);
     private static final Duration DETAIL_TTL = Duration.ofMinutes(10);
+    /** 缓存穿透防护：不存在的 ticketId 缓存一个短 TTL 的空标记 */
+    private static final Duration NULL_TTL = Duration.ofSeconds(30);
+    private static final TicketDetailDTO NULL_MARKER = new TicketDetailDTO();
 
     // RedisJSON客户端
     private final RedisJsonClient redisJsonClient;
@@ -30,7 +33,7 @@ public class TicketDetailCacheService {
     }
 
     /**
-     * 获取详情。
+     * 获取详情，返回 null 时可能不存在或未命中。
      */
     public TicketDetailDTO get(Long ticketId) {
         try {
@@ -39,6 +42,24 @@ public class TicketDetailCacheService {
             log.warn("读取工单详情缓存失败，ticketId={}", ticketId, ex);
             return null;
         }
+    }
+
+    /**
+     * 缓存不存在的 ticketId 空标记，防止穿透。
+     */
+    public void putNull(Long ticketId) {
+        try {
+            redisJsonClient.set(RedisKeys.ticketDetail(ticketId), NULL_MARKER, NULL_TTL);
+        } catch (RuntimeException ex) {
+            log.warn("写入空标记缓存失败，ticketId={}", ticketId, ex);
+        }
+    }
+
+    /**
+     * 检查是否为穿透保护的空标记。
+     */
+    public boolean isNullMarker(TicketDetailDTO detail) {
+        return detail != null && detail.getTicket() == null;
     }
 
     /**

@@ -1,7 +1,6 @@
 package com.smartticket.api.controller.ticket;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,10 +15,7 @@ import com.smartticket.api.vo.ticket.TicketVO;
 import com.smartticket.biz.model.CurrentUser;
 import com.smartticket.biz.service.ticket.TicketService;
 import com.smartticket.domain.entity.Ticket;
-import com.smartticket.domain.enums.TicketCategoryEnum;
-import com.smartticket.domain.enums.TicketPriorityEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
-import com.smartticket.domain.enums.TicketTypeEnum;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,7 +66,7 @@ class TicketControllerIdempotencyKeyTest {
             """;
 
     @Test
-    void createTicketWithOnlyHeaderIdempotencyKeyShouldSucceed() throws Exception {
+    void createTicketShouldSucceedWithValidIdempotencyKey() throws Exception {
         when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
         when(ticketRequestParser.parseType(null)).thenReturn(null);
         when(ticketRequestParser.parseCategory(null)).thenReturn(null);
@@ -89,99 +85,24 @@ class TicketControllerIdempotencyKeyTest {
     }
 
     @Test
-    void createTicketWithOnlyBodyIdempotencyKeyShouldSucceed() throws Exception {
-        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
-        when(ticketRequestParser.parseType(null)).thenReturn(null);
-        when(ticketRequestParser.parseCategory(null)).thenReturn(null);
-        when(ticketRequestParser.parsePriority(null)).thenReturn(null);
-        Ticket created = Ticket.builder().id(101L).title("测试环境无法登录").status(TicketStatusEnum.PENDING_ASSIGN).build();
-        when(ticketService.createTicket(any(), any())).thenReturn(created);
-        when(ticketAssembler.toVO(created)).thenReturn(TicketVO.builder().id(101L).build());
-
-        String bodyWithIdempotencyKey = """
-                {
-                    "title": "测试环境无法登录",
-                    "description": "登录时报 500，影响研发自测",
-                    "idempotencyKey": "create-ticket-002"
-                }
-                """;
-
-        mockMvc.perform(post("/api/tickets")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyWithIdempotencyKey)
-                        .with(authentication(auth())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    void createTicketWithSameHeaderAndBodyIdempotencyKeyShouldSucceed() throws Exception {
-        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
-        when(ticketRequestParser.parseType(null)).thenReturn(null);
-        when(ticketRequestParser.parseCategory(null)).thenReturn(null);
-        when(ticketRequestParser.parsePriority(null)).thenReturn(null);
-        Ticket created = Ticket.builder().id(101L).title("测试环境无法登录").status(TicketStatusEnum.PENDING_ASSIGN).build();
-        when(ticketService.createTicket(any(), any())).thenReturn(created);
-        when(ticketAssembler.toVO(created)).thenReturn(TicketVO.builder().id(101L).build());
-
-        String bodyWithIdempotencyKey = """
-                {
-                    "title": "测试环境无法登录",
-                    "description": "登录时报 500，影响研发自测",
-                    "idempotencyKey": "create-ticket-003"
-                }
-                """;
-
-        mockMvc.perform(post("/api/tickets")
-                        .header("Idempotency-Key", "create-ticket-003")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyWithIdempotencyKey)
-                        .with(authentication(auth())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
-    }
-
-    @Test
-    void createTicketWithConflictingIdempotencyKeyShouldReturn400() throws Exception {
-        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
-        when(ticketRequestParser.parseType(null)).thenReturn(null);
-        when(ticketRequestParser.parseCategory(null)).thenReturn(null);
-        when(ticketRequestParser.parsePriority(null)).thenReturn(null);
-
-        String bodyWithIdempotencyKey = """
-                {
-                    "title": "测试环境无法登录",
-                    "description": "登录时报 500，影响研发自测",
-                    "idempotencyKey": "body-key"
-                }
-                """;
-
-        mockMvc.perform(post("/api/tickets")
-                        .header("Idempotency-Key", "header-key")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(bodyWithIdempotencyKey)
-                        .with(authentication(auth())))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"));
-    }
-
-    @Test
-    void createTicketWithoutIdempotencyKeyShouldSucceed() throws Exception {
-        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
-        when(ticketRequestParser.parseType(null)).thenReturn(null);
-        when(ticketRequestParser.parseCategory(null)).thenReturn(null);
-        when(ticketRequestParser.parsePriority(null)).thenReturn(null);
-        Ticket created = Ticket.builder().id(101L).title("测试环境无法登录").status(TicketStatusEnum.PENDING_ASSIGN).build();
-        when(ticketService.createTicket(any(), any())).thenReturn(created);
-        when(ticketAssembler.toVO(created)).thenReturn(TicketVO.builder().id(101L).build());
-
+    void createTicketShouldReturn400WhenIdempotencyKeyHeaderMissing() throws Exception {
         mockMvc.perform(post("/api/tickets")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(validBody)
                         .with(authentication(auth())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true));
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void createTicketShouldReturn400WhenIdempotencyKeyEmpty() throws Exception {
+        when(currentUserResolver.resolve(any())).thenReturn(new CurrentUser(1L, "user1", List.of("USER")));
+
+        mockMvc.perform(post("/api/tickets")
+                        .header("Idempotency-Key", "   ")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validBody)
+                        .with(authentication(auth())))
+                .andExpect(status().isBadRequest());
     }
 
     private static Authentication auth() {

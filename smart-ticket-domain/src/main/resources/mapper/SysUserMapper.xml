@@ -11,25 +11,25 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.SysUser">
-        SELECT *
+        SELECT id, username, password_hash, real_name, email, status, created_at, updated_at
         FROM sys_user
         WHERE id = #{id}
     </select>
 
     <select id="findByUsername" resultType="com.smartticket.domain.entity.SysUser">
-        SELECT *
+        SELECT id, username, password_hash, real_name, email, status, created_at, updated_at
         FROM sys_user
         WHERE username = #{username}
     </select>
 
     <select id="findAll" resultType="com.smartticket.domain.entity.SysUser">
-        SELECT *
+        SELECT id, username, password_hash, real_name, email, status, created_at, updated_at
         FROM sys_user
         ORDER BY id ASC
     </select>
 
     <select id="findByRoleCode" resultType="com.smartticket.domain.entity.SysUser">
-        SELECT DISTINCT u.*
+        SELECT DISTINCT u.id, u.username, u.password_hash, u.real_name, u.email, u.status, u.created_at, u.updated_at
         FROM sys_user u
         INNER JOIN sys_user_role ur ON ur.user_id = u.id
         INNER JOIN sys_role r ON r.id = ur.role_id

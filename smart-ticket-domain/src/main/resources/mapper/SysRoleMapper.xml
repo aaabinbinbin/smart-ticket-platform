@@ -11,19 +11,19 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.SysRole">
-        SELECT *
+        SELECT id, role_code, role_name, created_at
         FROM sys_role
         WHERE id = #{id}
     </select>
 
     <select id="findByRoleCode" resultType="com.smartticket.domain.entity.SysRole">
-        SELECT *
+        SELECT id, role_code, role_name, created_at
         FROM sys_role
         WHERE role_code = #{roleCode}
     </select>
 
     <select id="findAll" resultType="com.smartticket.domain.entity.SysRole">
-        SELECT *
+        SELECT id, role_code, role_name, created_at
         FROM sys_role
         ORDER BY id ASC
     </select>

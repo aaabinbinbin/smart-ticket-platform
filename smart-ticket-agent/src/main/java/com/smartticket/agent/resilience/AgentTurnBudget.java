@@ -14,6 +14,7 @@ public class AgentTurnBudget {
     private final int maxLlmCalls;
     private final int maxToolCalls;
     private final int maxRagCalls;
+    private final int maxInputTokens;
     private final long startedAtMillis;
     private final Duration timeout;
     private final AtomicInteger llmCalls = new AtomicInteger();
@@ -21,11 +22,20 @@ public class AgentTurnBudget {
     private final AtomicInteger ragCalls = new AtomicInteger();
 
     public AgentTurnBudget(int maxLlmCalls, int maxToolCalls, int maxRagCalls, Duration timeout) {
+        this(maxLlmCalls, maxToolCalls, maxRagCalls, 6000, timeout);
+    }
+
+    public AgentTurnBudget(int maxLlmCalls, int maxToolCalls, int maxRagCalls, int maxInputTokens, Duration timeout) {
         this.maxLlmCalls = Math.max(maxLlmCalls, 0);
         this.maxToolCalls = Math.max(maxToolCalls, 0);
         this.maxRagCalls = Math.max(maxRagCalls, 0);
+        this.maxInputTokens = Math.max(maxInputTokens, 500);
         this.timeout = timeout;
         this.startedAtMillis = System.currentTimeMillis();
+    }
+
+    public int getMaxInputTokens() {
+        return maxInputTokens;
     }
 
     public int getMaxLlmCalls() {

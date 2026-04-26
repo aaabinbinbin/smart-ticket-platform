@@ -19,6 +19,7 @@ import com.smartticket.domain.entity.TicketQueue;
 import com.smartticket.domain.enums.CodeInfoEnum;
 import com.smartticket.domain.enums.OperationTypeEnum;
 import com.smartticket.domain.enums.TicketStatusEnum;
+import com.smartticket.domain.enums.TicketTypeEnum;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -201,13 +202,6 @@ public class TicketServiceSupport {
     }
 
     /**
-     * 校验审批人用户。
-     */
-    public void requireApproverUser(Long userId) {
-        ticketUserDirectoryService.requireApproverUser(userId);
-    }
-
-    /**
      * 校验工单分组与队列的绑定关系是否合法。
      */
     public void validateQueueBinding(Long groupId, Long queueId) {
@@ -244,11 +238,18 @@ public class TicketServiceSupport {
     }
 
     /**
-     * 生成工单编号。
+     * 生成工单编号，前缀根据工单类型派生。
      */
-    public String generateTicketNo() {
+    public String generateTicketNo(TicketTypeEnum type) {
         int suffix = ThreadLocalRandom.current().nextInt(1000, 10000);
-        return "INC" + LocalDateTime.now().format(TICKET_NO_TIME_FORMATTER) + suffix;
+        String prefix = switch (type == null ? TicketTypeEnum.INCIDENT : type) {
+            case INCIDENT -> "INC";
+            case ACCESS_REQUEST -> "ACC";
+            case ENVIRONMENT_REQUEST -> "ENV";
+            case CONSULTATION -> "CNS";
+            case CHANGE_REQUEST -> "CHG";
+        };
+        return prefix + LocalDateTime.now().format(TICKET_NO_TIME_FORMATTER) + suffix;
     }
 
     /**

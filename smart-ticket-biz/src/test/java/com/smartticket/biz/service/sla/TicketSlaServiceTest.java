@@ -75,7 +75,7 @@ class TicketSlaServiceTest {
     }
 
     @Test
-    void createOrRefreshInstanceShouldInsertCalculatedDeadlines() {
+    void createOrRefreshInstanceShouldUpsertCalculatedDeadlines() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 4, 23, 12, 0);
         Ticket ticket = Ticket.builder()
                 .id(1001L)
@@ -88,13 +88,12 @@ class TicketSlaServiceTest {
                 .firstResponseMinutes(30)
                 .resolveMinutes(120)
                 .build());
-        when(instanceRepository.findByTicketId(1001L)).thenReturn(null);
 
         service.createOrRefreshInstance(ticket);
 
         ArgumentCaptor<com.smartticket.domain.entity.TicketSlaInstance> captor =
                 ArgumentCaptor.forClass(com.smartticket.domain.entity.TicketSlaInstance.class);
-        verify(instanceRepository).insert(captor.capture());
+        verify(instanceRepository).upsert(captor.capture());
         assertEquals(1001L, captor.getValue().getTicketId());
         assertEquals(7L, captor.getValue().getPolicyId());
         assertEquals(createdAt.plusMinutes(30), captor.getValue().getFirstResponseDeadline());

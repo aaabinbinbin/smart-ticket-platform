@@ -15,13 +15,13 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketNotification">
-        SELECT *
+        SELECT id, ticket_id, receiver_user_id, channel, notification_type, title, content, read_status, read_at, created_at
         FROM ticket_notification
         WHERE id = #{id}
     </select>
 
     <select id="pageByReceiverUserId" resultType="com.smartticket.domain.entity.TicketNotification">
-        SELECT *
+        SELECT id, ticket_id, receiver_user_id, channel, notification_type, title, content, read_status, read_at, created_at
         FROM ticket_notification
         WHERE receiver_user_id = #{receiverUserId}
           <if test="unreadOnly != null and unreadOnly">

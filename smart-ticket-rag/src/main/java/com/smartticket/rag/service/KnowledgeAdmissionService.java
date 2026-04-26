@@ -61,6 +61,9 @@ public class KnowledgeAdmissionService {
         return result;
     }
 
+    private static final int AUTO_APPROVE_THRESHOLD = 55;
+    private static final int AUTO_REJECT_THRESHOLD = 30;
+
     /**
      * 执行评估。
      */
@@ -75,12 +78,12 @@ public class KnowledgeAdmissionService {
         } else if (sensitive) {
             decision = KnowledgeAdmissionDecision.MANUAL_REVIEW;
             reason = "内容可能包含敏感信息，需要人工复核。";
-        } else if (score >= 80) {
+        } else if (score >= AUTO_APPROVE_THRESHOLD) {
             decision = KnowledgeAdmissionDecision.AUTO_APPROVED;
-            reason = "标题、描述、解决摘要和关键评论较完整，自动通过。";
-        } else if (score < 50) {
+            reason = "内容完整度、结构质量和工单处理质量均较优，自动通过。";
+        } else if (score < AUTO_REJECT_THRESHOLD) {
             decision = KnowledgeAdmissionDecision.AUTO_REJECTED;
-            reason = "内容完整度不足，自动拒绝。";
+            reason = "内容过于简略，缺乏可复用的处理经验，自动拒绝。";
         } else {
             decision = KnowledgeAdmissionDecision.MANUAL_REVIEW;
             reason = "具备一定参考价值，但信息不够完整，需要人工复核。";
@@ -93,26 +96,66 @@ public class KnowledgeAdmissionService {
     }
 
     /**
-     * 处理评分。
+     * 多信号评分模型：内容完整性 + 结构质量 + 工单质量信号。
+     *
+     * <p>不使用 LLM——所有信号都是结构化数据，规则即可判断。
+     * 满分 80 分，纯长度规则不再能拿到满分。</p>
      */
     private int qualityScore(Ticket ticket, List<TicketComment> comments) {
         if (ticket == null) {
             return 0;
         }
         int score = 0;
+
+        // 第1层：内容完整性（最多 45 分，降低长度权重）
         if (hasText(ticket.getTitle()) && ticket.getTitle().trim().length() >= 6) {
-            score += 20;
+            score += 10;
         }
         if (hasText(ticket.getDescription()) && ticket.getDescription().trim().length() >= 20) {
-            score += 25;
+            score += 10;
         }
         if (hasText(ticket.getSolutionSummary()) && ticket.getSolutionSummary().trim().length() >= 10) {
-            score += 35;
+            score += 15;
         }
-        if (comments != null && comments.stream().filter(comment -> hasText(comment.getContent())).count() >= 2) {
-            score += 20;
+        long substantiveComments = comments == null ? 0
+                : comments.stream().filter(c -> hasText(c.getContent()) && c.getContent().trim().length() >= 10).count();
+        if (substantiveComments >= 2) {
+            score += 10;
         }
-        return Math.min(score, 100);
+
+        // 第2层：结构质量（最多 20 分）
+        String summary = ticket.getSolutionSummary();
+        if (hasText(summary) && summary.trim().length() >= 50) {
+            score += 10;  // 有实际解决细节，不是简单一句"已处理"
+        }
+        if (comments != null && comments.stream().anyMatch(c -> hasText(c.getContent()) && c.getContent().trim().length() > 50)) {
+            score += 10;  // 有实质性讨论
+        }
+
+        // 第3层：工单质量信号（最多 15 分）
+        if (ticket.getAssigneeId() != null) {
+            score += 5;  // 有人被分配处理，不是悬空单
+        }
+        if (hasText(summary) && containsResolutionKeywords(summary)) {
+            score += 5;  // 包含实际处理动作的描述
+        }
+        String combined = (ticket.getTitle() == null ? "" : ticket.getTitle())
+                + (ticket.getDescription() == null ? "" : ticket.getDescription());
+        if (combined.trim().length() > 50) {
+            score += 5;  // 问题描述足够详细
+        }
+
+        return Math.min(score, 80);
+    }
+
+    private boolean containsResolutionKeywords(String text) {
+        String lower = text.toLowerCase();
+        return lower.contains("修复") || lower.contains("解决")
+                || lower.contains("配置") || lower.contains("重启")
+                || lower.contains("调整") || lower.contains("更新")
+                || lower.contains("回滚") || lower.contains("迁移")
+                || lower.contains("fixed") || lower.contains("resolved")
+                || lower.contains("restart") || lower.contains("update");
     }
 
     /**

@@ -64,6 +64,13 @@ public class RedisJsonClient {
     }
 
     /**
+     * 重置 key 的 TTL，用于会话续期等场景。
+     */
+    public void expire(String key, Duration ttl) {
+        stringRedisTemplate.expire(key, ttl);
+    }
+
+    /**
      * 处理delete。
      */
     public void delete(String key) {

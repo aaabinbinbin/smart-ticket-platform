@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
  *   <li>用户显式传入的字段（不覆盖）</li>
  *   <li>LLM 抽取结果（enabled 时，需校验通过且置信度达标）</li>
  *   <li>规则推断结果（关键词匹配）</li>
- *   <li>默认兜底值（"待确认"）</li>
+ *   <li>默认兜底值（PENDING_CONFIRM）</li>
  * </ol>
  * </p>
  *
@@ -37,6 +37,7 @@ import org.springframework.stereotype.Service;
 public class TicketCreateEnrichmentService {
 
     private static final Logger log = LoggerFactory.getLogger(TicketCreateEnrichmentService.class);
+    private static final String PENDING_CONFIRM = "待确认";
 
     private final TicketCreateEnrichmentProperties properties;
     private final TicketCreateLlmEnricher llmEnricher;
@@ -307,24 +308,24 @@ public class TicketCreateEnrichmentService {
             }
             case ACCESS_REQUEST -> {
                 Map<String, Object> profile = new HashMap<>();
-                profile.put("accountId", "待确认");
+                profile.put("accountId", PENDING_CONFIRM);
                 profile.put("targetResource", extractTargetResource(desc));
-                profile.put("requestedRole", "待确认");
+                profile.put("requestedRole", PENDING_CONFIRM);
                 profile.put("justification", desc);
                 yield profile;
             }
             case CHANGE_REQUEST -> {
                 Map<String, Object> profile = new HashMap<>();
                 profile.put("changeTarget", extractChangeTarget(desc));
-                profile.put("changeWindow", "待确认");
-                profile.put("rollbackPlan", "待确认");
+                profile.put("changeWindow", PENDING_CONFIRM);
+                profile.put("rollbackPlan", PENDING_CONFIRM);
                 profile.put("impactScope", extractImpactScope(desc));
                 yield profile;
             }
             case ENVIRONMENT_REQUEST -> {
                 Map<String, Object> profile = new HashMap<>();
                 profile.put("environmentName", extractEnvironmentName(desc));
-                profile.put("resourceSpec", "待确认");
+                profile.put("resourceSpec", PENDING_CONFIRM);
                 profile.put("purpose", desc);
                 yield profile;
             }
@@ -345,7 +346,7 @@ public class TicketCreateEnrichmentService {
             int end = Math.min(idx + 20, text.length());
             return text.substring(idx, end);
         }
-        return "待确认";
+        return PENDING_CONFIRM;
     }
 
     private String extractTargetResource(String text) {
@@ -360,7 +361,7 @@ public class TicketCreateEnrichmentService {
                 }
             }
         }
-        return "待确认";
+        return PENDING_CONFIRM;
     }
 
     private String extractChangeTarget(String text) {
@@ -377,7 +378,7 @@ public class TicketCreateEnrichmentService {
         if (text.length() > 10) {
             return text.substring(0, Math.min(30, text.length()));
         }
-        return "待确认";
+        return PENDING_CONFIRM;
     }
 
     private String extractEnvironmentName(String text) {
@@ -394,7 +395,7 @@ public class TicketCreateEnrichmentService {
                 }
             }
         }
-        return "待确认";
+        return PENDING_CONFIRM;
     }
 
     private String getSearchText(TicketCreateCommandDTO command) {

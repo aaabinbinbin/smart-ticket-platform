@@ -23,25 +23,30 @@
         <result property="failureType" column="failure_type"/>
         <result property="stepJson" column="step_json"/>
         <result property="reasoningJson" column="reasoning_json"/>
+        <result property="inputTokens" column="input_tokens"/>
+        <result property="outputTokens" column="output_tokens"/>
         <result property="createdAt" column="created_at"/>
     </resultMap>
 
     <sql id="agentTraceColumns">
         trace_id, session_id, user_id, raw_input, intent, confidence, plan_stage,
         triggered_skill, parameter_summary, prompt_version, spring_ai_used, fallback_used,
-        final_reply, elapsed_millis, status, failure_type, step_json, reasoning_json, created_at
+        final_reply, elapsed_millis, status, failure_type, step_json, reasoning_json,
+        input_tokens, output_tokens, created_at
     </sql>
 
     <insert id="insert" parameterType="com.smartticket.domain.entity.AgentTraceRecord">
         INSERT INTO agent_trace_record (
             trace_id, session_id, user_id, raw_input, intent, confidence, plan_stage,
             triggered_skill, parameter_summary, prompt_version, spring_ai_used, fallback_used,
-            final_reply, elapsed_millis, status, failure_type, step_json, reasoning_json, created_at
+            final_reply, elapsed_millis, status, failure_type, step_json, reasoning_json,
+            input_tokens, output_tokens, created_at
         )
         VALUES (
             #{traceId}, #{sessionId}, #{userId}, #{rawInput}, #{intent}, #{confidence}, #{planStage},
             #{triggeredSkill}, #{parameterSummary}, #{promptVersion}, #{springAiUsed}, #{fallbackUsed},
-            #{finalReply}, #{elapsedMillis}, #{status}, #{failureType}, #{stepJson}, #{reasoningJson}, #{createdAt}
+            #{finalReply}, #{elapsedMillis}, #{status}, #{failureType}, #{stepJson}, #{reasoningJson},
+            #{inputTokens}, #{outputTokens}, #{createdAt}
         )
     </insert>
 

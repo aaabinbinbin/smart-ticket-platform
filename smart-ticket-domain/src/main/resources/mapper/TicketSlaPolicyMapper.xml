@@ -15,13 +15,13 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
-        SELECT *
+        SELECT id, policy_name, category, priority, first_response_minutes, resolve_minutes, enabled, created_at, updated_at
         FROM ticket_sla_policy
         WHERE id = #{id}
     </select>
 
     <select id="page" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
-        SELECT *
+        SELECT id, policy_name, category, priority, first_response_minutes, resolve_minutes, enabled, created_at, updated_at
         FROM ticket_sla_policy
         WHERE 1 = 1
         <if test="category != null">AND category = #{category}</if>
@@ -58,7 +58,7 @@
     </update>
 
     <select id="findBestMatch" resultType="com.smartticket.domain.entity.TicketSlaPolicy">
-        SELECT *
+        SELECT id, policy_name, category, priority, first_response_minutes, resolve_minutes, enabled, created_at, updated_at
         FROM ticket_sla_policy
         WHERE enabled = 1
           AND (category IS NULL OR category = #{category})

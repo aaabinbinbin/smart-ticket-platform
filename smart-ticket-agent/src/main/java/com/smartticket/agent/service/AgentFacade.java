@@ -531,6 +531,7 @@ public class AgentFacade {
         sessionService.updateAfterTool(sessionId, context, route, message, toolResult);
         memoryService.remember(currentUser, context, route, parameters, toolResult);
         sessionService.save(sessionId, context);
+        sessionService.touch(sessionId);  // 每次交互续期 TTL
     }
 
     /**
@@ -558,6 +559,7 @@ public class AgentFacade {
             memoryService.remember(currentUser, context, route, null, call.getResult());
         }
         sessionService.save(sessionId, context);
+        sessionService.touch(sessionId);  // 每次交互续期 TTL
     }
 
     /**

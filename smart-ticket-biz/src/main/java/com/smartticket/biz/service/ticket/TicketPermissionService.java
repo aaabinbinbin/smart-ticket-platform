@@ -48,15 +48,6 @@ public class TicketPermissionService {
     }
 
     /**
-     * 校验View。
-     */
-    public void requireView(CurrentUser user, Ticket ticket) {
-        if (!canView(user, ticket)) {
-            throw new BusinessException(BusinessErrorCode.TICKET_FORBIDDEN);
-        }
-    }
-
-    /**
      * 校验管理。
      */
     public void requireAdmin(CurrentUser user) {

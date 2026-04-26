@@ -26,6 +26,7 @@ public class CreateTicketRequestDTO {
 
     // 描述
     @NotBlank(message = "工单描述不能为空")
+    @Size(max = 10000, message = "工单描述不能超过 10000 个字符")
     @Schema(description = "工单描述", example = "测试环境登录时报 500，影响研发自测")
     private String description;
 
@@ -45,8 +46,4 @@ public class CreateTicketRequestDTO {
     @Schema(description = "工单优先级 code，缺省时系统可使用默认值", example = "HIGH")
     private String priority;
 
-    // 幂等键
-    @Size(max = 128, message = "幂等键不能超过 128 个字符")
-    @Schema(description = "请求幂等键", example = "create-ticket-001")
-    private String idempotencyKey;
 }

@@ -15,7 +15,7 @@
     </insert>
 
     <select id="findByKnowledgeId" resultType="com.smartticket.domain.entity.RagFeedback">
-        SELECT *
+        SELECT id, knowledge_id, ticket_id, session_id, query_text, feedback_type, comment, created_by, created_at
         FROM rag_feedback
         WHERE knowledge_id = #{knowledgeId}
         ORDER BY created_at DESC

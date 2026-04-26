@@ -142,6 +142,31 @@ class TicketToolsTest {
     }
 
     @Test
+    void createTicketToolShouldSucceedWithOnlyTitleAndDescription() {
+        CreateTicketTool tool = new CreateTicketTool(ticketCommandService, validator, retrievalService, springAiToolSupport, 0.72d);
+        when(validator.validate(eq(tool), any())).thenReturn(AgentToolValidationResult.builder().valid(true).build());
+        when(retrievalService.checkSimilarCasesBeforeCreate(any(), any(), eq(3))).thenReturn(RetrievalResult.builder()
+                .retrievalPath("MYSQL_FALLBACK")
+                .fallbackUsed(true)
+                .hits(List.of())
+                .build());
+        when(ticketCommandService.createTicket(any(), any())).thenReturn(ticket(1004L));
+
+        AgentToolResult result = tool.execute(AgentToolRequest.builder()
+                .currentUser(currentUser())
+                .message("登录失败，请帮我创建工单")
+                .parameters(AgentToolParameters.builder()
+                        .title("登录失败")
+                        .description("登录时报 500 错误")
+                        .build())
+                .build());
+
+        assertEquals(AgentToolStatus.SUCCESS, result.getStatus());
+        assertEquals(1004L, result.getActiveTicketId());
+        verify(ticketCommandService).createTicket(any(), any());
+    }
+
+    @Test
     void searchHistoryToolShouldCallRetrievalServiceAndReturnRecentMessages() {
         SearchHistoryTool tool = new SearchHistoryTool(retrievalService, springAiToolSupport);
         RetrievalResult retrievalResult = RetrievalResult.builder()

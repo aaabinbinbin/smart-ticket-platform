@@ -17,19 +17,19 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketKnowledge">
-        SELECT *
+        SELECT id, ticket_id, content_summary, symptom_summary, root_cause_summary, status, created_at, updated_at
         FROM ticket_knowledge
         WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketKnowledge">
-        SELECT *
+        SELECT id, ticket_id, content_summary, symptom_summary, root_cause_summary, status, created_at, updated_at
         FROM ticket_knowledge
         WHERE ticket_id = #{ticketId}
     </select>
 
     <select id="findActive" resultType="com.smartticket.domain.entity.TicketKnowledge">
-        SELECT *
+        SELECT id, ticket_id, content_summary, symptom_summary, root_cause_summary, status, created_at, updated_at
         FROM ticket_knowledge
         WHERE status = 'ACTIVE'
         ORDER BY updated_at DESC

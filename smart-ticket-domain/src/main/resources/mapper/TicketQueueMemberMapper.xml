@@ -15,20 +15,20 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketQueueMember">
-        SELECT *
+        SELECT id, queue_id, user_id, enabled, last_assigned_at, created_at, updated_at
         FROM ticket_queue_member
         WHERE id = #{id}
     </select>
 
     <select id="findByQueueIdAndUserId" resultType="com.smartticket.domain.entity.TicketQueueMember">
-        SELECT *
+        SELECT id, queue_id, user_id, enabled, last_assigned_at, created_at, updated_at
         FROM ticket_queue_member
         WHERE queue_id = #{queueId}
           AND user_id = #{userId}
     </select>
 
     <select id="findByQueueId" resultType="com.smartticket.domain.entity.TicketQueueMember">
-        SELECT *
+        SELECT id, queue_id, user_id, enabled, last_assigned_at, created_at, updated_at
         FROM ticket_queue_member
         WHERE queue_id = #{queueId}
         <if test="enabled != null">

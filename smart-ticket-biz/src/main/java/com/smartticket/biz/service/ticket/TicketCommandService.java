@@ -107,7 +107,7 @@ public class TicketCommandService {
         TicketTypeEnum type = command.getType() == null ? TicketTypeEnum.INCIDENT : command.getType();
         // 按工单类型做额外语义校验，避免关键字段缺失但仍被创建。
         validateByType(type, command);
-        ticketTypeProfileService.validate(type, command.getTypeProfile());
+        // typeProfile 校验由 TicketTypeProfileService.saveOrUpdate() 内部完成，避免重复校验
         Ticket ticket = buildTicket(operator, command, type);
         ticketRepository.insert(ticket);
         ticketTypeProfileService.saveOrUpdate(ticket.getId(), type, command.getTypeProfile());
@@ -150,7 +150,7 @@ public class TicketCommandService {
      */
     private Ticket buildTicket(CurrentUser operator, TicketCreateCommandDTO command, TicketTypeEnum type) {
         return Ticket.builder()
-                .ticketNo(support.generateTicketNo())
+                .ticketNo(support.generateTicketNo(type))
                 .title(command.getTitle())
                 .description(command.getDescription())
                 .type(type)
@@ -158,7 +158,7 @@ public class TicketCommandService {
                 .priority(resolvePriority(command, type))
                 .status(TicketStatusEnum.PENDING_ASSIGN)
                 .creatorId(operator.getUserId())
-                .source("MANUAL")
+                .source(command.getSource() != null ? command.getSource() : "MANUAL")
                 .idempotencyKey(command.getIdempotencyKey())
                 .build();
     }

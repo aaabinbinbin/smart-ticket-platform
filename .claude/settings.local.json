@@ -30,7 +30,13 @@
       "Bash(git check-ignore *)",
       "Bash(echo \"exit=$?\")",
       "Bash(git hash-object *)",
-      "Bash(javap *)"
+      "Bash(javap *)",
+      "Bash(dir *)",
+      "Bash(read f *)",
+      "Bash([ -f \"D:/aaaAgent/smart-ticket-platform/$f\" ])",
+      "Bash(mv smart-ticket-agent/src/main/resources/agent/prompt/intent-classification.md smart-ticket-agent/src/main/resources/prompts/intent-classification.md)",
+      "Bash(mv smart-ticket-agent/src/main/resources/agent/prompt/history-summary.md smart-ticket-agent/src/main/resources/prompts/history-summary.md)",
+      "Bash(mv smart-ticket-agent/src/main/resources/agent/prompt/result-explanation.md smart-ticket-agent/src/main/resources/prompts/result-explanation.md)"
     ]
   }
 }

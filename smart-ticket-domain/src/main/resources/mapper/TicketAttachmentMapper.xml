@@ -15,13 +15,13 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketAttachment">
-        SELECT *
+        SELECT id, ticket_id, file_name, file_url, file_type, file_size, uploader_id, created_at
         FROM ticket_attachment
         WHERE id = #{id}
     </select>
 
     <select id="findByTicketId" resultType="com.smartticket.domain.entity.TicketAttachment">
-        SELECT *
+        SELECT id, ticket_id, file_name, file_url, file_type, file_size, uploader_id, created_at
         FROM ticket_attachment
         WHERE ticket_id = #{ticketId}
         ORDER BY created_at ASC

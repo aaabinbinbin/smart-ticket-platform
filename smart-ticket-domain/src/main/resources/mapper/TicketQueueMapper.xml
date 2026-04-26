@@ -15,19 +15,19 @@
     </insert>
 
     <select id="findById" resultType="com.smartticket.domain.entity.TicketQueue">
-        SELECT *
+        SELECT id, queue_name, queue_code, group_id, enabled, created_at, updated_at
         FROM ticket_queue
         WHERE id = #{id}
     </select>
 
     <select id="findByCode" resultType="com.smartticket.domain.entity.TicketQueue">
-        SELECT *
+        SELECT id, queue_name, queue_code, group_id, enabled, created_at, updated_at
         FROM ticket_queue
         WHERE queue_code = #{queueCode}
     </select>
 
     <select id="findEnabledByGroupId" resultType="com.smartticket.domain.entity.TicketQueue">
-        SELECT *
+        SELECT id, queue_name, queue_code, group_id, enabled, created_at, updated_at
         FROM ticket_queue
         WHERE group_id = #{groupId}
           AND enabled = 1
@@ -35,7 +35,7 @@
     </select>
 
     <select id="page" resultType="com.smartticket.domain.entity.TicketQueue">
-        SELECT *
+        SELECT id, queue_name, queue_code, group_id, enabled, created_at, updated_at
         FROM ticket_queue
         WHERE 1 = 1
         <if test="groupId != null">AND group_id = #{groupId}</if>
